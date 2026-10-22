@@ -72,6 +72,10 @@ let onFlushed: (() => void) | undefined
 /** Registered by sync.ts (avoids an import cycle): called after a flush that sent something and left nothing pending. */
 export const setOnFlushed = (fn: () => void) => void (onFlushed = fn)
 
+let onRejected: ((op: Op, e: ApiError) => boolean) | undefined
+/** Registered by flight.ts: sees a queued op the server refused for good; true when it handled it (no error shown). */
+export const setOnRejected = (fn: (op: Op, e: ApiError) => boolean) => void (onRejected = fn)
+
 /**
  * The entities a refresh must not overwrite because a local write to them is queued or still in flight. Entity groups:
  * profile, trip, stories, stamps, sessions, friends, letters. A touch is a group name, or `story:<id>` / `letter:<id>`,
@@ -133,7 +137,7 @@ async function run() {
         return
       }
       console.warn('outbox: server rejected op, dropping it', op, e)
-      dropped = dropMessage(op, e)
+      if (!onRejected?.(op, e as ApiError)) dropped = dropMessage(op, e)
     }
     attempt = 0
     save(q().filter((o) => o !== op)) // by identity: a newer op with the same id, queued meanwhile, stays

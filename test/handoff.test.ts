@@ -11,7 +11,8 @@ vi.mock('../src/lib/stories', () => ({
 import { api, ApiError } from '../src/lib/api'
 import { deviceId, serverNow } from '../src/lib/device'
 import { flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, startSession, takeOver } from '../src/lib/flight'
-import { clearOutbox, enqueue } from '../src/lib/outbox'
+import { clearOutbox, enqueue, flush, pendingOps } from '../src/lib/outbox'
+import { getSyncStatus } from '../src/lib/syncStatus'
 import { getState, setState, type ActiveFlight, type Trip } from '../src/lib/store'
 import { refreshAll } from '../src/lib/sync'
 import { withRoute } from '../src/lib/trips'
@@ -106,6 +107,21 @@ describe('flight handoff', () => {
     await vi.waitFor(() => expect(getState().session).toBeNull())
     expect(flightRole()).toBe('none')
     await vi.waitFor(() => expect(apiMock.mock.calls.some(([p]) => p === '/state')).toBe(true)) // and refreshes
+  })
+
+  it('queued_put_flight_409_on_reconnect_switches_to_observer_without_sync_error', async () => {
+    const f = foreign()
+    apiMock.mockRejectedValue(new TypeError('Failed to fetch')) // offline: the PUT is queued
+    startSession(trip, 25)
+    await vi.waitFor(() => expect(pendingOps()).toBe(1))
+    expect(getState().session).not.toBeNull()
+    apiMock.mockReset()
+    apiMock.mockRejectedValue(new ApiError(409, 'owned', { flight: f })) // back online, another device flies it
+    await flush()
+    expect(getState().session).toBeNull()
+    expect(getState().flight).toEqual(f)
+    expect(flightRole()).toBe('observer')
+    expect(getSyncStatus()).toMatchObject({ state: 'synced', pending: 0 })
   })
 
   it('owner_leaving_tab_sends_left_at_to_server', async () => {

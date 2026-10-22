@@ -3,7 +3,7 @@ import { DEMO_MODE } from './demo'
 import type { ApiError } from './api'
 import { deviceId, serverNow } from './device'
 import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
-import { send } from './outbox'
+import { send, setOnRejected } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
 import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
@@ -55,10 +55,30 @@ export function flightRole(): 'owner' | 'observer' | 'none' {
 const refreshSoon = () => void import('./sync').then((m) => m.refreshAll()).catch((e) => console.warn('refresh after flight rejection failed', e))
 
 /**
+ * A `PUT /flight` the server refused for good, sent directly or from the outbox queue (an offline start meeting another
+ * device's flight on reconnect): 409 `{ flight }` means another device owns it (become observer); 409 "already landed" or
+ * 404 means it is over (drop it and refresh). True when handled.
+ */
+function flightRejected(body: { tripId: string; startMs: number }, e: ApiError): boolean {
+  const mine = () => getState().session?.startMs === body.startMs && getState().session?.tripId === body.tripId
+  const other = (e.body as { flight?: ActiveFlight } | undefined)?.flight
+  if (e.status === 409 && other) {
+    setState({ flight: other, ...(mine() ? { session: null } : {}) })
+    return true
+  }
+  if (e.status === 409 || e.status === 404) {
+    if (mine()) setState({ session: null, flight: null })
+    refreshSoon()
+    return true
+  }
+  console.error('PUT /flight rejected', e, body) // 400: a client bug
+  return false
+}
+setOnRejected((op, e) => op.method === 'PUT' && op.path === '/flight' && flightRejected(op.body as { tripId: string; startMs: number }, e))
+
+/**
  * `PUT /flight` for the local session, through `send` so it reaches the server after the trip it needs (POST /trips) and is
- * queued on a network error or 5xx. A 4xx of the direct call comes back with its body: 409 `{ flight }` means another device
- * owns it (become observer); 409 "already landed" or 404 means it is over (drop it and refresh). A queued PUT that is later
- * rejected is only logged by the outbox; the next refresh reconciles (see sync.ts).
+ * queued on a network error or 5xx. A 4xx, now or when the queued PUT is sent later, goes to `flightRejected`.
  */
 function putFlight(s: ActiveSession, takeover = false): Promise<void> {
   const body = {
@@ -72,21 +92,7 @@ function putFlight(s: ActiveSession, takeover = false): Promise<void> {
     ...(takeover ? { takeover: true } : {}),
   }
   const mine = () => getState().session?.startMs === s.startMs && getState().session?.tripId === s.tripId
-  const rejected = (e: ApiError) => {
-    const other = (e.body as { flight?: ActiveFlight } | undefined)?.flight
-    if (e.status === 409 && other) {
-      setState({ flight: other, ...(mine() ? { session: null } : {}) })
-      return true
-    }
-    if (e.status === 409 || e.status === 404) {
-      if (mine()) setState({ session: null, flight: null })
-      refreshSoon()
-      return true
-    }
-    console.error('PUT /flight rejected', e, body) // 400: a client bug
-    return false
-  }
-  return send<ActiveFlight>({ id: `flight:${s.tripId}`, method: 'PUT', path: '/flight', body, touches: ['flight'] }, rejected).then((f) => {
+  return send<ActiveFlight>({ id: `flight:${s.tripId}`, method: 'PUT', path: '/flight', body, touches: ['flight'] }, (e) => flightRejected(body, e)).then((f) => {
     if (f && mine()) setState({ flight: f })
   })
 }

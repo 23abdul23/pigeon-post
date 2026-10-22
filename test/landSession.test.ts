@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
-vi.mock('../src/lib/outbox', () => ({ send: vi.fn() }))
+vi.mock('../src/lib/outbox', () => ({ send: vi.fn(), setOnRejected: vi.fn() }))
 vi.mock('../src/lib/stories', () => ({
   buildStory: vi.fn(async (lat: number, lng: number, km: number) => ({ place: 'Plitvice', country: 'Croatia', cc: 'HR', lens: 'Nature', text: 'Lakes.', birds: [], km, lat, lng })),
 }))
