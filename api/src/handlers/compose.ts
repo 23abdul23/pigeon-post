@@ -57,8 +57,8 @@ export const handler = route(async (sub, event) => {
           anthropic_version: 'bedrock-2023-05-31',
           max_tokens: 200,
           system: SYSTEM,
-          // A forged closing tag in the facts cannot end the data block early.
-          messages: [{ role: 'user', content: `<facts>${facts.replace(/<\s*\/?\s*facts[^>]*>/gi, '')}</facts>` }],
+          // No angle brackets survive in the facts, so no tag (nested or not) can end the data block early.
+          messages: [{ role: 'user', content: `<facts>${facts.replace(/[<>]/g, '')}</facts>` }],
         }),
       }),
     )
