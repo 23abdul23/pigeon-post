@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mockClient } from 'aws-sdk-client-mock'
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { handler as postSession } from '../src/handlers/sessions'
 import { createTrip, returnTrip } from '../src/handlers/trips'
@@ -60,6 +60,7 @@ beforeEach(() => {
   ddb.reset()
   table.clear()
   ddb.on(GetCommand).callsFake((input) => ({ Item: table.get(key(input.Key)) }))
+  ddb.on(QueryCommand).resolves({ Items: [] }) // no letters here; api/test/letters.test.ts covers the arrival rule
   ddb.on(TransactWriteCommand).callsFake((input) => {
     const puts = input.TransactItems.map((t: { Put: { Item: Record<string, unknown>; ConditionExpression?: string } }) => t.Put)
     if (puts.some((p: { Item: Record<string, unknown>; ConditionExpression?: string }) => p.ConditionExpression === 'attribute_not_exists(PK)' && table.has(key(p.Item))))

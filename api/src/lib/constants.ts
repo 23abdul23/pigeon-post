@@ -6,3 +6,9 @@ export const BIRD_IDS = ['hawk', 'stork', 'flamingo', 'parrot', 'gull', 'seagull
 
 /** City-level precision only: we never store an exact location. */
 export const roundCoord = (n: number): number => Math.round(n * 100) / 100
+
+/** Letters (Global Constraints): text and attachment limits, enforced by the API. */
+export const LETTER_MAX_CHARS = 2000
+export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+export const ATTACHMENT_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'application/pdf']
+export const MAX_ATTACHMENTS = 3

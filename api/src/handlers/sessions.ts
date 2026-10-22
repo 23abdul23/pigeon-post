@@ -1,12 +1,39 @@
-import { GetCommand, TransactWriteCommand, type TransactWriteCommandInput } from '@aws-sdk/lib-dynamodb'
-import type { SessionLog, SessionResult, Stamp, Story, Trip } from '../../../src/lib/types'
+import { GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
+import type { Letter, SessionLog, SessionResult, Stamp, Story, Trip } from '../../../src/lib/types'
 import { clampKm } from '../lib/clamp'
 import { roundCoord } from '../lib/constants'
 import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
 import { sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
+import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
 
-type TransactItem = NonNullable<TransactWriteCommandInput['TransactItems']>[number]
+// A transaction holds at most 100 items: 4 for the session itself, 2 per letter (both copies).
+// ponytail: letters beyond the cap keep their status (a sender's extra CARRIED letters go on the next visit); split into a follow-up step if real mailboxes get that big.
+const MAX_LETTER_MOVES = 48
+
+/**
+ * The arrival rule (Flow.md section 6), run once: only on the session that takes the trip to routeKm.
+ * At the friend's city my CARRIED letters to them are DELIVERED and their WAITING letters to me ride home (CARRIED, tagged
+ * with this trip); arriving home delivers exactly the letters this trip picked up.
+ */
+async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Letter[]; pickedUp: Letter[]; items: TransactItem[] }> {
+  const inbox = await queryAll<LetterRow>(userPk(sub), 'LETTER#')
+  let deliver: LetterRow[] = []
+  let pickUp: LetterRow[] = []
+  if (trip.status === 'RETURNING') deliver = inbox.filter((l) => l.status === 'CARRIED' && l.pickedUpBy === trip.id)
+  else if (trip.friendId) {
+    const sent = await queryAll<LetterRow>(userPk(sub), 'SENT#')
+    deliver = sent.filter((l) => l.status === 'CARRIED' && l.toId === trip.friendId)
+    pickUp = inbox.filter((l) => l.status === 'WAITING' && l.fromId === trip.friendId)
+  }
+  deliver = deliver.slice(0, MAX_LETTER_MOVES)
+  pickUp = pickUp.slice(0, MAX_LETTER_MOVES - deliver.length)
+  return {
+    delivered: deliver.map((l) => letterOut({ ...l, status: 'DELIVERED' }, sub)),
+    pickedUp: pickUp.map((l) => letterOut({ ...l, status: 'CARRIED' }, sub)),
+    items: [...deliver.flatMap((l) => move(l, 'CARRIED', 'DELIVERED')), ...pickUp.flatMap((l) => move(l, 'WAITING', 'CARRIED', trip.id))],
+  }
+}
 
 const REASONS: readonly unknown[] = ['completed', 'left', 'ended'] satisfies SessionLog['reason'][]
 const LENSES: readonly unknown[] = ['Legend', 'Food', 'Hidden spot', 'Nature', 'History'] satisfies Story['lens'][]
@@ -33,7 +60,8 @@ function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
 }
 
 /**
- * POST /trips/{id}/sessions: records a landed session. One transaction writes the session, trip progress, stamp and story.
+ * POST /trips/{id}/sessions: records a landed session. One transaction writes the session, trip progress, stamp, story and,
+ * on arrival, the letter handovers.
  * Idempotent on the client-generated session id: a replay returns the stored result and counts nothing twice.
  */
 export const handler = route(async (sub, event) => {
@@ -77,8 +105,10 @@ export const handler = route(async (sub, event) => {
       : { cc: storyIn.cc, country: storyIn.country, firstMs: now, visits: 1 }
     const story: Story = { ...storyIn, km: progressKm, dateMs: now, saved: false }
     const log: SessionLog = { id: sessionId, tripId, startMs, endMs, km: progressKm - trip.progressKm, reason: b.reason as SessionLog['reason'] }
+    // a session on a trip that had already arrived moves no letters
+    const letters = arrived && trip.progressKm < trip.routeKm ? await arrival(sub, trip) : { delivered: [], pickedUp: [], items: [] }
     // stored on the session row so a replay returns it unchanged
-    const result: SessionResult = { trip: tripOut(nextTrip), stamp, story, delivered: [], pickedUp: [] }
+    const result: SessionResult = { trip: tripOut(nextTrip), stamp, story, delivered: letters.delivered, pickedUp: letters.pickedUp }
 
     const items: TransactItem[] = [
       { Put: { TableName, Item: { PK, SK: sessionSk(sessionId), ...log, result }, ConditionExpression: 'attribute_not_exists(PK)' } },
@@ -100,8 +130,9 @@ export const handler = route(async (sub, event) => {
         },
       },
       { Put: { TableName, Item: { PK, SK: storySk(story.id), ...story }, ConditionExpression: 'attribute_not_exists(PK)' } },
+      // each letter write is conditional on its current status: a letter that moved meanwhile cancels this attempt, which re-reads
+      ...letters.items,
     ]
-    // Task 6 adds the arrival step here: when `arrived`, append the letter writes to `items` and fill result.delivered / pickedUp.
 
     try {
       await ddb.send(new TransactWriteCommand({ TransactItems: items }))

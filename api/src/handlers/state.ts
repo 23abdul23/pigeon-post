@@ -3,6 +3,7 @@ import type { Friend, ServerProfile, ServerState, SessionLog, Stamp, Story } fro
 import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { json, route } from '../lib/http'
 import { PROFILE_SK, userPk } from '../lib/keys'
+import { letterOut, type LetterRow } from '../lib/letters'
 
 export const handler = route(async (sub) => {
   const s: ServerState = { profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [] }
@@ -14,7 +15,6 @@ export const handler = route(async (sub) => {
     )
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)
-      // Later tasks dispatch their SK prefixes here (LETTER#, SENT#).
       if (sk === PROFILE_SK) s.profile = clean<ServerProfile>(item)
       else if (sk.startsWith('TRIP#')) {
         const t = clean<StoredTrip>(item)
@@ -25,6 +25,7 @@ export const handler = route(async (sub) => {
       } else if (sk.startsWith('STORY#')) s.stories.push(clean<Story>(item))
       else if (sk.startsWith('STAMP#')) s.stamps.push(clean<Stamp>(item))
       else if (sk.startsWith('FRIEND#')) s.friends.push(clean<Friend>(item))
+      else if (sk.startsWith('LETTER#') || sk.startsWith('SENT#')) s.letters.push(letterOut(item as LetterRow, sub)) // received and sent copies
     }
     ExclusiveStartKey = page.LastEvaluatedKey
   } while (ExclusiveStartKey)
@@ -34,5 +35,6 @@ export const handler = route(async (sub) => {
   s.stories.sort((a, b) => b.dateMs - a.dateMs)
   s.sessions.sort((a, b) => b.endMs - a.endMs)
   s.stamps.sort((a, b) => a.firstMs - b.firstMs)
+  s.letters.sort((a, b) => b.dateMs - a.dateMs)
   return json(200, s)
 })

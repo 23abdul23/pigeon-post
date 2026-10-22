@@ -314,7 +314,7 @@ Resources:
             Method: POST
             Path: /trips
 
-  # Transaction: session/trip/stamp/story are all Puts; reads check idempotency, the trip and the stamp.
+  # Transaction: session/trip/stamp/story are Puts, arrival letter moves are Updates; reads check idempotency, the trip and the stamp.
   SessionsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -338,8 +338,9 @@ Resources:
         LogGroup: !Ref SessionsLogGroup
       Policies:
         - Statement:
+            # Query + UpdateItem: the arrival step reads my letters and moves both copies (mine and my friend's)
             - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem]
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem]
               Resource: !GetAtt PigeonPost.Arn
       Events:
         Route:
@@ -461,6 +462,108 @@ Resources:
           Type: HttpApi
           Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: '/friends/{id}' }
 
+  # Letter attachments. Private: the browser uploads and downloads only through 5-minute presigned URLs.
+  LettersBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Sub 'https://${SiteDistribution.DomainName}'
+              - http://localhost:5173
+            AllowedMethods: [PUT, GET]
+            AllowedHeaders: [content-type]
+            MaxAge: 600
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }
+
+  LettersLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-letters'
+      RetentionInDays: 14
+
+  # One function for the three letter routes. Writes touch both users' partitions in one transaction.
+  LettersFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/letters.ts]
+    Properties:
+      CodeUri: api/
+      Handler: letters.handler
+      LoggingConfig:
+        LogGroup: !Ref LettersLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Create:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: /letters }
+        Open:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: '/letters/{id}/open' }
+        Save:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: PUT, Path: '/letters/{id}' }
+
+  UploadsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-uploads'
+      RetentionInDays: 14
+
+  UploadsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/uploads.ts]
+    Properties:
+      CodeUri: api/
+      Handler: uploads.handler
+      LoggingConfig:
+        LogGroup: !Ref UploadsLogGroup
+      Environment:
+        Variables:
+          LETTERS_BUCKET: !Ref LettersBucket
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Query] # may this caller read an attachment: is it on a letter in their inbox?
+              Resource: !GetAtt PigeonPost.Arn
+            # presigned URLs act with these rights, so they cover letters/* only
+            - Effect: Allow
+              Action: [s3:PutObject, s3:GetObject]
+              Resource: !Sub '${LettersBucket.Arn}/letters/*'
+      Events:
+        Presign:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: /uploads/presign }
+        Url:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /uploads/url }
+
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -483,6 +586,8 @@ Outputs:
     Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
   SiteBucket:
     Value: !Ref SiteBucket
+  LettersBucket:
+    Value: !Ref LettersBucket
   DistributionId:
     Value: !Ref SiteDistribution
   UserPoolId:
