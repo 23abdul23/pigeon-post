@@ -27,3 +27,5 @@ dist-ssr
 api/node_modules
 api/.aws-sam
 .aws-sam
+
+.env
