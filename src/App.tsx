@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useStore } from './lib/store'
+import { useEffect } from 'react'
+import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
+import { setState, useStore } from './lib/store'
+import AuthCallback from './screens/AuthCallback'
 import ChooseBird from './screens/ChooseBird'
 import Dashboard from './screens/Dashboard'
 import AddFriend from './screens/AddFriend'
@@ -25,7 +28,18 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   const home = useStore((s) => s.homeCity)
   const bird = useStore((s) => s.bird)
   const loc = useLocation()
-  if (!user) return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
+  const auth = useAuth()
+  // With Cognito the session is the source of truth; mirror it into the store for screens that read `user`.
+  useEffect(() => {
+    if (COGNITO_CONFIGURED && auth.status === 'signedIn' && !user) {
+      setState({ user: { name: auth.email?.split('@')[0] ?? 'Traveler', email: auth.email ?? '' } })
+    }
+  }, [auth.status, auth.email, user])
+  if (COGNITO_CONFIGURED) {
+    if (auth.status === 'loading') return null
+    if (auth.status === 'signedOut') return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
+    if (!user) return null
+  } else if (!user) return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
   if (!onboarding) {
     if (!home) return <Navigate to="/onboarding/city" replace />
     if (!bird) return <Navigate to="/onboarding/bird" replace />
@@ -38,6 +52,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/signin" element={<SignIn />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/onboarding/city" element={<Guard onboarding><HomeCity /></Guard>} />
       <Route path="/onboarding/bird" element={<Guard onboarding><ChooseBird /></Guard>} />
       <Route path="/fly/:tripId" element={<Guard><Focus /></Guard>} />

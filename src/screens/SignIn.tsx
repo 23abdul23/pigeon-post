@@ -1,13 +1,16 @@
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Frame } from '../components/Layout'
 import Header from '../components/Header'
+import { COGNITO_CONFIGURED, signIn as cognitoSignIn } from '../lib/auth'
 import { getState, setState } from '../lib/store'
 
 export default function SignIn() {
   const nav = useNavigate()
+  const returnTo = (useLocation().state as { returnTo?: string } | null)?.returnTo
 
   function signIn() {
-    // Mock Google sign-in; the AWS plan swaps this for Cognito.
+    if (COGNITO_CONFIGURED) return void cognitoSignIn(returnTo)
+    // Offline dev (no VITE_COGNITO_*): local mock user.
     const s = getState()
     setState({ user: s.user ?? { name: 'Azeem', email: 'azeem@example.com' } })
     const next = !getState().homeCity ? '/onboarding/city' : !getState().bird ? '/onboarding/bird' : '/home'

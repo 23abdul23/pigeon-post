@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { COGNITO_CONFIGURED, signOut as cognitoSignOut } from '../lib/auth'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import BirdViewer from '../components/BirdViewer'
 import Flag from '../components/Flag'
@@ -73,6 +74,7 @@ export default function Settings() {
 
   function signOut() {
     setState({ user: null })
+    if (COGNITO_CONFIGURED) return void cognitoSignOut()
     nav('/signin', { replace: true })
   }
 
