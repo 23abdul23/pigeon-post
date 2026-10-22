@@ -56,6 +56,8 @@ export type State = {
   stamps: Stamp[]
   sessions: SessionLog[]
   settings: Settings
+  /** the caller's own invite code, from the server */
+  inviteCode: string | null
 }
 
 const KEY = 'pigeon-post:v1'
@@ -74,6 +76,7 @@ const initial: State = {
   stamps: [],
   sessions: [],
   settings: defaultSettings,
+  inviteCode: null,
 }
 
 function load(): State {
@@ -104,7 +107,7 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l())
 }
 
-/** Applies `GET /state` (its trip with the route recomputed). Letters and friends stay local until their tasks move them. */
+/** Applies `GET /state` (its trip with the route recomputed). Letters stay local until their task moves them. */
 export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): void {
   const p = s.profile
   setState((st) => ({
@@ -112,6 +115,8 @@ export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): v
     stories: s.stories,
     stamps: s.stamps,
     sessions: s.sessions,
+    friends: s.friends,
+    inviteCode: p?.inviteCode ?? null,
     homeCity: p?.homeCity ?? null,
     bird: p?.bird ?? null,
     settings: { ...defaultSettings, ...p?.settings },

@@ -1,8 +1,12 @@
+import { api, ApiError } from './api'
+import { COGNITO_CONFIGURED } from './auth'
+import { DEMO_MODE } from './demo'
+import { send } from './outbox'
 import { getState, setState, type Friend, type Letter } from './store'
 
 /**
- * Local stand-in for the friends service. The directory below plays the role of "other users";
- * the AWS plan replaces it with real accounts, invite links and DynamoDB items.
+ * With Cognito configured, friends are real: the API owns requests and acceptance (/friends/*).
+ * The directory below plays "other users" for offline demo mode only (DEMO_MODE, no Cognito).
  */
 export type Person = { id: string; name: string; city: string; cc: string; lat: number; lng: number; district: string; code: string; photo?: string }
 
@@ -55,10 +59,29 @@ const norm = (c: string) => c.replace(/[^a-z0-9]/gi, '').toUpperCase()
 
 export function findPersonByCode(code: string): Person | undefined {
   const n = norm(code)
-  return n ? PEOPLE.find((p) => p.code === n) : undefined
+  return DEMO_MODE && n ? PEOPLE.find((p) => p.code === n) : undefined
 }
 
-/** Sends a request; the demo directory accepts it a moment later. */
+const REQUEST_ERRORS: Record<number, string> = {
+  400: "That's your own code, or your profile isn't finished yet.",
+  404: "That code doesn't match anyone. Check it and try again.",
+  409: 'That code is shared by more than one person. Ask your friend to check it.',
+}
+
+/** Sends a request by invite code. Throws an Error with a message fit to show the user (a direct call, never queued). */
+export async function requestFriendByCode(code: string): Promise<Friend> {
+  let f: Friend
+  try {
+    f = await api<Friend>('/friends/request', { method: 'POST', body: JSON.stringify({ code }) })
+  } catch (e) {
+    if (e instanceof ApiError) throw new Error(REQUEST_ERRORS[e.status] ?? 'Something went wrong. Try again in a moment.')
+    throw new Error("Can't reach the roost right now. Check your connection and try again.")
+  }
+  setState((st) => ({ friends: [...st.friends.filter((x) => x.id !== f.id), f] }))
+  return f
+}
+
+/** Demo only: sends a request; the demo directory accepts it a moment later. */
 export function requestFriend(p: Person) {
   const st = getState()
   if (st.friends.some((f) => f.id === p.id)) return
@@ -66,12 +89,20 @@ export function requestFriend(p: Person) {
   window.setTimeout(() => acceptFriend(p.id), 2500)
 }
 
+// Local state changes first; the API write goes through the outbox (retried when offline; a no-op without Cognito).
 export function acceptFriend(id: string) {
   setState({ friends: getState().friends.map((f) => (f.id === id ? { ...f, status: 'accepted' } : f)) })
+  void send({ id: `friend-accept:${id}`, method: 'POST', path: `/friends/${id}/accept` })
+}
+
+export function declineFriend(id: string) {
+  setState({ friends: getState().friends.filter((f) => f.id !== id) })
+  void send({ id: `friend-decline:${id}`, method: 'POST', path: `/friends/${id}/decline` })
 }
 
 export function removeFriend(id: string) {
   setState({ friends: getState().friends.filter((f) => f.id !== id) })
+  void send({ id: `friend-remove:${id}`, method: 'DELETE', path: `/friends/${id}` })
 }
 
 export function writeLetter(input: {
@@ -125,8 +156,9 @@ export function replyFrom(friend: Friend): Letter {
   }
 }
 
-/** Pending requests left over from a previous visit resolve once the app reopens. */
+/** Demo only: pending requests left over from a previous visit resolve once the app reopens. Real requests wait for the other user. */
 export function settleRequests() {
+  if (COGNITO_CONFIGURED) return
   const st = getState()
   if (st.friends.some((f) => f.status === 'pending_out')) {
     setState({ friends: st.friends.map((f) => (f.status === 'pending_out' ? { ...f, status: 'accepted' as const } : f)) })

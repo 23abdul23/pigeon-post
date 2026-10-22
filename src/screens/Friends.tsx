@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
 import MiniMap from '../components/MiniMap'
-import { acceptFriend, avatarColor, initials, removeFriend, settleRequests } from '../lib/social'
+import { acceptFriend, avatarColor, declineFriend, initials, settleRequests } from '../lib/social'
 import { useStore, type Friend } from '../lib/store'
 import { countryName } from '../lib/geo'
 
@@ -177,7 +177,7 @@ export default function Friends() {
                   <button type="button" onClick={() => acceptFriend(f.id)} className="flex-1 rounded-full bg-[#8e4d31] py-2 text-[14px] font-bold text-white">
                     Accept
                   </button>
-                  <button type="button" onClick={() => removeFriend(f.id)} className="flex-1 rounded-full bg-line py-2 text-[14px] font-bold text-ink-2">
+                  <button type="button" onClick={() => declineFriend(f.id)} className="flex-1 rounded-full bg-line py-2 text-[14px] font-bold text-ink-2">
                     Decline
                   </button>
                 </div>

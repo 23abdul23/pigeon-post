@@ -4,13 +4,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
 import { countryName, haversineKm } from '../lib/geo'
-import { findPersonByCode, myInviteCode, requestFriend, type Person } from '../lib/social'
+import { COGNITO_CONFIGURED } from '../lib/auth'
+import { findPersonByCode, myInviteCode, requestFriend, requestFriendByCode, type Person } from '../lib/social'
 import { useStore } from '../lib/store'
 
 export default function AddFriend() {
   const nav = useNavigate()
   const [params] = useSearchParams()
-  const user = useStore((s) => s.user)
+  const inviteCode = useStore((s) => s.inviteCode)
   const home = useStore((s) => s.homeCity)
   const friends = useStore((s) => s.friends)
   const [tab, setTab] = useState<'invite' | 'code'>(params.get('code') ? 'code' : 'invite')
@@ -18,15 +19,18 @@ export default function AddFriend() {
   const [found, setFound] = useState<Person | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [sending, setSending] = useState(false)
 
-  const mine = myInviteCode()
-  const stamp = `PIGEON-${mine.slice(0, 3)}`
-  const link = `pigeonpost.app/roost/${(user?.name ?? 'friend').toLowerCase()}-${mine.slice(0, 3).toLowerCase()}`
+  // Real code from the server; the derived one only exists for offline demo mode.
+  const mine = inviteCode ?? (COGNITO_CONFIGURED ? '' : myInviteCode())
+  const stamp = mine || '--------'
+  const link = mine ? `${window.location.host}/friends/add?code=${mine}` : ''
   const existing = found ? friends.find((f) => f.id === found.id) : undefined
 
   async function copy() {
+    if (!link) return
     try {
-      await navigator.clipboard.writeText(`https://${link}`)
+      await navigator.clipboard.writeText(`${window.location.protocol}//${link}`)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -35,7 +39,8 @@ export default function AddFriend() {
   }
 
   async function share() {
-    const data = { title: 'Pigeon Post', text: 'Join my roost on Pigeon Post', url: `https://${link}` }
+    if (!link) return
+    const data = { title: 'Pigeon Post', text: `Join my roost on Pigeon Post. My code: ${mine}`, url: `${window.location.protocol}//${link}` }
     if (navigator.share) {
       try {
         await navigator.share(data)
@@ -47,7 +52,21 @@ export default function AddFriend() {
     }
   }
 
+  // With the real API there is no directory to preview: the server resolves the code when the request is sent.
+  async function sendByCode() {
+    setError('')
+    setSending(true)
+    try {
+      await requestFriendByCode(code)
+      nav('/friends?tab=requests', { replace: true })
+    } catch (e) {
+      setError((e as Error).message)
+      setSending(false)
+    }
+  }
+
   function find() {
+    if (COGNITO_CONFIGURED) return void sendByCode()
     setError('')
     const p = findPersonByCode(code)
     if (!p) {
@@ -130,7 +149,7 @@ export default function AddFriend() {
               <div className="mt-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                   <img src="/assets/af-link.svg" alt="" className="h-2 w-[16.7px]" />
-                  <span className="min-w-0 flex-1 truncate text-[14px] text-ink">{link}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-ink">{link || 'Loading your link...'}</span>
                   {copied && <img src="/assets/af-check.svg" alt="Copied" className="size-4" />}
                 </div>
                 <div className="flex gap-2 pt-1">
@@ -180,16 +199,16 @@ export default function AddFriend() {
                     className="w-full rounded-xl bg-white py-3 pl-11 pr-4 text-[16px] uppercase tracking-[0.8px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] outline-none placeholder:text-outline focus:ring-2 focus:ring-sage/40"
                   />
                 </div>
-                <button type="button" onClick={find} className="flex items-center justify-center gap-2 rounded-full bg-[#7fa38a] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <button type="button" onClick={find} disabled={sending || (COGNITO_CONFIGURED && !code.trim())} className="flex items-center justify-center gap-2 rounded-full bg-[#7fa38a] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                   <img src="/assets/af-search.svg" alt="" className="size-[15px]" />
-                  Find friend
+                  {COGNITO_CONFIGURED ? (sending ? 'Sending...' : 'Send roost request') : 'Find friend'}
                 </button>
                 {error && (
                   <p role="alert" className="text-[13px] text-[#ba1a1a]">
                     {error}
                   </p>
                 )}
-                {DEMO_MODE && <p className="text-[12px] text-muted">Demo: try WING-4421, MAYA2024 or JULIAN42.</p>}
+                {DEMO_MODE && !COGNITO_CONFIGURED && <p className="text-[12px] text-muted">Demo: try WING-4421, MAYA2024 or JULIAN42.</p>}
               </div>
 
               {found && (
