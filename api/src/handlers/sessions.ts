@@ -4,7 +4,7 @@ import { clampKm } from '../lib/clamp'
 import { roundCoord } from '../lib/constants'
 import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
-import { sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
+import { letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
 
 // A transaction holds at most 100 items: 4 for the session itself, 2 per letter (both copies).
@@ -26,8 +26,12 @@ async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Lett
     deliver = sent.filter((l) => l.status === 'CARRIED' && l.toId === trip.friendId)
     pickUp = inbox.filter((l) => l.status === 'WAITING' && l.fromId === trip.friendId)
   }
-  deliver = deliver.slice(0, MAX_LETTER_MOVES)
-  pickUp = pickUp.slice(0, MAX_LETTER_MOVES - deliver.length)
+  // a letter whose other copy is gone (account deletion) is skipped: moving it would cancel every attempt and the flight would never land
+  const get = async (PK: string, SK: string) => (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK, SK }, ConsistentRead: true }))).Item
+  const mirrored = async (ls: LetterRow[], other: (l: LetterRow) => [string, string]) =>
+    (await Promise.all(ls.map(async (l) => ((await get(...other(l))) ? l : undefined)))).filter((l): l is LetterRow => !!l)
+  deliver = await mirrored(deliver.slice(0, MAX_LETTER_MOVES), (l) => [userPk(l.toId), letterSk(l.id)])
+  pickUp = await mirrored(pickUp.slice(0, MAX_LETTER_MOVES - deliver.length), (l) => [userPk(l.fromId), sentSk(l.id)])
   return {
     delivered: deliver.map((l) => letterOut({ ...l, status: 'DELIVERED' }, sub)),
     pickedUp: pickUp.map((l) => letterOut({ ...l, status: 'CARRIED' }, sub)),

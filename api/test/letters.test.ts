@@ -133,7 +133,9 @@ describe('uploads', () => {
     expect(ok.body.key).toMatch(/^letters\/a\/[\w-]+$/)
     expect(ok.body.url).toContain('letters-test-bucket')
     expect(ok.body.url).toContain(encodeURIComponent(ok.body.key).replace(/%2F/g, '/'))
-    expect(ok.body.url).toMatch(/X-Amz-SignedHeaders=[^&]*content-length/) // S3 refuses a body of another size
+    expect(ok.body.url).toMatch(/X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost/) // S3 refuses a body of another size or type
+    // no SDK default checksum: a CRC32 of the empty body would make S3 reject every real upload (BadDigest)
+    expect(ok.body.url).not.toMatch(/x-amz-checksum|x-amz-sdk-checksum/i)
   })
 
   it('presign_rejects_exe_content_type', async () => {
@@ -150,6 +152,7 @@ describe('uploads', () => {
     const r = await downloadUrl('letters/a/k1', 'b')
     expect(r.status).toBe(200)
     expect(r.body.url).toContain('letters/a/k1')
+    expect(r.body.url).not.toMatch(/x-amz-checksum|x-amz-sdk-checksum/i)
     expect((await downloadUrl('letters/a/k1', 'c')).status).toBe(403)
     expect((await downloadUrl('site/index.html')).status).toBe(400)
     expect((await downloadUrl('letters/a/../b/k1')).status).toBe(400)
@@ -215,6 +218,20 @@ describe('arrival', () => {
     expect(status('USER#a', 'LETTER#reply')).toBe('DELIVERED')
     expect(status('USER#b', 'SENT#reply')).toBe('DELIVERED')
     expect(status('USER#a', 'LETTER#bobs-own')).toBe('CARRIED') // not on Ann's bird
+  })
+
+  it('arrival_skips_a_letter_whose_other_copy_is_missing', async () => {
+    await write('a', {})
+    await write('b', { id: 'reply', toId: 'a', status: 'WAITING' })
+    await write('b', { id: 'orphan', toId: 'a', status: 'WAITING' })
+    table.delete(k('USER#b', 'SENT#orphan')) // e.g. the sender's copy was removed with their account
+    seedTrip('a')
+    const r = await fly('a', 's1')
+    expect(r.status).toBe(200) // the flight still lands
+    expect(r.body.pickedUp.map((l: { id: string }) => l.id)).toEqual(['reply'])
+    expect(r.body.delivered.map((l: { id: string }) => l.id)).toEqual(['l1'])
+    expect(status('USER#a', 'LETTER#orphan')).toBe('WAITING')
+    expect(row('USER#b', 'SENT#orphan')).toBeUndefined() // no stub row recreated
   })
 
   it('arrival_twice_does_not_duplicate_or_redeliver', async () => {

@@ -7,7 +7,8 @@ import { bad, fail, json, parseBody, route } from '../lib/http'
 import { queryAll, type LetterRow } from '../lib/letters'
 import { userPk } from '../lib/keys'
 
-const s3 = new S3Client({})
+// WHEN_REQUIRED: the SDK default would sign a CRC32 of the empty body into presigned URLs, and S3 would reject every real upload
+const s3 = new S3Client({ requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED' })
 const Bucket = () => process.env.LETTERS_BUCKET!
 const EXPIRES_S = 300
 
