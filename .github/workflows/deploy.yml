@@ -60,7 +60,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: pigeon-post-deploy
       - name: Build
-        run: sam build --config-env ci
+        # esbuild is an api/ devDependency; SAM only finds it on PATH.
+        run: |
+          echo "$GITHUB_WORKSPACE/api/node_modules/.bin" >> "$GITHUB_PATH"
+          export PATH="$GITHUB_WORKSPACE/api/node_modules/.bin:$PATH"
+          sam build --config-env ci
+      - name: Smoke-test bundles
+        # A handler that fails to import crashes at Lambda init; block the deploy.
+        run: node scripts/smoke-bundles.mjs
       - name: Deploy stack
         # Values come in through env, never interpolated into the script text.
         env:

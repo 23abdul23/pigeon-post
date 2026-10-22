@@ -280,6 +280,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/health.ts]
     Properties:
       CodeUri: api/
@@ -311,6 +312,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/state.ts]
     Properties:
       CodeUri: api/
@@ -345,6 +347,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/me.ts]
     Properties:
       CodeUri: api/
@@ -382,6 +385,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/trips.ts]
     Properties:
       CodeUri: api/
@@ -417,6 +421,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/sessions.ts]
     Properties:
       CodeUri: api/
@@ -462,6 +467,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/trips.ts]
     Properties:
       CodeUri: api/
@@ -496,6 +502,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/stories.ts]
     Properties:
       CodeUri: api/
@@ -530,6 +537,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/compose.ts]
     Properties:
       CodeUri: api/
@@ -577,6 +585,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/friends.ts]
     Properties:
       CodeUri: api/
@@ -645,6 +654,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/letters.ts]
     Properties:
       CodeUri: api/
@@ -682,6 +692,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/uploads.ts]
     Properties:
       CodeUri: api/
@@ -724,6 +735,7 @@ Resources:
         Target: es2023
         Minify: true
         OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
         EntryPoints: [src/handlers/account.ts]
     Properties:
       CodeUri: api/
