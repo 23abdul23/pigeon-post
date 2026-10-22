@@ -1,8 +1,8 @@
-import { GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
+import { DeleteCommand, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import type { Letter, SessionLog, SessionResult, Stamp, Story, Trip } from '../../../src/lib/types'
 import { clampKm } from '../lib/clamp'
 import { roundCoord } from '../lib/constants'
-import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
+import { clean, ddb, isConditionFail, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
 import { flightSk, letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
@@ -87,6 +87,12 @@ export const handler = route(async (sub, event) => {
     const s = await get(sessionSk(sessionId))
     if (!s) return undefined
     if (s.tripId !== tripId) return fail(409, 'session id belongs to another trip')
+    // best effort: a heartbeat that raced the first landing may have recreated this flight; only that exact flight is cleared
+    try {
+      await ddb.send(new DeleteCommand({ TableName, Key: { PK, SK: flightSk() }, ConditionExpression: 'tripId = :t AND startMs = :s', ExpressionAttributeValues: { ':t': tripId, ':s': s.startMs } }))
+    } catch (e) {
+      if (!isConditionFail(e)) throw e
+    }
     return json(200, s.result)
   }
 

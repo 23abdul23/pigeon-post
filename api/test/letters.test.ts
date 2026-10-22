@@ -186,6 +186,19 @@ describe('POST /letters', () => {
 })
 
 describe('arrival', () => {
+  it('arrival_with_many_letters_stays_within_the_100_item_transaction_limit', async () => {
+    for (let i = 0; i < 60; i++) {
+      const l = { id: `m${i}`, fromId: 'a', toId: 'b', fromName: 'Ann', fromCity: 'Zagreb', cc: 'HR', text: 'Hi', attachments: [], status: 'CARRIED', dateMs: i }
+      table.set(k('USER#a', `SENT#m${i}`), { PK: 'USER#a', SK: `SENT#m${i}`, ...l, box: 'sent' })
+      table.set(k('USER#b', `LETTER#m${i}`), { PK: 'USER#b', SK: `LETTER#m${i}`, ...l, box: 'in' })
+    }
+    seedTrip('a')
+    const r = await fly('a', 's1')
+    expect(r.status).toBe(200)
+    expect(transacts()[0].args[0].input.TransactItems!.length).toBeLessThanOrEqual(100)
+    expect(r.body.delivered).toHaveLength(47) // the rest go on the next visit
+  })
+
   it('arrival_delivers_sender_letters', async () => {
     await write('a', {})
     seedTrip('a')

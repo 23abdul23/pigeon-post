@@ -61,7 +61,8 @@ const PHONE = 'phone-device-1'
 const LAPTOP = 'laptop-device-2'
 const body = (over: Record<string, unknown> = {}) => ({ tripId: 't1', startMs: NOW - 60000, durationMin: 25, baseKm: 0, deviceId: PHONE, ...over })
 const seedFlight = (over: Record<string, unknown> = {}) =>
-  table.set(k('USER#u1', 'FLIGHT'), { PK: 'USER#u1', SK: 'FLIGHT', ...body(), heartbeatMs: NOW, ttl: 0, ...over })
+  table.set(k('USER#u1', 'FLIGHT'), { PK: 'USER#u1', SK: 'FLIGHT', ...body(), legs: 0, heartbeatMs: NOW, ttl: 0, ...over })
+const LANDED = { status: 409, body: { error: 'flight already landed' } }
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
@@ -79,6 +80,7 @@ beforeEach(() => {
     return { Attributes: applyUpdate(i) }
   })
   ddb.on(DeleteCommand).callsFake((i) => {
+    if (!holds(i, table.get(k(i.Key.PK, i.Key.SK)))) throw condFail()
     table.delete(k(i.Key.PK, i.Key.SK))
     return {}
   })
@@ -102,7 +104,7 @@ describe('PUT /flight', () => {
     seedTrip()
     const r = await put(body())
     expect(r.status).toBe(200)
-    expect(r.body).toEqual({ ...body(), heartbeatMs: NOW })
+    expect(r.body).toEqual({ ...body(), legs: 0, heartbeatMs: NOW }) // legs: the trip's, so a landing (legs + 1) invalidates it
     const item = row('USER#u1', 'FLIGHT')!
     // epoch seconds, like the table's other ttl items: start + duration + 24 h
     expect(item.ttl).toBe(Math.floor((NOW - 60000) / 1000) + 25 * 60 + 24 * 3600)
@@ -115,7 +117,7 @@ describe('PUT /flight', () => {
     // a heartbeat that tries to change the flight's shape changes nothing but liveness and leftAtMs
     const r = await put(body({ durationMin: 60, baseKm: 500, leftAtMs: NOW - 1000 }))
     expect(r.status).toBe(200)
-    expect(r.body).toEqual({ ...body(), heartbeatMs: NOW, leftAtMs: NOW - 1000 })
+    expect(r.body).toEqual({ ...body(), legs: 0, heartbeatMs: NOW, leftAtMs: NOW - 1000 })
     expect(row('USER#u1', 'FLIGHT')).toMatchObject({ durationMin: 25, baseKm: 0, heartbeatMs: NOW, leftAtMs: NOW - 1000 })
     expect(ddb.commandCalls(PutCommand)).toHaveLength(0)
     expect(ddb.commandCalls(UpdateCommand)[0].args[0].input.ConditionExpression).toBe('deviceId = :d AND startMs = :s')
@@ -124,9 +126,9 @@ describe('PUT /flight', () => {
   it('flight_put_same_device_new_start_replaces_the_flight', async () => {
     seedTrip()
     seedFlight({ heartbeatMs: NOW })
-    const r = await put(body({ startMs: NOW, durationMin: 50, baseKm: 200 }))
+    const r = await put(body({ startMs: NOW, durationMin: 50 }))
     expect(r.status).toBe(200)
-    expect(row('USER#u1', 'FLIGHT')).toMatchObject({ startMs: NOW, durationMin: 50, baseKm: 200 })
+    expect(row('USER#u1', 'FLIGHT')).toMatchObject({ startMs: NOW, durationMin: 50, heartbeatMs: NOW })
   })
 
   it('flight_put_other_device_while_fresh_is_409_with_current_flight', async () => {
@@ -134,7 +136,7 @@ describe('PUT /flight', () => {
     seedFlight({ heartbeatMs: NOW - FLIGHT_STALE_MS })
     const r = await put(body({ deviceId: LAPTOP, startMs: NOW }))
     expect(r.status).toBe(409)
-    expect(r.body).toEqual({ flight: { ...body(), heartbeatMs: NOW - FLIGHT_STALE_MS } }) // no PK/SK/ttl
+    expect(r.body).toEqual({ flight: { ...body(), legs: 0, heartbeatMs: NOW - FLIGHT_STALE_MS } }) // no PK/SK/ttl
     expect(row('USER#u1', 'FLIGHT')!.deviceId).toBe(PHONE)
   })
 
@@ -219,12 +221,12 @@ describe('DELETE /flight', () => {
 })
 
 describe('landing', () => {
-  const session = (id: string, tripId = 't1') =>
+  const session = (id: string, tripId = 't1', over: Record<string, unknown> = {}) =>
     call(
       postSession,
       ev(
         'POST /trips/{id}/sessions',
-        { id, startMs: NOW - 5 * 60000, endMs: NOW, reason: 'completed', kmGained: 500, story: { id: `story-${id}`, place: 'Plitvice', country: 'Croatia', cc: 'HR', lens: 'Nature', text: 'Lakes.', birds: [], lat: 44.88, lng: 15.62 } },
+        { id, startMs: NOW - 5 * 60000, endMs: NOW, reason: 'completed', kmGained: 500, ...over, story: { id: `story-${id}`, place: 'Plitvice', country: 'Croatia', cc: 'HR', lens: 'Nature', text: 'Lakes.', birds: [], lat: 44.88, lng: 15.62 } },
         'u1',
         tripId,
       ),
@@ -259,5 +261,57 @@ describe('landing', () => {
     expect([...table.keys()].filter((key) => key.startsWith('USER#u1|SESSION#'))).toEqual(['USER#u1|SESSION#s1'])
     expect(row('USER#u1', 'STAMP#HR')!.visits).toBe(1)
     expect(row('USER#u1', 'TRIP#t1')).toMatchObject({ legs: 1, progressKm: 500 })
+  })
+
+  it('heartbeat_after_landing_does_not_recreate_the_flight', async () => {
+    seedTrip()
+    expect((await put(body({ legs: 0 }))).status).toBe(200)
+    expect((await session('s1', 't1', { startMs: NOW - 60000 })).status).toBe(200)
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+    // a queued or retried heartbeat arriving after the landing: baseKm no longer matches the trip's progress
+    expect(await put(body())).toEqual(LANDED)
+    expect(await put(body({ leftAtMs: NOW }))).toEqual(LANDED)
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+
+    // a quick leave lands 0 km, so progress is unchanged: the trip's legs (now 1) still tell
+    seedTrip({ routeKm: 5000 })
+    expect((await put(body({ legs: 0 }))).status).toBe(200)
+    expect((await session('s2', 't1', { startMs: NOW - 60000, endMs: NOW - 60000, kmGained: 0, reason: 'left' })).status).toBe(200)
+    expect(row('USER#u1', 'TRIP#t1')).toMatchObject({ progressKm: 0, legs: 1 })
+    expect(await put(body({ legs: 0 }))).toEqual(LANDED)
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+    expect((await put(body({ legs: 1, startMs: NOW }))).status).toBe(200) // the next flight is fine
+  })
+
+  it('heartbeat_racing_the_landing_returns_409_already_landed', async () => {
+    seedTrip()
+    seedFlight({ heartbeatMs: NOW - 30000 })
+    // the landing commits between the heartbeat's read and its update
+    ddb.on(UpdateCommand).callsFakeOnce(() => {
+      table.delete(k('USER#u1', 'FLIGHT'))
+      seedTrip({ progressKm: 500, legs: 1 })
+      throw condFail()
+    })
+    expect(await put(body())).toEqual(LANDED)
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0)
+    // a surviving row from before a landing (legs moved on) is not heartbeated back to life either
+    seedFlight({ heartbeatMs: NOW - 30000, baseKm: 500 })
+    expect(await put(body({ baseKm: 500 }))).toEqual(LANDED)
+  })
+
+  it('replay_of_a_landing_clears_a_recreated_flight', async () => {
+    seedTrip({ routeKm: 5000 })
+    seedFlight({ startMs: NOW - 5 * 60000 })
+    const first = await session('s1')
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+    seedFlight({ startMs: NOW - 5 * 60000 }) // resurrected by an old client before the guard
+    expect(await session('s1')).toEqual(first)
+    expect(row('USER#u1', 'FLIGHT')).toBeUndefined()
+    // a newer flight on the same trip (another startMs) is not the landed one: kept
+    seedFlight({ startMs: NOW, baseKm: 500, legs: 1 })
+    expect(await session('s1')).toEqual(first)
+    expect(row('USER#u1', 'FLIGHT')).toMatchObject({ startMs: NOW })
+    expect(ddb.commandCalls(TransactWriteCommand)).toHaveLength(1)
   })
 })

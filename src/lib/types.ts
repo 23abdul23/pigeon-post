@@ -19,8 +19,8 @@ export type Trip = {
   origin?: City
 }
 
-/** The flight in progress, owned by one device (`PUT /flight`); `heartbeatMs` is server time. */
-export type ActiveFlight = { tripId: string; startMs: number; durationMin: number; baseKm: number; deviceId: string; leftAtMs?: number; heartbeatMs: number }
+/** The flight in progress, owned by one device (`PUT /flight`); `heartbeatMs` is server time; `legs` is the trip's legs at start (missing on old rows). */
+export type ActiveFlight = { tripId: string; startMs: number; durationMin: number; baseKm: number; deviceId: string; leftAtMs?: number; heartbeatMs: number; legs?: number }
 
 export type Story = {
   id: string
