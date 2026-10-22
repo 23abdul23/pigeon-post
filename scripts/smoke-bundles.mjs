@@ -13,18 +13,37 @@ Object.assign(process.env, {
   BEDROCK_MODEL_ID: 'smoke-model',
 });
 
+function die(msg) {
+  console.error(msg);
+  process.exit(1);
+}
+
+// Expected functions come from the template, so a partial build cannot pass silently.
+let template;
+try {
+  template = readFileSync('template.yaml', 'utf8');
+} catch (e) {
+  die(`FAIL: cannot read template.yaml: ${e.message}`);
+}
+// Name = the nearest preceding 2-space-indented key, so comments, Condition, DependsOn and blank lines before Type are fine.
+const typeRe = /^\s*Type:\s*['"]?AWS::Serverless::Function['"]?\s*(#.*)?$/;
+const expected = [];
+let key = null;
+for (const line of template.split(/\r?\n/)) {
+  const k = line.match(/^ {2}['"]?([\w-]+)['"]?:\s*(#.*)?$/);
+  if (k) key = k[1];
+  else if (/^ {4}Type:/.test(line) && typeRe.test(line) && key) expected.push(key);
+}
+// Independent count: any Type line anywhere, so a layout the name parser misses still trips the gate.
+const typeCount = (template.match(/Type:\s*['"]?AWS::Serverless::Function['"]?/g) ?? []).length;
+if (typeCount === 0) die('FAIL: no AWS::Serverless::Function resources found in template.yaml');
+if (typeCount !== expected.length) {
+  die(`FAIL: template.yaml has ${typeCount} AWS::Serverless::Function types but only ${expected.length} names were parsed [${expected}]`);
+}
+
 const root = resolve('.aws-sam/build');
-if (!existsSync(root)) {
-  console.error('FAIL: .aws-sam/build not found; run `sam build --config-env ci` first');
-  process.exit(1);
-}
-// Expected functions come from the template, so a partial build cannot pass silently.
-// Expected functions come from the template, so a partial build cannot pass silently.
-const expected = [...readFileSync('template.yaml', 'utf8').matchAll(/^ {2}(\w+):\r?\n {4}Type: AWS::Serverless::Function\b/gm)].map((m) => m[1]);
-if (expected.length === 0) {
-  console.error('FAIL: no AWS::Serverless::Function resources found in template.yaml');
-  process.exit(1);
-}
+if (!existsSync(root)) die('FAIL: .aws-sam/build not found; run `sam build --config-env ci` first');
+
 const failures = [];
 let ok = 0;
 const seen = new Set();
@@ -42,8 +61,5 @@ for (const fn of readdirSync(root, { withFileTypes: true })) {
   }
 }
 for (const name of expected) if (!seen.has(name)) failures.push(`FAIL ${name}: no build directory`);
-if (failures.length) {
-  console.error(failures.join('\n'));
-  process.exit(1);
-}
+if (failures.length) die(failures.join('\n'));
 console.log(`OK ${ok} bundles import cleanly`);
