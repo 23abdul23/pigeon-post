@@ -50,11 +50,17 @@ describe('auth client', () => {
     expect(mgr.signinSilent).not.toHaveBeenCalled()
   })
   it('getIdToken_null_when_cognito_not_configured', async () => {
+    mgr.getUser.mockResolvedValue(fresh) // a valid user: only the guard can make this null
     vi.resetModules()
     vi.stubEnv('VITE_COGNITO_CLIENT_ID', '')
-    const m = await import('../src/lib/auth')
-    expect(await m.getIdToken()).toBeNull()
-    vi.stubEnv('VITE_COGNITO_CLIENT_ID', 'client')
+    try {
+      const m = await import('../src/lib/auth')
+      expect(await m.getIdToken()).toBeNull()
+      expect(mgr.getUser).not.toHaveBeenCalled()
+      expect(mgr.signinSilent).not.toHaveBeenCalled()
+    } finally {
+      vi.stubEnv('VITE_COGNITO_CLIENT_ID', 'client')
+    }
   })
 
   it('completeSignIn_returns_stored_returnTo_and_clears_it', async () => {
