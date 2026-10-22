@@ -13,7 +13,10 @@ export class ApiError extends Error {
   }
 }
 
-/** Calls the Pigeon Post API with the Cognito ID token. Throws ApiError on an HTTP error or when signed out; network errors propagate as-is. */
+/** A request cancelled through its `AbortSignal` (fetch rejects with the signal's reason, a DOMException named AbortError). */
+export const isAbortError = (e: unknown) => (e as Error | null)?.name === 'AbortError'
+
+/** Calls the Fost API with the Cognito ID token. Throws ApiError on an HTTP error or when signed out; network errors and aborts (`init.signal`) propagate as-is. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getIdToken()
   if (!token || !BASE) throw new ApiError(401, 'not signed in')

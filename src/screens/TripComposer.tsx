@@ -221,7 +221,7 @@ export default function TripComposer() {
 
           {mode === 'place' ? (
             <div className="pt-2">
-              <PlaceSearch value={place} onChange={setPlace} />
+              <PlaceSearch kind="any" value={place} onChange={setPlace} />
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 pt-2">

@@ -4,7 +4,9 @@ import { Frame } from '../components/Layout'
 import Header from '../components/Header'
 import MiniMap from '../components/MiniMap'
 import Flag from '../components/Flag'
-import { searchPlaces, toCity } from '../lib/places'
+import { toCity, type PlaceSource } from '../lib/places'
+import { createPlaceSearch, HOME_SEARCH_KIND } from '../lib/placeSearch'
+import { placeDetail, PlaceSourceNote } from '../components/PlaceSearch'
 import { getState, setState, type Place } from '../lib/store'
 import { saveProfile } from '../lib/sync'
 
@@ -19,26 +21,26 @@ export default function HomeCity() {
   const [text, setText] = useState(existing ? existing.name : '')
   const [results, setResults] = useState<Place[]>([])
   const [selected, setSelected] = useState<Place | null>(
-    existing ? { id: 'current', name: existing.name, country: existing.country, cc: existing.cc, lat: existing.lat, lng: existing.lng } : null,
+    existing ? { id: 'current', name: existing.name, region: existing.region, country: existing.country, cc: existing.cc, lat: existing.lat, lng: existing.lng } : null,
   )
   const [searched, setSearched] = useState(false)
-  const timer = useRef(0)
+  const [source, setSource] = useState<PlaceSource>('server')
+  const searcher = useRef<ReturnType<typeof createPlaceSearch>>(null)
+  searcher.current ??= createPlaceSearch({
+    kind: HOME_SEARCH_KIND,
+    onResult: (r) => {
+      setResults(r?.places ?? [])
+      setSearched(!!r)
+      if (r) setSource(r.source)
+    },
+  })
 
-  useEffect(() => () => window.clearTimeout(timer.current), [])
+  useEffect(() => () => searcher.current?.cancel(), [])
 
   function onType(v: string) {
     setText(v)
     setSelected(null)
-    window.clearTimeout(timer.current)
-    if (v.trim().length < 2) {
-      setResults([])
-      setSearched(false)
-      return
-    }
-    timer.current = window.setTimeout(async () => {
-      setResults(await searchPlaces(v, 5))
-      setSearched(true)
-    }, 150)
+    searcher.current!.query(v)
   }
 
   function pick(p: Place) {
@@ -47,6 +49,7 @@ export default function HomeCity() {
   }
 
   function clear() {
+    searcher.current!.cancel()
     setText('')
     setSelected(null)
     setResults([])
@@ -55,7 +58,8 @@ export default function HomeCity() {
 
   function next() {
     if (!selected) return
-    setState({ homeCity: toCity(selected) })
+    // the unchanged current home keeps its stored fields (placeId included)
+    setState({ homeCity: selected.id === 'current' && existing ? existing : toCity(selected) })
     saveProfile()
     nav(fromSettings ? '/settings/city' : '/onboarding/bird')
   }
@@ -128,7 +132,7 @@ export default function HomeCity() {
                       <span className="min-w-0">
                         <span className={`block text-[16px] leading-6 text-ink ${on ? 'font-bold' : 'font-semibold'}`}>{p.name}</span>
                         <span className="block truncate text-[14px] leading-5 text-ink-2">
-                          {p.country} • Coordinates {Math.abs(p.lat).toFixed(4)}° {p.lat >= 0 ? 'N' : 'S'}
+                          {placeDetail(p)} • Coordinates {Math.abs(p.lat).toFixed(4)}° {p.lat >= 0 ? 'N' : 'S'}
                         </span>
                       </span>
                     </span>
@@ -136,6 +140,7 @@ export default function HomeCity() {
                   </button>
                 )
               })}
+              {showList && <PlaceSourceNote source={source} />}
             </div>
           )}
         </div>

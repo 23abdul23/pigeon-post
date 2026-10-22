@@ -1,6 +1,7 @@
 // Shared by the SPA and the API (type-only; no runtime code, no DOM).
 
-export type City = { name: string; country: string; cc: string; lat: number; lng: number }
+/** `region` and `placeId` (the chosen `Place.id`) are optional: cities stored before place search lack them. */
+export type City = { name: string; region?: string; country: string; cc: string; lat: number; lng: number; placeId?: string }
 export type Bird = { species: string; name: string }
 /** A searchable or tappable place; `id` is namespaced by source (`photon:<osm_type><osm_id>`, `om:<geonameid>`, or the bundled `CC-name-lat`). */
 export type Place = { id: string; name: string; region?: string; country: string; cc: string; lat: number; lng: number; kind?: 'locality' | 'poi' | 'region' }

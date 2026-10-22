@@ -166,6 +166,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col gap-2 pt-1">
             <PlaceSearch
+              kind="any"
               value={dest}
               onChange={(p) => {
                 setDest(p)

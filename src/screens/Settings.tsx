@@ -254,6 +254,13 @@ export default function Settings() {
             </button>
           </div>
         </Card>
+
+        <section aria-labelledby="about-h" className="px-1 text-[12px] leading-5 text-muted">
+          <h2 id="about-h" className="font-semibold uppercase tracking-[0.6px]">
+            About
+          </h2>
+          <p>Place data: OpenStreetMap, GeoNames. Map tiles: OpenFreeMap.</p>
+        </section>
       </main>
 
       {(dirty || toast) && (
