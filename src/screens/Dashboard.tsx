@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PlaceSearch from '../components/PlaceSearch'
 import { AppLayout } from '../components/Layout'
 import { Card, Hand, Pill, PrimaryButton, SoftButton } from '../components/ui'
 import Flag from '../components/Flag'
+import { deviceId } from '../lib/device'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { useStore, type Place } from '../lib/store'
 import { flightRole, startReturn, startSession } from '../lib/flight'
@@ -28,6 +29,14 @@ export default function Dashboard() {
   const sessions = useStore((s) => s.sessions)
   const stamps = useStore((s) => s.stamps)
   const flight = useStore((s) => s.flight)
+  useStore((s) => s.session) // re-render when this device starts or loses a flight
+  const foreign = !!flight && flight.deviceId !== deviceId()
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!foreign) return
+    const id = window.setInterval(() => setTick((n) => n + 1), 15_000) // a foreign flight going stale frees "Start flight"
+    return () => window.clearInterval(id)
+  }, [foreign])
   const elsewhere = flight && flightRole() === 'observer' ? flight : null // flying on another device
   const [minutes, setMinutes] = useState(25)
   const [dest, setDest] = useState<Place | null>(null)
@@ -124,7 +133,7 @@ export default function Dashboard() {
           <span className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[2px]">
             <img src="/assets/ic-compass.svg" alt="" className="size-[15px]" />
           </span>
-          <Hand className="absolute bottom-1 right-3 -rotate-2 text-ink-2">tailwind 12 knots west ∿</Hand>
+          {/* <Hand className="absolute bottom-1 right-3 -rotate-2 text-ink-2">tailwind 12 knots west ∿</Hand> */}
         </div>
 
         <Card className="flex flex-col gap-4 p-5">
@@ -137,7 +146,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-center py-2">
             <span className="font-serif text-[38px] font-bold leading-[44px] tracking-[-0.95px] text-ink">{String(minutes).padStart(2, '0')}:00</span>
-            <span className="text-[14px] text-ink-2">Minutes of uninterrupted flight</span>
+            <span className="text-[14px] text-ink-2">Minutes of Focused Session</span>
           </div>
           <div className="flex items-center gap-2 px-1" role="radiogroup" aria-label="Session length in minutes">
             {DURATIONS.map((d) => (

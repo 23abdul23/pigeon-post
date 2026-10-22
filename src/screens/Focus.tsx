@@ -5,7 +5,7 @@ import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
 import { birdBySpecies } from '../lib/birds'
 import { serverNow } from '../lib/device'
-import { computeProgress, flightIds, flightRole, heartbeat, landSession, takeOver } from '../lib/flight'
+import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, takeOver } from '../lib/flight'
 import { fmtKm, pointAtKm } from '../lib/geo'
 import { nearestCity } from '../lib/places'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
@@ -54,17 +54,12 @@ export default function Focus() {
     }
   }, [])
 
-  // Leaving the tab freezes progress; coming back lands the bird.
+  // Leaving the tab freezes progress; coming back lands the bird (this also lands a session found stale on mount).
   useEffect(() => {
-    const onHide = () => {
-      const s = getState().session
-      if (s && !s.leftAtMs) {
-        setState({ session: { ...s, leftAtMs: serverNow() } })
-        heartbeat() // the server learns when this device stopped flying
-      }
-    }
+    const onHide = markLeft
+    // lands only if no other device took the flight over meanwhile (else this screen turns into the observer view)
     const onShow = () => {
-      if (getState().session?.leftAtMs) void landSession('left')
+      if (getState().session?.leftAtMs) void landIfStillOwner('left')
     }
     const onVis = () => (document.visibilityState === 'hidden' ? onHide() : onShow())
     document.addEventListener('visibilitychange', onVis)

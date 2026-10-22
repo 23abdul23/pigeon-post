@@ -10,7 +10,7 @@ vi.mock('../src/lib/stories', () => ({
 
 import { api, ApiError } from '../src/lib/api'
 import { deviceId, serverNow } from '../src/lib/device'
-import { flightIds, flightRole, heartbeat, landSession, startSession, takeOver } from '../src/lib/flight'
+import { flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, startSession, takeOver } from '../src/lib/flight'
 import { clearOutbox, enqueue } from '../src/lib/outbox'
 import { getState, setState, type ActiveFlight, type Trip } from '../src/lib/store'
 import { refreshAll } from '../src/lib/sync'
@@ -141,5 +141,54 @@ describe('flight handoff', () => {
     expect(r[0][0]).toBeCloseTo(origin.lat)
     expect(r[0][1]).toBeCloseTo(origin.lng)
     expect(withRoute({ ...t, origin: undefined }, home)!.route[0][0]).toBeCloseTo(home.lat) // older trips: current home
+  })
+
+  const leftSession = () => {
+    const startMs = serverNow() - 60000
+    return { tripId: 't1', startMs, durationMin: 25, baseKm: 300, legs: 2, leftAtMs: startMs + 30000, heartbeatMs: startMs + 30000 }
+  }
+  const paths = () => apiMock.mock.calls.map(([p]) => p)
+
+  it('returning_device_refreshes_before_landing_left', async () => {
+    const session = leftSession()
+    setState({ session })
+    const mine = { ...session, deviceId: deviceId(), heartbeatMs: Date.now() - 30000 }
+    apiMock.mockImplementation((async (p: string) => (p === '/state' ? server({ flight: mine }) : undefined)) as never)
+    const landing = await landIfStillOwner('left')
+    expect(landing).toMatchObject({ reason: 'left', tripId: 't1' })
+    await vi.waitFor(() => expect(paths()).toContain('/trips/t1/sessions'))
+    expect(paths().indexOf('/state')).toBeLessThan(paths().indexOf('/trips/t1/sessions'))
+  })
+
+  it('returning_device_taken_over_does_not_land', async () => {
+    const session = leftSession()
+    setState({ session })
+    apiMock.mockImplementation((async (p: string) => (p === '/state' ? server({ flight: foreign({ startMs: session.startMs }) }) : undefined)) as never)
+    expect(await landIfStillOwner('left')).toBeNull()
+    expect(getState().session).toBeNull()
+    expect(flightRole()).toBe('observer')
+    await new Promise((r) => setTimeout(r, 10))
+    expect(paths()).toEqual(['/state'])
+  })
+
+  it('offline_returning_device_still_lands_left', async () => {
+    setState({ session: leftSession() })
+    apiMock.mockImplementation((async (p: string) => {
+      if (p === '/state') throw new TypeError('Failed to fetch')
+    }) as never)
+    expect(await landIfStillOwner('left')).toMatchObject({ reason: 'left' })
+    expect(getState().session).toBeNull()
+  })
+
+  it('mark_left_freezes_the_session_and_sends_left_at', async () => {
+    apiMock.mockImplementation((async (_p: string, init: RequestInit) => ({ ...JSON.parse(init.body as string), heartbeatMs: Date.now() })) as never)
+    setState({ session: { tripId: 't1', startMs: serverNow() - 60000, durationMin: 25, baseKm: 300, legs: 2 } })
+    markLeft()
+    const left = getState().session!.leftAtMs!
+    expect(left).toBeGreaterThan(serverNow() - 1000)
+    await vi.waitFor(() => expect(flightCalls()).toHaveLength(1))
+    expect(bodyOf(flightCalls()[0])).toMatchObject({ leftAtMs: left })
+    markLeft() // already left: nothing more
+    expect(getState().session!.leftAtMs).toBe(left)
   })
 })

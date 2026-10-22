@@ -104,6 +104,32 @@ export function heartbeat(): void {
   if (s) void putFlight(s)
 }
 
+/** Leaving the tab: freezes the flight at this moment and tells the server (the 30 s heartbeat stops while hidden). */
+export function markLeft(): void {
+  const s = getState().session
+  if (!s || s.leftAtMs) return
+  setState({ session: { ...s, leftAtMs: serverNow() } })
+  heartbeat()
+}
+
+/**
+ * Lands a flight this device left (tab back, or reopened), but only if it still owns it: a refresh first, so a device
+ * that was taken over meanwhile becomes the observer instead of landing the other device's flight short. Offline, the
+ * refresh fails and it lands as before.
+ */
+export async function landIfStillOwner(reason: Landing['reason']): Promise<Landing | null> {
+  const s = getState().session
+  if (!s) return null
+  try {
+    await (await import('./sync')).refreshAll()
+  } catch (e) {
+    console.warn('refresh before landing failed; landing anyway', e)
+  }
+  const cur = getState().session
+  if (!cur || cur.tripId !== s.tripId || cur.startMs !== s.startMs || flightRole() === 'observer') return null
+  return landSession(reason)
+}
+
 /** Continues the flight another device is flying: same start, distance and length; this device owns it from now on. */
 export async function takeOver(): Promise<void> {
   const { flight: f, trip } = getState()
