@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { UserManager, WebStorageStateStore } from 'oidc-client-ts'
+import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
 
 const env = import.meta.env
 const POOL = env.VITE_COGNITO_USER_POOL_ID as string | undefined
@@ -45,18 +45,29 @@ export async function signOut(): Promise<void> {
   location.assign(`${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(`${location.origin}/signin`)}`)
 }
 
-/** Current ID token; refreshes via the refresh token when expired. */
-export async function getIdToken(): Promise<string | null> {
+/** The stored user, refreshed via the refresh token when the ID token has expired; null if unusable. */
+async function liveUser(): Promise<User | null> {
+  if (!COGNITO_CONFIGURED) return null
   let user = await um().getUser()
   if (user?.expired && user.refresh_token) user = await um().signinSilent().catch(() => null)
-  return user && !user.expired ? (user.id_token ?? null) : null
+  return user && !user.expired ? user : null
 }
 
-export function useAuth(): { status: 'loading' | 'signedOut' | 'signedIn'; email?: string } {
-  const [s, setS] = useState<{ status: 'loading' | 'signedOut' | 'signedIn'; email?: string }>({ status: 'loading' })
+export async function getIdToken(): Promise<string | null> {
+  return (await liveUser())?.id_token ?? null
+}
+
+type AuthState = { status: 'loading' | 'signedOut' | 'signedIn'; email?: string }
+
+export async function resolveAuth(): Promise<AuthState> {
+  const u = await liveUser().catch(() => null)
+  return u ? { status: 'signedIn', email: u.profile.email } : { status: 'signedOut' }
+}
+
+export function useAuth(): AuthState {
+  const [s, setS] = useState<AuthState>({ status: 'loading' })
   useEffect(() => {
-    if (!COGNITO_CONFIGURED) return setS({ status: 'signedOut' })
-    um().getUser().then((u) => setS(u && !u.expired ? { status: 'signedIn', email: u.profile.email } : { status: 'signedOut' }))
+    resolveAuth().then(setS)
   }, [])
   return s
 }
