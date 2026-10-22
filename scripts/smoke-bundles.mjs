@@ -1,6 +1,6 @@
 // Imports every built Lambda bundle the way the Node 22 runtime does, so init-time crashes
 // (e.g. `Dynamic require of "node:https" is not supported`) fail the build, not production.
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -18,10 +18,19 @@ if (!existsSync(root)) {
   console.error('FAIL: .aws-sam/build not found; run `sam build --config-env ci` first');
   process.exit(1);
 }
+// Expected functions come from the template, so a partial build cannot pass silently.
+// Expected functions come from the template, so a partial build cannot pass silently.
+const expected = [...readFileSync('template.yaml', 'utf8').matchAll(/^ {2}(\w+):\r?\n {4}Type: AWS::Serverless::Function\b/gm)].map((m) => m[1]);
+if (expected.length === 0) {
+  console.error('FAIL: no AWS::Serverless::Function resources found in template.yaml');
+  process.exit(1);
+}
 const failures = [];
 let ok = 0;
+const seen = new Set();
 for (const fn of readdirSync(root, { withFileTypes: true })) {
   if (!fn.isDirectory()) continue;
+  seen.add(fn.name);
   const dir = join(root, fn.name);
   const bundles = readdirSync(dir).filter((f) => /\.(mjs|js)$/.test(f));
   try {
@@ -32,6 +41,7 @@ for (const fn of readdirSync(root, { withFileTypes: true })) {
     failures.push(`FAIL ${fn.name}: ${e.message}`);
   }
 }
+for (const name of expected) if (!seen.has(name)) failures.push(`FAIL ${name}: no build directory`);
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
