@@ -48,24 +48,35 @@ const BUNDLED_LIMIT = 8
 export async function searchPlaces(q: string, opts: { kind: PlaceKind; signal?: AbortSignal; bias?: Pt }): Promise<PlaceResults> {
   const { kind, signal, bias } = opts
   if (COGNITO_CONFIGURED) {
-    const timeout = AbortSignal.timeout(SERVER_TIMEOUT_MS)
     const params = new URLSearchParams({ q: q.trim(), kind })
     // privacy: the bias point leaves the device rounded to 2 decimals
     if (bias) {
       params.set('lat', bias[0].toFixed(2))
       params.set('lng', bias[1].toFixed(2))
     }
+    // a plain controller instead of AbortSignal.any/timeout, which older Safari lacks
+    const ctrl = new AbortController()
+    const onAbort = () => ctrl.abort(signal!.reason)
+    const timer = setTimeout(() => ctrl.abort(new DOMException('place search timed out', 'TimeoutError')), SERVER_TIMEOUT_MS)
     try {
-      const r = await api<{ places: Place[] }>(`/places/search?${params}`, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
+      if (signal?.aborted) onAbort()
+      signal?.addEventListener('abort', onAbort)
+      const r = await api<{ places: Place[] }>(`/places/search?${params}`, { signal: ctrl.signal })
       return { places: r.places, source: 'server' }
     } catch (e) {
       if (signal?.aborted) throw e
+    } finally {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
     }
   }
   const places = await searchBundledPlaces(q, BUNDLED_LIMIT)
   signal?.throwIfAborted()
   return { places, source: 'bundled' }
 }
+
+/** "Name, Region, Country" (region when known); the same text for a search result and for a stored City. */
+export const placeLabel = (p: { name: string; region?: string; country: string }) => [p.name, p.region, p.country].filter(Boolean).join(', ')
 
 export const toCity = (p: Place): City => ({
   name: p.name,

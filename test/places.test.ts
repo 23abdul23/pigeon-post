@@ -10,7 +10,7 @@ vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../sr
 
 import { api, ApiError } from '../src/lib/api'
 import { attributionFor, createPlaceSearch, HOME_SEARCH_KIND } from '../src/lib/placeSearch'
-import { searchBundledPlaces, searchPlaces, toCity } from '../src/lib/places'
+import { placeLabel, searchBundledPlaces, searchPlaces, toCity } from '../src/lib/places'
 import type { Place } from '../src/lib/types'
 
 const apiMock = vi.mocked(api)
@@ -55,6 +55,32 @@ describe('searchPlaces', () => {
     const p = searchPlaces('Zagr', { kind: 'city', signal: c.signal })
     c.abort()
     await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('search_times_out_to_bundled_without_abort_signal_statics', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('AbortSignal', Object.assign(function () {}, { prototype: AbortSignal.prototype })) // no .any / .timeout
+    let seen: AbortSignal | undefined
+    apiMock.mockImplementation((_p, init) => ((seen = init!.signal!), new Promise((_, rej) => seen!.addEventListener('abort', () => rej(seen!.reason)))))
+    const caller = new AbortController()
+    const p = searchPlaces('Zagr', { kind: 'city', signal: caller.signal })
+    await vi.advanceTimersByTimeAsync(3500)
+    const r = await p
+    expect(r.source).toBe('bundled')
+    expect(caller.signal.aborted).toBe(false)
+    // and the caller's abort still reaches the request
+    const c2 = new AbortController()
+    const p2 = searchPlaces('Zagr', { kind: 'city', signal: c2.signal })
+    await vi.advanceTimersByTimeAsync(0)
+    c2.abort()
+    await expect(p2).rejects.toMatchObject({ name: 'AbortError' })
+    vi.unstubAllGlobals()
+  })
+
+  it('place_label_includes_region_for_places_and_stored_cities', () => {
+    expect(placeLabel(paris)).toBe('Paris, Ile-de-France, France')
+    expect(placeLabel(toCity(paris))).toBe('Paris, Ile-de-France, France')
+    expect(placeLabel({ name: 'Zagreb', country: 'Croatia' })).toBe('Zagreb, Croatia')
   })
 
   it('search_is_diacritic_insensitive_in_bundled_fallback', async () => {
@@ -127,6 +153,35 @@ describe('createPlaceSearch', () => {
     await vi.advanceTimersByTimeAsync(500)
     expect(search).not.toHaveBeenCalled()
     expect(got).toEqual([null])
+  })
+
+  it('cancel_after_selection_drops_a_pending_and_an_in_flight_result', async () => {
+    vi.useFakeTimers()
+    const pending: ReturnType<typeof deferred>[] = []
+    const search = vi.fn(() => {
+      const d = deferred()
+      pending.push(d)
+      return d.promise
+    })
+    const got: unknown[] = []
+    const s = createPlaceSearch({ kind: 'any', search, onResult: (r) => got.push(r) })
+    s.query('Par')
+    await vi.advanceTimersByTimeAsync(250) // in flight
+    s.query('Pari') // debounce pending
+    pending[0].resolve({ places: [paris], source: 'server' }) // resolved but not yet delivered
+    s.cancel() // the user picked a row
+    await vi.advanceTimersByTimeAsync(500)
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(got).toEqual([])
+  })
+
+  it('search_failure_delivers_an_empty_result_instead_of_a_dead_box', async () => {
+    vi.useFakeTimers()
+    const got: unknown[] = []
+    const s = createPlaceSearch({ kind: 'any', search: () => Promise.reject(new Error('chunk load failed')), onResult: (r) => got.push(r) })
+    s.query('Par')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(got).toEqual([{ places: [], source: 'bundled' }])
   })
 
   it('home_city_search_never_requests_kind_any', async () => {

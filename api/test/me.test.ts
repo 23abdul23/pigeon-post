@@ -132,6 +132,9 @@ describe('PUT /me', () => {
     ddb.resetHistory()
     expect((await call(me, ev({ homeCity: city }))).status).toBe(200)
     expect(Object.keys(updates()[0].ExpressionAttributeValues![':homeCity']).sort()).toEqual(['cc', 'country', 'lat', 'lng', 'name'])
+    // lengths count code points, as the places route trims them: 120 astral characters is a legal name and region
+    const astral = '\u{1D4B3}'.repeat(120)
+    expect((await call(me, ev({ homeCity: { ...city, name: astral, region: astral } }))).status).toBe(200)
     for (const bad of [{ region: 'x'.repeat(121) }, { placeId: 'x'.repeat(81) }, { placeId: 'a\u0007b' }, { region: 7 }, { placeId: '' }])
       expect((await call(me, ev({ homeCity: { ...city, ...bad } }))).status).toBe(400)
   })

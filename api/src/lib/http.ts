@@ -35,7 +35,8 @@ export const route =
 
 // Validation helpers for request bodies (trust boundary).
 export const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-export const str = (v: unknown, max: number, what: string) => (typeof v === 'string' && v.trim() && v.length <= max ? v.trim() : bad(`invalid ${what}`))
+/** `max` counts code points (an emoji or astral character is one), matching how the places route trims names. */
+export const str = (v: unknown, max: number, what: string) => (typeof v === 'string' && v.trim() && Array.from(v).length <= max ? v.trim() : bad(`invalid ${what}`))
 export const optStr = (v: unknown, max: number, what: string) => (v === undefined ? undefined : str(v, max, what))
 export const num = (v: unknown, min: number, max: number, what: string) =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : bad(`invalid ${what}`)

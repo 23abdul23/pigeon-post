@@ -4,7 +4,7 @@ import { Frame } from '../components/Layout'
 import Header from '../components/Header'
 import MiniMap from '../components/MiniMap'
 import Flag from '../components/Flag'
-import { toCity, type PlaceSource } from '../lib/places'
+import { placeLabel, toCity, type PlaceSource } from '../lib/places'
 import { createPlaceSearch, HOME_SEARCH_KIND } from '../lib/placeSearch'
 import { placeDetail, PlaceSourceNote } from '../components/PlaceSearch'
 import { getState, setState, type Place } from '../lib/store'
@@ -18,7 +18,7 @@ export default function HomeCity() {
   const [params] = useSearchParams()
   const fromSettings = params.get('from') === 'settings'
   const existing = getState().homeCity
-  const [text, setText] = useState(existing ? existing.name : '')
+  const [text, setText] = useState(existing ? placeLabel(existing) : '')
   const [results, setResults] = useState<Place[]>([])
   const [selected, setSelected] = useState<Place | null>(
     existing ? { id: 'current', name: existing.name, region: existing.region, country: existing.country, cc: existing.cc, lat: existing.lat, lng: existing.lng } : null,
@@ -44,8 +44,9 @@ export default function HomeCity() {
   }
 
   function pick(p: Place) {
+    searcher.current!.cancel()
     setSelected(p)
-    setText(`${p.name}, ${p.country}`)
+    setText(placeLabel(p))
   }
 
   function clear() {

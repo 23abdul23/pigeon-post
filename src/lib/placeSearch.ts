@@ -1,3 +1,4 @@
+import { isAbortError } from './api'
 import { searchPlaces, type PlaceKind, type PlaceResults, type PlaceSource } from './places'
 
 /** Home stays city level for privacy: the home screen never asks for landmarks or streets. */
@@ -38,10 +39,12 @@ export function createPlaceSearch({
         const c = (ctrl = new AbortController())
         search(text, { kind, signal: c.signal }).then(
           (r) => mine === seq && onResult(r),
-          () => {}, // aborted: a newer query owns the list
+          // aborted: a newer query owns the list; anything else shows the empty state rather than a dead box
+          (e) => mine === seq && !isAbortError(e) && onResult({ places: [], source: 'bundled' }),
         )
       }, debounceMs)
     },
+    /** Call when the user picks a result: drops the pending keystroke and any in-flight or undelivered response. */
     cancel() {
       cancel()
     },

@@ -15,7 +15,8 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
 }
 
 const isoCc = (v: unknown) => (typeof v === 'string' && /^[a-z]{2}$/i.test(v) ? v.toUpperCase() : undefined)
-const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 120) : undefined)
+// trims by code points so a surrogate pair is never split (http.ts str() counts the same way)
+const text = (v: unknown) => (typeof v === 'string' && v.trim() ? Array.from(v.trim()).slice(0, 120).join('') : undefined)
 const finite = (...n: unknown[]) => n.every((x) => typeof x === 'number' && Number.isFinite(x))
 const make = (id: string, name: string, region: string | undefined, country: string | undefined, cc: string, lat: number, lng: number, kind: Kind): Place => ({
   id,

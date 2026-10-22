@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import Flag from './Flag'
-import type { PlaceKind, PlaceSource } from '../lib/places'
+import { placeLabel, type PlaceKind, type PlaceSource } from '../lib/places'
 import { attributionFor, createPlaceSearch } from '../lib/placeSearch'
 import type { Place } from '../lib/store'
 
@@ -13,7 +13,6 @@ type Props = {
   large?: boolean
 }
 
-const label = (p: Place) => `${p.name}, ${p.country}`
 export const placeDetail = (p: Place) => (p.region ? `${p.region}, ${p.country}` : p.country)
 
 /** "Offline results" when the server could not be used, OSM attribution when it was. */
@@ -23,7 +22,7 @@ export function PlaceSourceNote({ source }: { source: PlaceSource }) {
 }
 
 export default function PlaceSearch({ value, onChange, kind, placeholder = 'Where to?', large = false }: Props) {
-  const [text, setText] = useState(value ? label(value) : '')
+  const [text, setText] = useState(value ? placeLabel(value) : '')
   const [results, setResults] = useState<Place[]>([])
   const [source, setSource] = useState<PlaceSource>('server')
   const [open, setOpen] = useState(false)
@@ -46,7 +45,7 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
 
   useEffect(() => () => searcher.current?.cancel(), [])
   useEffect(() => {
-    if (value) setText(label(value))
+    if (value) setText(placeLabel(value))
   }, [value])
 
   function onType(v: string) {
@@ -56,6 +55,7 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
   }
 
   function choose(p: Place) {
+    searcher.current!.cancel() // a still-pending search must not reopen the list over the choice
     onChange(p)
     setOpen(false)
   }
@@ -96,8 +96,8 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
       />
       {expanded && (
         <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl bg-white py-1 shadow-[0_8px_24px_rgba(62,58,54,0.12)]">
+          {results.length === 0 && <p className="px-4 py-3 text-[14px] text-muted">We couldn't find that place. Check the spelling.</p>}
           <ul id={listId} role="listbox" aria-label="Places" className="max-h-64 overflow-auto">
-            {results.length === 0 && <li className="px-4 py-3 text-[14px] text-muted">We couldn't find that place. Check the spelling.</li>}
             {results.map((p, i) => (
               <li
                 key={p.id}
