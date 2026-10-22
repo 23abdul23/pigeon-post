@@ -1,0 +1,380 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Pigeon Post - GitHub Actions OIDC deploy role. Deploy ONCE by hand with an admin profile (see docs/runbook.md), never from CI.'
+
+# Why a separate stack: if the role lived in template.yaml, a deploy could edit or delete its own permissions.
+# Only an admin can change this stack, so a compromised workflow cannot widen its own role.
+#
+# Where scoping is NOT possible, the tradeoff is stated next to the statement ("tradeoff: ...").
+# The role is not AdministratorAccess and cannot touch IAM outside role/<StackName>-*, and every role it creates
+# must carry the permissions boundary below, so a malicious template still cannot mint an admin role.
+
+Parameters:
+  GithubRepo:
+    Type: String
+    Default: 23abdul23/pigeon-post
+    AllowedPattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+  GithubBranch:
+    Type: String
+    Default: main
+    AllowedPattern: '^[A-Za-z0-9_./-]+$'
+    Description: Only workflows running on this exact branch may assume the role
+  # The account can have only one provider for this URL. Set 'false' if it already exists.
+  CreateGithubOidcProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+  StackName:
+    Type: String
+    Default: pigeon-post
+    AllowedPattern: '^[a-z][a-z0-9-]*$'
+    Description: 'Name of the application stack the role may deploy (lowercase, because S3 bucket names derive from it)'
+  # Set when the app stack uses a Route 53 zone (template.yaml HostedZoneId). Empty = no Route 53 access at all.
+  HostedZoneId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^Z[A-Z0-9]+$'
+
+Conditions:
+  CreateProvider: !Equals [!Ref CreateGithubOidcProvider, 'true']
+  HasZone: !Not [!Equals [!Ref HostedZoneId, '']]
+
+Resources:
+  GithubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  # Caps what any Lambda role created by the deploy role can ever do (the intersection with its policies applies).
+  # Adding a new Lambda permission to template.yaml that is not listed here needs an admin update of this stack.
+  LambdaBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${StackName}-lambda-boundary'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [logs:CreateLogStream, logs:PutLogEvents]
+            Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${StackName}-*:*'
+          - Effect: Allow
+            Action: [dynamodb:GetItem, dynamodb:BatchGetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem, dynamodb:Query, dynamodb:ConditionCheckItem]
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StackName}-*'
+          - Effect: Allow
+            Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${StackName}-*/*'
+          - Effect: Allow
+            Action: [s3:ListBucket]
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${StackName}-*'
+          - Effect: Allow
+            Action: [ses:SendEmail]
+            Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*'
+          - Effect: Allow
+            Action: [bedrock:InvokeModel]
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*'
+              - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
+          - Effect: Allow
+            Action: [cognito-idp:AdminDeleteUser]
+            Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # Deliberately NOT <StackName>-*: that prefix is what the deploy policy may modify, and it must not be able to edit itself.
+      RoleName: !Sub 'github-deploy-${StackName}'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - CreateProvider
+                - !Ref GithubOidcProvider
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Exact match, no wildcard: pull requests, forks, tags and other branches cannot assume the role.
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GithubRepo}:ref:refs/heads/${GithubBranch}'
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudFormationStack
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:ListStackResources
+                  - cloudformation:CancelUpdateStack
+                  - cloudformation:ContinueUpdateRollback
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${StackName}/*'
+                  # `sam deploy --resolve-s3` looks at (and may refresh) this stack that holds the artifact bucket.
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*'
+              # No cloudformation:DeleteStack on purpose: teardown is a manual admin action.
+              - Sid: SamTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31'
+
+              - Sid: ArtifactBucket
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:ListBucket, s3:GetBucketLocation, s3:GetBucketVersioning]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:::aws-sam-cli-managed-default-samclisourcebucket-*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*'
+              # tradeoff: the first-ever `sam deploy` creates the managed artifact stack/bucket, which needs more S3 and
+              # CloudFormation rights than this role has. Run the first deploy locally (runbook), after which CI only reuses it.
+
+              - Sid: StackBucketsManage
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                  - s3:DeleteBucketPolicy
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketCORS
+                  - s3:PutBucketCORS
+                  - s3:GetLifecycleConfiguration
+                  - s3:PutLifecycleConfiguration
+                  - s3:GetBucketTagging
+                  - s3:PutBucketTagging
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${StackName}-*'
+              # Object access only on the site bucket (deploy-web sync); CI never reads or writes users' letter files.
+              - Sid: SiteObjects
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${StackName}-sitebucket-*/*'
+
+              # tradeoff: CloudFront ARNs contain ids that do not exist until created, so these cover every
+              # distribution / access control in the account. Nothing else in this account should use CloudFront.
+              - Sid: CloudFront
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:GetOriginAccessControlConfig
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*'
+
+              - Sid: LambdaFunctions
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:GetFunctionCodeSigningConfig
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:GetPolicy
+                  - lambda:ListTags
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:PublishVersion
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-*'
+
+              # IAM. Roles only, only named <StackName>-*, and only with the boundary attached.
+              - Sid: RolesMutateWithBoundary
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:PutRolePermissionsBoundary
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${StackName}-*'
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref LambdaBoundary
+              - Sid: RolesAttachBasicExecutionOnly
+                Effect: Allow
+                Action: [iam:AttachRolePolicy, iam:DetachRolePolicy]
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${StackName}-*'
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref LambdaBoundary
+                    iam:PolicyARN: !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+              - Sid: RolesRead
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:DeleteRole
+                  - iam:UpdateAssumeRolePolicy
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${StackName}-*'
+              - Sid: PassRoleToLambdaOnly
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${StackName}-*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              # tradeoff: iam:UpdateAssumeRolePolicy cannot be conditioned on the new trust document. It is limited to
+              # <StackName>-* roles, which all carry the boundary, so the worst case is another principal using a boundary-capped role.
+
+              # tradeoff: HTTP API ids do not exist until created, so this covers every API Gateway v2 API in the account.
+              - Sid: HttpApi
+                Effect: Allow
+                Action: [apigateway:GET, apigateway:POST, apigateway:PUT, apigateway:PATCH, apigateway:DELETE]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis'
+                  - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*'
+                  - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*'
+
+              - Sid: Table
+                Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateTable
+                  - dynamodb:DescribeTimeToLive
+                  - dynamodb:UpdateTimeToLive
+                  - dynamodb:DescribeContinuousBackups
+                  - dynamodb:TagResource
+                  - dynamodb:UntagResource
+                  - dynamodb:ListTagsOfResource
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StackName}-*'
+
+              # tradeoff: user pool ids are generated, so this covers every user pool in the account. Only management
+              # actions are listed: no Admin* user operations, so CI cannot read or delete any user.
+              - Sid: Cognito
+                Effect: Allow
+                Action:
+                  - cognito-idp:CreateUserPool
+                  - cognito-idp:DeleteUserPool
+                  - cognito-idp:UpdateUserPool
+                  - cognito-idp:DescribeUserPool
+                  - cognito-idp:GetUserPoolMfaConfig
+                  - cognito-idp:CreateIdentityProvider
+                  - cognito-idp:UpdateIdentityProvider
+                  - cognito-idp:DeleteIdentityProvider
+                  - cognito-idp:DescribeIdentityProvider
+                  - cognito-idp:CreateUserPoolClient
+                  - cognito-idp:UpdateUserPoolClient
+                  - cognito-idp:DeleteUserPoolClient
+                  - cognito-idp:DescribeUserPoolClient
+                  - cognito-idp:CreateUserPoolDomain
+                  - cognito-idp:DeleteUserPoolDomain
+                  - cognito-idp:TagResource
+                  - cognito-idp:UntagResource
+                  - cognito-idp:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+              - Sid: CognitoDomainLookup
+                Effect: Allow
+                Action: cognito-idp:DescribeUserPoolDomain
+                Resource: '*' # tradeoff: this action does not support resource-level permissions
+
+              - Sid: LogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                  - logs:ListTagsLogGroup
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${StackName}-*'
+              - Sid: LogGroupsDescribe
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+
+              - Sid: Alarm
+                Effect: Allow
+                Action: [cloudwatch:PutMetricAlarm, cloudwatch:DeleteAlarms, cloudwatch:TagResource, cloudwatch:UntagResource, cloudwatch:ListTagsForResource]
+                Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${StackName}-*'
+              - Sid: AlarmDescribe
+                Effect: Allow
+                Action: cloudwatch:DescribeAlarms
+                Resource: '*' # tradeoff: this action does not support resource-level permissions
+
+              # The Google client secret, read by the workflow and passed to the stack as a NoEcho parameter.
+              - Sid: GoogleSecret
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/pigeon/google-client-secret'
+              - Sid: DecryptSsmSecureString
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+                    kms:EncryptionContext:PARAMETER_ARN: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/pigeon/google-client-secret'
+
+              # Optional custom domain. tradeoff: ACM certificate ARNs do not exist until requested.
+              - Sid: Acm
+                Effect: Allow
+                Action:
+                  - acm:RequestCertificate
+                  - acm:DescribeCertificate
+                  - acm:DeleteCertificate
+                  - acm:AddTagsToCertificate
+                  - acm:RemoveTagsFromCertificate
+                  - acm:ListTagsForCertificate
+                Resource: '*'
+              # Present only when HostedZoneId is given, and then only for that zone.
+              - !If
+                - HasZone
+                - Sid: Route53Zone
+                  Effect: Allow
+                  Action: [route53:ChangeResourceRecordSets, route53:ListResourceRecordSets]
+                  Resource: !Sub 'arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}'
+                - !Ref 'AWS::NoValue'
+              - !If
+                - HasZone
+                - Sid: Route53Change
+                  Effect: Allow
+                  Action: route53:GetChange
+                  Resource: !Sub 'arn:${AWS::Partition}:route53:::change/*'
+                - !Ref 'AWS::NoValue'
+
+Outputs:
+  DeployRoleArn:
+    Description: Set as the GitHub repo variable AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn
+  PermissionsBoundaryArn:
+    Description: Set as the GitHub repo variable AWS_PERMISSIONS_BOUNDARY_ARN (and the PermissionsBoundaryArn stack parameter)
+    Value: !Ref LambdaBoundary

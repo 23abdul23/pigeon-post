@@ -25,8 +25,37 @@ Parameters:
     AllowedPattern: '^us\.anthropic\..+'
     Description: Bedrock inference profile id used for story polish
 
+  # Optional custom domain (Task 10). Leave Domain empty to serve from the CloudFront domain only.
+  Domain:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+    Description: Custom site domain, e.g. pigeonpost.app (empty = none)
+  # With a Route 53 zone the certificate is validated and the alias records are created in-stack.
+  # Without one, the stack waits at the certificate until you add the ACM validation CNAME at your DNS host
+  # (see docs/runbook.md), then you add the alias to the CloudFront domain yourself.
+  HostedZoneId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^Z[A-Z0-9]+$'
+    Description: Route 53 hosted zone id for Domain (empty = DNS managed elsewhere)
+  # ARN of the pigeon-post-lambda-boundary policy from deploy-role.yaml. Empty for manual admin deploys; the CI deploy
+  # role may only create Lambda roles that carry this boundary, so CI must pass it.
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws:iam::[0-9]{12}:policy/.+$'
+    Description: IAM permissions boundary for the Lambda execution roles (empty = none)
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref Domain, '']]
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, '']]
+  HasDomainAndZone: !And [!Condition HasDomain, !Condition HasHostedZone]
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, '']]
+
 Globals:
   Function:
+    PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
     Runtime: nodejs22.x
     Architectures: [arm64]
     Timeout: 10
@@ -54,11 +83,30 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  # CloudFront only accepts certificates from us-east-1, which is this stack's region (Global Constraints).
+  SiteCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref Domain
+      ValidationMethod: DNS
+      DomainValidationOptions: !If
+        - HasHostedZone
+        - [{ DomainName: !Ref Domain, HostedZoneId: !Ref HostedZoneId }]
+        - !Ref 'AWS::NoValue'
+
   SiteDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
+        Aliases: !If [HasDomain, [!Ref Domain], !Ref 'AWS::NoValue']
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref SiteCertificate
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - !Ref 'AWS::NoValue'
         DefaultRootObject: index.html
         HttpVersion: http2and3
         PriceClass: PriceClass_100
@@ -83,6 +131,25 @@ Resources:
             ResponseCode: 200
             ResponsePagePath: /index.html
             ErrorCachingMinTTL: 0
+
+  # Z2FDTNDATAQYW2 is the fixed hosted zone id of every CloudFront distribution.
+  SiteAliasA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomainAndZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: A
+      AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt SiteDistribution.DomainName }
+
+  SiteAliasAAAA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDomainAndZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: AAAA
+      AliasTarget: { HostedZoneId: Z2FDTNDATAQYW2, DNSName: !GetAtt SiteDistribution.DomainName }
 
   SiteBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -142,9 +209,11 @@ Resources:
       CallbackURLs:
         - !Sub 'https://${SiteDistribution.DomainName}/auth/callback'
         - http://localhost:5173/auth/callback
+        - !If [HasDomain, !Sub 'https://${Domain}/auth/callback', !Ref 'AWS::NoValue']
       LogoutURLs:
         - !Sub 'https://${SiteDistribution.DomainName}/signin'
         - http://localhost:5173/signin
+        - !If [HasDomain, !Sub 'https://${Domain}/signin', !Ref 'AWS::NoValue']
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
       PreventUserExistenceErrors: ENABLED
 
@@ -163,6 +232,7 @@ Resources:
         AllowOrigins:
           - !Sub 'https://${SiteDistribution.DomainName}'
           - http://localhost:5173
+          - !If [HasDomain, !Sub 'https://${Domain}', !Ref 'AWS::NoValue']
         AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
         AllowHeaders: [content-type, authorization]
         MaxAge: 600
@@ -541,6 +611,7 @@ Resources:
           - AllowedOrigins:
               - !Sub 'https://${SiteDistribution.DomainName}'
               - http://localhost:5173
+              - !If [HasDomain, !Sub 'https://${Domain}', !Ref 'AWS::NoValue']
             AllowedMethods: [PUT, GET]
             AllowedHeaders: [content-type]
             MaxAge: 600
@@ -698,7 +769,10 @@ Resources:
 
 Outputs:
   SiteUrl:
-    Value: !Sub 'https://${SiteDistribution.DomainName}'
+    Value: !If [HasDomain, !Sub 'https://${Domain}', !Sub 'https://${SiteDistribution.DomainName}']
+  # Point DNS here (CNAME/ALIAS) when HostedZoneId is empty.
+  CloudFrontDomain:
+    Value: !GetAtt SiteDistribution.DomainName
   ApiUrl:
     Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
   SiteBucket:
