@@ -19,6 +19,9 @@ Globals:
     Architectures: [arm64]
     Timeout: 10
     MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref PigeonPost
 
 Resources:
   SiteBucket:
@@ -152,6 +155,29 @@ Resources:
         AllowHeaders: [content-type, authorization]
         MaxAge: 600
 
+  # Single table (API contract): PK/SK per user, GSI1 for invite-code lookup, TTL on `ttl`.
+  PigeonPost:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+        - { AttributeName: GSI1PK, AttributeType: S }
+        - { AttributeName: GSI1SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - { AttributeName: GSI1PK, KeyType: HASH }
+            - { AttributeName: GSI1SK, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
   HealthLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -183,6 +209,74 @@ Resources:
             Auth:
               Authorizer: NONE
 
+  StateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-state'
+      RetentionInDays: 14
+
+  StateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/state.ts]
+    Properties:
+      CodeUri: api/
+      Handler: state.handler
+      LoggingConfig:
+        LogGroup: !Ref StateLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Query]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /state
+
+  MeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-me'
+      RetentionInDays: 14
+
+  MeFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/me.ts]
+    Properties:
+      CodeUri: api/
+      Handler: me.handler
+      LoggingConfig:
+        LogGroup: !Ref MeLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: PUT
+            Path: /me
+
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -209,6 +303,8 @@ Outputs:
     Value: !Ref SiteDistribution
   UserPoolId:
     Value: !Ref UserPool
+  TableName:
+    Value: !Ref PigeonPost
   UserPoolClientId:
     Value: !Ref UserPoolClient
   CognitoDomain:
