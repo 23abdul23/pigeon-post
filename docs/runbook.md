@@ -26,7 +26,7 @@ Deploy the application stack once yourself so the `aws-sam-cli-managed-default` 
 
 ```
 sam build
-sam deploy --profile pigeon --parameter-overrides GoogleClientId=<id> SesSenderEmail=<sender> \
+sam deploy --profile pigeon --parameter-overrides GoogleClientId=<id> SesSenderEmail=<sender or ''> \
   GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon) \
   PermissionsBoundaryArn=<PermissionsBoundaryArn output>
 ```
@@ -40,7 +40,7 @@ Repo Settings > Secrets and variables > Actions > **Variables** tab. None of the
 | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::123456789012:role/github-deploy-pigeon-post` (stack output `DeployRoleArn`) | yes |
 | `AWS_PERMISSIONS_BOUNDARY_ARN` | `arn:aws:iam::123456789012:policy/pigeon-post-lambda-boundary` (stack output `PermissionsBoundaryArn`) | yes |
 | `GOOGLE_CLIENT_ID` | `1234-abc.apps.googleusercontent.com` | yes |
-| `SES_SENDER_EMAIL` | `letters@example.com` | yes |
+| `SES_SENDER_EMAIL` | `letters@example.com` (empty disables email letter alerts) | no |
 | `AWS_REGION` | `us-east-1` (default) | no |
 | `BEDROCK_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` (template default) | no |
 | `DOMAIN` | `pigeonpost.app` | no |
@@ -108,7 +108,7 @@ node scripts/empty-buckets.mjs && sam delete --stack-name pigeon-post --profile 
 
 ## Things that are easy to forget
 
-- **SES sandbox**: until AWS grants production access, "A letter arrived" emails go only to verified identities. Verify test recipients, or request production access in the SES console.
+- **SES is optional**: leave `SES_SENDER_EMAIL` empty to disable email letter alerts (the in-app mailbox still delivers). **SES sandbox**: until AWS grants production access, "A letter arrived" emails go only to verified identities. Verify test recipients, or request production access in the SES console.
 - **Bedrock model id**: confirm `BedrockModelId` (default `us.anthropic.claude-haiku-4-5-20251001-v1:0`) matches the inference profile with access granted in the Bedrock console; a wrong id makes story polish fail.
 - **Google OAuth client**: Authorized redirect URI is the `GoogleRedirectUri` stack output; Authorized origins must include any custom domain (see above).
 - **Budget**: the 5 USD monthly budget alarm from Task 0 is not part of the stack; keep it.

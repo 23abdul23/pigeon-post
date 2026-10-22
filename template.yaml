@@ -7,16 +7,20 @@ Parameters:
     Type: String
     Description: Google OAuth client ID (not secret)
   # CloudFormation cannot resolve ssm-secure for Cognito IdP, so the deploy command passes the secret in from SSM, e.g.
-  #   sam deploy --parameter-overrides GoogleClientId=<id> SesSenderEmail=<verified sender> GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon)
+  #   sam deploy --parameter-overrides GoogleClientId=<id> SesSenderEmail=<verified sender or ''> GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon)
   GoogleClientSecret:
     Type: String
     NoEcho: true
     Description: Google OAuth client secret, read from SSM /pigeon/google-client-secret at deploy time
-  # No default: pass SesSenderEmail=<verified sender> on every `sam deploy`. While the account is in the SES sandbox,
-  # recipients must be verified identities too, and ses:SendEmail may then also need their identity ARNs as resources.
+  # SES is optional. Empty (default) disables "A letter arrived" emails and drops the ses:SendEmail permission.
+  # `sam deploy` keeps previous values for omitted parameters, so pass SesSenderEmail=<sender or ''> every time.
+  # While the account is in the SES sandbox only verified recipient addresses receive mail, and ses:SendEmail may then
+  # also need their identity ARNs as resources.
   SesSenderEmail:
     Type: String
-    Description: SES-verified sender address for "A letter arrived" emails (Task 0)
+    Default: ''
+    AllowedPattern: '^$|^[^@\s]+@[^@\s]+$'
+    Description: Optional SES-verified sender address for "A letter arrived" emails (empty = email alerts off)
 
   # Confirm this id in the Bedrock console (model access granted in Task 0); the "us." prefix is a cross-region inference profile.
   BedrockModelId:
@@ -51,6 +55,7 @@ Conditions:
   HasDomain: !Not [!Equals [!Ref Domain, '']]
   HasHostedZone: !Not [!Equals [!Ref HostedZoneId, '']]
   HasDomainAndZone: !And [!Condition HasDomain, !Condition HasHostedZone]
+  HasSesSender: !Not [!Equals [!Ref SesSenderEmail, '']]
   HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, '']]
 
 Globals:
@@ -428,9 +433,12 @@ Resources:
               Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem]
               Resource: !GetAtt PigeonPost.Arn
             # "A letter arrived" email, from the verified sender only (the recipient's email is read from their profile row)
-            - Effect: Allow
-              Action: [ses:SendEmail]
-              Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}'
+            - !If
+              - HasSesSender
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}'
+              - !Ref AWS::NoValue
       Events:
         Route:
           Type: HttpApi

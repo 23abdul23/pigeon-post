@@ -256,6 +256,17 @@ describe('arrival email', () => {
     expect(mail).not.toContain('secret words')
   })
 
+  it('arrival_email_not_sent_when_no_sender_configured', async () => {
+    const prev = process.env.SES_SENDER
+    process.env.SES_SENDER = ''
+    try {
+      expect((await arrive({ notifyLetter: true, channel: 'email' })).body.delivered).toHaveLength(1)
+      expect(ses.commandCalls(SendEmailCommand)).toHaveLength(0)
+    } finally {
+      process.env.SES_SENDER = prev
+    }
+  })
+
   it('arrival_survives_ses_failure', async () => {
     ses.on(SendEmailCommand).rejects(new Error('SES throttled'))
     const r = await arrive({ notifyLetter: true, channel: 'email' })
