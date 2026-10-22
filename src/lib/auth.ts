@@ -57,7 +57,17 @@ async function liveUser(): Promise<User | null> {
       .signinSilent()
       .catch(() => null)
       .finally(() => (refreshing = undefined)))
-  return user && !user.expired ? user : null
+  const live = user && !user.expired ? user : null
+  if (live) lastSub = live.profile.sub
+  return live
+}
+
+let lastSub: string | null = null
+/** The last signed-in user's id (sync, for tagging queued writes); null until auth has resolved once. */
+export const currentSub = () => lastSub
+/** The signed-in user's id, or null when signed out. */
+export async function getUserSub(): Promise<string | null> {
+  return (await liveUser())?.profile.sub ?? null
 }
 
 export async function getIdToken(): Promise<string | null> {

@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
+vi.mock('../src/lib/auth', () => ({ currentSub: vi.fn(), getUserSub: vi.fn() }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
 import { api, ApiError } from '../src/lib/api'
+import { currentSub, getUserSub } from '../src/lib/auth'
 import { enqueue, flush } from '../src/lib/outbox'
 
 const apiMock = vi.mocked(api)
@@ -14,6 +16,8 @@ const queued = () => JSON.parse(store.get('pigeon-post:outbox') ?? '[]').map((o:
 beforeEach(() => {
   vi.useFakeTimers()
   apiMock.mockReset()
+  vi.mocked(currentSub).mockReset()
+  vi.mocked(getUserSub).mockReset()
 })
 afterEach(async () => {
   apiMock.mockResolvedValue(undefined)
@@ -58,5 +62,21 @@ describe('outbox', () => {
     enqueue({ id: 'b', method: 'PUT', path: '/b' })
     await flush()
     expect(queued()).toEqual(['b'])
+  })
+
+  it('outbox_is_discarded_when_a_different_user_signs_in', async () => {
+    apiMock.mockResolvedValue(undefined)
+    vi.mocked(currentSub).mockReturnValue('user-a')
+    enqueue({ id: 'me', method: 'PUT', path: '/me', body: { name: 'A' } })
+    expect(JSON.parse(store.get('pigeon-post:outbox')!)[0].owner).toBe('user-a')
+    vi.mocked(getUserSub).mockResolvedValue('user-b') // A's session lapsed, B signed in
+    await flush()
+    expect(apiMock).not.toHaveBeenCalled()
+    expect(queued()).toEqual([])
+
+    vi.mocked(currentSub).mockReturnValue('user-b')
+    enqueue({ id: 'me', method: 'PUT', path: '/me', body: { name: 'B' } })
+    await flush()
+    expect(sent()).toEqual(['/me']) // the owner's own ops still go out
   })
 })

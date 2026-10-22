@@ -84,6 +84,7 @@ export default function Settings() {
 
   function deleteAccount() {
     resetState()
+    clearOutbox()
     nav('/signin', { replace: true, state: { farewell: true } })
   }
 

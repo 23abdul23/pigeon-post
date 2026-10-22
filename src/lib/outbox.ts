@@ -1,22 +1,24 @@
 import { api, ApiError } from './api'
+import { currentSub, getUserSub } from './auth'
 
 export type Op = { id: string; method: string; path: string; body?: unknown }
+type Queued = Op & { owner?: string }
 
 const KEY = 'pigeon-post:outbox'
 const MAX_BACKOFF_MS = 60_000
 
-let queue: Op[] | undefined
-function q(): Op[] {
+let queue: Queued[] | undefined
+function q(): Queued[] {
   if (!queue) {
     try {
-      queue = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Op[]
+      queue = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Queued[]
     } catch {
       queue = []
     }
   }
   return queue
 }
-function save(next: Op[]) {
+function save(next: Queued[]) {
   queue = next
   try {
     localStorage.setItem(KEY, JSON.stringify(next))
@@ -25,9 +27,9 @@ function save(next: Op[]) {
   }
 }
 
-/** Queues a write; an op with the same id replaces the queued one (each op is a full PUT-style write). */
+/** Queues a write for the signed-in user; an op with the same id replaces the queued one (each op is a full PUT-style write). */
 export function enqueue(op: Op): void {
-  save([...q().filter((o) => o.id !== op.id), op])
+  save([...q().filter((o) => o.id !== op.id), { ...op, owner: currentSub() ?? undefined }])
 }
 
 export const pendingOps = () => q().length
@@ -49,6 +51,9 @@ export function flush(): Promise<void> {
 
 async function run() {
   clearTimeout(timer)
+  // Never send one user's queued writes with another user's token (e.g. A's session lapsed, B signed in).
+  const sub = await getUserSub()
+  if (sub) save(q().filter((o) => o.owner === sub))
   while (q().length) {
     const op = q()[0]
     try {
