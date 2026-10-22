@@ -29,6 +29,24 @@ Parameters:
     AllowedPattern: '^us\.anthropic\..+'
     Description: Bedrock inference profile id used for story polish
 
+  # Place search upstreams (Task 6). Free public services; the base URLs are parameters so a self-hosted or paid instance
+  # can be swapped in without a client release. GeocoderContact goes in the User-Agent (Photon/Open-Meteo fair use).
+  PhotonBaseUrl:
+    Type: String
+    Default: https://photon.komoot.io
+    AllowedPattern: '^https://[a-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$'
+    Description: Photon geocoder base URL (search and reverse)
+  OpenMeteoGeocodingUrl:
+    Type: String
+    Default: https://geocoding-api.open-meteo.com
+    AllowedPattern: '^https://[a-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$'
+    Description: Open-Meteo geocoding base URL (search fallback)
+  GeocoderContact:
+    Type: String
+    Default: ''
+    AllowedPattern: '^[A-Za-z0-9 @.:/_+-]{0,100}$'
+    Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "PigeonPost/1.0")
+
   # Optional custom domain (Task 10). Leave Domain empty to serve from the CloudFront domain only.
   Domain:
     Type: String
@@ -645,6 +663,49 @@ Resources:
             ApiId: !Ref HttpApi
             Method: POST
             Path: /stories/compose
+
+  PlacesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-places'
+      RetentionInDays: 14
+
+  # Place search and reverse geocode over Photon, then Open-Meteo; plain fetch (no VPC), shared cache and daily caps in the table.
+  PlacesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/places.ts]
+    Properties:
+      CodeUri: api/
+      Handler: places.handler
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref PlacesLogGroup
+      Environment:
+        Variables:
+          PHOTON_BASE_URL: !Ref PhotonBaseUrl
+          OPEN_METEO_GEOCODING_URL: !Ref OpenMeteoGeocodingUrl
+          GEOCODER_CONTACT: !Ref GeocoderContact
+      Policies:
+        - Statement:
+            # TransactWriteItems (the two counters) is authorized per item by UpdateItem.
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Search:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /places/search }
+        Reverse:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /places/reverse }
 
   FriendsLogGroup:
     Type: AWS::Logs::LogGroup

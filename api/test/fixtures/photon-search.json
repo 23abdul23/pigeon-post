@@ -1,0 +1,181 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 62422,
+    "osm_key": "place",
+    "osm_value": "city",
+    "type": "city",
+    "name": "Berlin",
+    "country": "Germany",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     13.3951309,
+     52.5173885
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 170184,
+    "osm_key": "place",
+    "osm_value": "city",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Coos",
+    "state": "New Hampshire",
+    "country": "United States",
+    "postcode": "03570",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.1810703,
+     44.4696602
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 126290,
+    "osm_key": "place",
+    "osm_value": "village",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Sangamon",
+    "state": "Illinois",
+    "country": "United States",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -89.9031635,
+     39.7589387
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 11042445,
+    "osm_key": "place",
+    "osm_value": "town",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Capitol Planning Region",
+    "state": "Connecticut",
+    "country": "United States",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -72.7456519,
+     41.621488
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 133689,
+    "osm_key": "place",
+    "osm_value": "town",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Worcester",
+    "state": "Maryland",
+    "country": "United States",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -75.2188589,
+     38.324505
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1844156,
+    "osm_key": "place",
+    "osm_value": "village",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Worcester",
+    "state": "Massachusetts",
+    "country": "United States",
+    "postcode": "01503",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.6372642,
+     42.3813665
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 170680,
+    "osm_key": "place",
+    "osm_value": "village",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Camden",
+    "state": "New Jersey",
+    "country": "United States",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -74.9290536,
+     39.7912262
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 251729,
+    "osm_key": "place",
+    "osm_value": "town",
+    "type": "city",
+    "name": "Berlin",
+    "county": "Green Lake",
+    "state": "Wisconsin",
+    "country": "United States",
+    "countrycode": "US"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -88.9466233,
+     43.9684264
+    ]
+   }
+  }
+ ]
+}

@@ -2,7 +2,8 @@
 
 export type City = { name: string; country: string; cc: string; lat: number; lng: number }
 export type Bird = { species: string; name: string }
-export type Place = { id: string; name: string; country: string; cc: string; lat: number; lng: number }
+/** A searchable or tappable place; `id` is namespaced by source (`photon:<osm_type><osm_id>`, `om:<geonameid>`, or the bundled `CC-name-lat`). */
+export type Place = { id: string; name: string; region?: string; country: string; cc: string; lat: number; lng: number; kind?: 'locality' | 'poi' | 'region' }
 
 export type Trip = {
   id: string

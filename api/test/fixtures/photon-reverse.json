@@ -1,0 +1,30 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2469854836,
+    "osm_key": "place",
+    "osm_value": "house",
+    "type": "house",
+    "housenumber": "21",
+    "street": "Neuenburger Straße",
+    "locality": "Ritterkiez",
+    "district": "Kreuzberg",
+    "city": "Berlin",
+    "country": "Germany",
+    "postcode": "10969",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     13.3997604,
+     52.4999589
+    ]
+   }
+  }
+ ]
+}
