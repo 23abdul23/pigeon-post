@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { COGNITO_CONFIGURED } from './auth'
-import { clearOutbox, enqueue, flush, pendingOps, pendingTouches } from './outbox'
+import { clearOutbox, enqueue, flush, GROUPS, pendingOps, pendingTouches, setOnFlushed, touchedSince, writeSeq } from './outbox'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
 
-const GROUPS = ['profile', 'trip', 'stories', 'stamps', 'sessions', 'friends', 'letters']
-
 /**
- * Fetches `GET /state` and applies every entity group without a pending local write (checked before and after the fetch,
- * so a write made meanwhile wins). Never touches the active flight (`session`) or `landing`. No-op without Cognito.
+ * Fetches `GET /state` and applies every entity group without a local write pending now, pending when the fetch started,
+ * or started/settled during the fetch (the response may predate it). Never touches the active flight (`session`) or
+ * `landing`. `show` makes the chip say "Syncing…" (initial load, retry); background polls stay quiet. No-op without Cognito.
  */
-async function pull(): Promise<void> {
+async function pull(show: boolean): Promise<void> {
   if (!COGNITO_CONFIGURED) return
   const before = pendingTouches()
   if (GROUPS.every((g) => before.has(g))) return
+  const since = writeSeq()
   const prev = getSyncStatus().state
-  if (prev !== 'error') setSyncStatus({ state: 'syncing', pending: pendingOps() })
+  if (show && prev !== 'error') setSyncStatus({ state: 'syncing', pending: pendingOps() })
   let s: ServerState
   try {
     s = await api<ServerState>('/state')
@@ -25,29 +25,41 @@ async function pull(): Promise<void> {
     if (prev !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
     throw e
   }
-  const held = new Set([...before, ...pendingTouches()])
-  hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
-  if (prev === 'error') setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
-  else if (pendingOps()) setSyncStatus({ state: 'offline', pending: pendingOps() })
+  try {
+    const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
+    hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
+  } catch (e) {
+    setSyncStatus({ state: 'error', pending: pendingOps(), lastError: `Could not read server data: ${e instanceof Error ? e.message : 'unknown error'}` })
+    throw e
+  }
+  const state = getSyncStatus().state
+  if (pendingOps() || state === 'error') setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
   else markSynced()
 }
+
+// One fetch at a time: concurrent callers share it, so an older response can never land after a newer one.
+let pulling: Promise<void> | undefined
+const pullOnce = (show: boolean) => (pulling ??= pull(show).finally(() => (pulling = undefined)))
 
 /** Sign-in load: sends queued writes first, then takes every group that has no write still pending. */
 export async function loadServerState(): Promise<void> {
   if (!COGNITO_CONFIGURED) return
   await flush()
-  await pull()
+  await pullOnce(true)
 }
 
-/** The 30 s poll and tab-visible refresh: server state for every entity group without a pending local write. */
-export const refreshAll = pull
+/** The poll, tab-visible and after-flush refresh: server state for every entity group without a pending local write. */
+export const refreshAll = () => pullOnce(false)
+
+// A flush that sent something and left nothing queued refreshes (refreshing never enqueues, so this cannot loop).
+setOnFlushed(() => void refreshAll().catch((e) => console.warn('refresh after flush failed', e)))
 
 /** The Header chip's tap: clears a shown error, sends what is queued, then refreshes. */
 export async function retrySync(): Promise<void> {
   if (!COGNITO_CONFIGURED) return
   setSyncStatus({ state: 'syncing', lastError: undefined, pending: pendingOps() })
   await flush()
-  await pull().catch((e) => console.warn('retry refresh failed', e))
+  await pullOnce(true).catch((e) => console.warn('retry refresh failed', e))
 }
 
 const POLL_MS = 30_000

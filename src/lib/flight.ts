@@ -116,7 +116,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
         : [...cur.stamps, { cc: story.cc, country: story.country, firstMs: now, visits: 1 }],
     })
     const body = { id: sessionId, startMs: s.startMs, endMs, reason, kmGained: p.km - s.baseKm, story: { ...story, id } }
-    void send<SessionResult>({ id: `session:${sessionId}`, method: 'POST', path: `/trips/${trip.id}/sessions`, body, touches: ['trip', 'stories', 'stamps', 'sessions'] }).then((r) => r && adoptSession(r, nextTrip))
+    void send<SessionResult>({ id: `session:${sessionId}`, method: 'POST', path: `/trips/${trip.id}/sessions`, body, touches: ['trip', 'stories', 'stamps', 'sessions', 'letters'] }).then((r) => r && adoptSession(r, nextTrip))
     return result
   })().finally(() => {
     landing = null

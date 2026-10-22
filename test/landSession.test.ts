@@ -26,7 +26,7 @@ describe('landSession', () => {
     // the local optimistic result is visible straight away
     expect(getState().stories[0].id).toBe(landing.storyId)
     const [op] = sendMock.mock.calls[0]
-    expect(op).toMatchObject({ id: `session:${getState().sessions[0].id}`, method: 'POST', path: '/trips/t1/sessions', touches: ['trip', 'stories', 'stamps', 'sessions'] })
+    expect(op).toMatchObject({ id: `session:${getState().sessions[0].id}`, method: 'POST', path: '/trips/t1/sessions', touches: ['trip', 'stories', 'stamps', 'sessions', 'letters'] })
     expect(op.body).toMatchObject({ id: getState().sessions[0].id, reason: 'ended', story: { id: landing.storyId, cc: 'HR' } })
 
     const serverStory = { ...getState().stories[0], lat: 45.12, lng: 15.5 }

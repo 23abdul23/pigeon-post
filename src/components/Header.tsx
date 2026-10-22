@@ -6,13 +6,13 @@ const chip = 'rounded-full px-3 py-1 text-[12px] font-medium'
 
 /** Sync state, hidden when all is saved. Never shown without Cognito (the status then stays 'synced'). */
 function SyncChip() {
-  const { state, pending } = useSyncStatus()
+  const { state, pending, lastError } = useSyncStatus()
   return (
     <div aria-live="polite">
       {state === 'syncing' && <span className={`${chip} bg-sage/15 text-ink-2`}>Syncing…</span>}
       {state === 'offline' && <span className={`${chip} bg-ink/10 text-ink-2`}>{pending ? `Offline, ${pending} waiting` : 'Offline'}</span>}
       {state === 'error' && (
-        <button type="button" onClick={() => void retrySync()} className={`${chip} bg-[#8e4d31]/15 text-[#8e4d31]`}>
+        <button type="button" title={lastError} aria-label={`Sync problem. ${lastError ?? ''} Tap to retry`} onClick={() => void retrySync()} className={`${chip} bg-[#8e4d31]/15 text-[#8e4d31]`}>
           Sync problem. Tap to retry
         </button>
       )}

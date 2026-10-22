@@ -4,7 +4,7 @@ const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
 vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: vi.fn() }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
-vi.mock('../src/lib/outbox', () => ({ send: vi.fn(), flush: vi.fn(async () => {}), pendingOps: vi.fn(() => 0), pendingTouches: vi.fn(() => new Set<string>()), enqueue: vi.fn() }))
+vi.mock('../src/lib/outbox', () => ({ send: vi.fn(), flush: vi.fn(async () => {}), pendingOps: vi.fn(() => 0), pendingTouches: vi.fn(() => new Set<string>()), touchedSince: vi.fn(() => new Set<string>()), writeSeq: vi.fn(() => 0), setOnFlushed: vi.fn(), GROUPS: ['profile', 'trip', 'stories', 'stamps', 'sessions', 'friends', 'letters'], enqueue: vi.fn() }))
 vi.mock('../src/lib/stories', () => ({
   buildStory: vi.fn(async (lat: number, lng: number, km: number) => ({ place: 'Kyoto', country: 'Japan', cc: 'JP', lens: 'Nature', text: 'Moss.', birds: [], km, lat, lng })),
 }))

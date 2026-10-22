@@ -31,13 +31,42 @@ function save(next: Queued[]) {
 
 /** Queues a write for the signed-in user; an op with the same id replaces the queued one (each op is a full PUT-style write). */
 export function enqueue(op: Op): void {
+  note(op.touches)
   save([...q().filter((o) => o.id !== op.id), { ...op, owner: currentSub() ?? undefined }])
   if (getSyncStatus().state !== 'synced') setSyncStatus({ pending: pendingOps() })
 }
 
-const inflight = new Set<Op>()
+export const GROUPS = ['profile', 'trip', 'stories', 'stamps', 'sessions', 'friends', 'letters']
+
+/** Every `send` from the moment it is called (waiting its turn on the chain or in flight) until the server answered. */
+const active = new Set<Op>()
 /** Queued writes plus any `send` the server has not answered yet: until then, `GET /state` may not reflect them. */
-export const pendingOps = () => q().length + inflight.size
+export const pendingOps = () => q().length + [...active].filter((o) => !q().some((x) => x.id === o.id)).length
+
+// A monotonic log of write starts and settlements, so a refresh can tell that a write finished while its fetch was out.
+let seq = 0
+let log: { seq: number; touches: string[] }[] = []
+const note = (touches: string[] | undefined) => {
+  log = [...log.slice(-199), { seq: ++seq, touches: touches ?? GROUPS }]
+}
+export const writeSeq = () => seq
+const expand = (out: Set<string>, touches: string[] | undefined) => {
+  for (const t of touches ?? GROUPS) {
+    out.add(t)
+    if (t.startsWith('story:')) out.add('stories')
+    if (t.startsWith('letter:')) out.add('letters')
+  }
+}
+/** Entities touched by any write that started or settled after `since` (a `writeSeq()` value). */
+export function touchedSince(since: number): Set<string> {
+  const out = new Set<string>()
+  for (const e of log) if (e.seq > since) expand(out, e.touches)
+  return out
+}
+
+let onFlushed: (() => void) | undefined
+/** Registered by sync.ts (avoids an import cycle): called after a flush that sent something and left nothing pending. */
+export const setOnFlushed = (fn: () => void) => void (onFlushed = fn)
 
 /**
  * The entities a refresh must not overwrite because a local write to them is queued or still in flight. Entity groups:
@@ -47,13 +76,7 @@ export const pendingOps = () => q().length + inflight.size
  */
 export function pendingTouches(): Set<string> {
   const out = new Set<string>()
-  for (const o of [...q(), ...inflight]) {
-    for (const t of o.touches) {
-      out.add(t)
-      if (t.startsWith('story:')) out.add('stories')
-      if (t.startsWith('letter:')) out.add('letters')
-    }
-  }
+  for (const o of [...q(), ...active]) expand(out, o.touches) // persisted ops from older builds have no touches: assume all
   return out
 }
 
@@ -92,11 +115,13 @@ async function run() {
   const sub = await getUserSub().catch(() => null)
   if (sub) save(q().filter((o) => o.owner === sub))
   let dropped: string | undefined
+  let sent = 0
   if (q().length) setSyncStatus({ state: 'syncing', pending: q().length, lastError: undefined })
   while (q().length) {
     const op = q()[0]
     try {
       await api(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
+      sent++
     } catch (e) {
       if (!permanent(e)) {
         timer = setTimeout(() => void flush(), Math.min(MAX_BACKOFF_MS, 1000 * 2 ** attempt++))
@@ -108,9 +133,11 @@ async function run() {
     }
     attempt = 0
     save(q().filter((o) => o !== op)) // by identity: a newer op with the same id, queued meanwhile, stays
+    note(op.touches)
   }
   if (dropped) setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropped })
   else if (getSyncStatus().state === 'syncing' && !pendingOps()) markSynced()
+  if (sent && !dropped && !pendingOps()) onFlushed?.()
 }
 
 let chain: Promise<unknown> = Promise.resolve()
@@ -122,24 +149,32 @@ let chain: Promise<unknown> = Promise.resolve()
  */
 export function send<T>(op: Op): Promise<T | null> {
   if (!COGNITO_CONFIGURED) return Promise.resolve(null)
+  note(op.touches)
+  active.add(op)
   const p = chain.then(async () => {
-    if (!q().length) {
-      inflight.add(op)
-      try {
-        return await api<T>(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
-      } catch (e) {
-        console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
-        if (permanent(e)) {
-          setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropMessage(op, e) })
-          return null
+    let ok = false
+    try {
+      if (!q().length) {
+        try {
+          const r = await api<T>(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
+          ok = true
+          return r
+        } catch (e) {
+          console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
+          if (permanent(e)) {
+            setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropMessage(op, e) })
+            return null
+          }
         }
-      } finally {
-        inflight.delete(op)
       }
+      enqueue(op)
+      void flush()
+      return null
+    } finally {
+      active.delete(op)
+      note(op.touches)
+      if (ok && ['syncing', 'offline'].includes(getSyncStatus().state) && !pendingOps()) markSynced()
     }
-    enqueue(op)
-    void flush()
-    return null
   })
   chain = p.catch(() => null)
   return p
