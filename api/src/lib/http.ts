@@ -41,6 +41,8 @@ export const num = (v: unknown, min: number, max: number, what: string) =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : bad(`invalid ${what}`)
 /** Ids end up inside sort keys, so only plain uuid-like strings. */
 export const id = (v: unknown, what: string) => (typeof v === 'string' && /^[\w-]{1,64}$/.test(v) ? v : bad(`invalid ${what}`))
+/** A place's provider id (`photon:N1`, `om:2`, or a bundled `CC-name-lat` that may hold spaces and non-ASCII); never control characters. */
+export const placeId = (v: unknown, what: string) => (typeof v === 'string' && /^[^\u0000-\u001f\u007f]{1,80}$/u.test(v) ? v : bad(`invalid ${what}`))
 export const cc = (v: unknown, what: string) => (typeof v === 'string' && /^[A-Z]{2}$/.test(v) ? v : bad(`invalid ${what}`))
 export function parseBody(body: string | undefined): Record<string, unknown> {
   let v: unknown

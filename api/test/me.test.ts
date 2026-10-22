@@ -121,6 +121,20 @@ describe('PUT /me', () => {
     expect((await call(me, ev({ inviteCode: 'AAAAAAAA' }))).status).toBe(400)
     expect((await call(me, ev({ homeCity: { ...city, lat: 123 } }))).status).toBe(400)
   })
+
+  it('put_me_accepts_region_and_place_id_and_bounds_their_length', async () => {
+    const r = await call(me, ev({ homeCity: { ...city, region: 'City of Zagreb', placeId: 'photon:R1234' } }))
+    expect(r.status).toBe(200)
+    expect(updates()[0].ExpressionAttributeValues![':homeCity']).toEqual({ name: 'Zagreb', region: 'City of Zagreb', country: 'Croatia', cc: 'HR', lat: 45.81, lng: 15.98, placeId: 'photon:R1234' })
+    // bundled ids carry spaces and non-ASCII names
+    expect((await call(me, ev({ homeCity: { ...city, placeId: 'CI-Abidjan Plateau-5.32' } }))).status).toBe(200)
+    // old cities without them stay valid and gain no keys
+    ddb.resetHistory()
+    expect((await call(me, ev({ homeCity: city }))).status).toBe(200)
+    expect(Object.keys(updates()[0].ExpressionAttributeValues![':homeCity']).sort()).toEqual(['cc', 'country', 'lat', 'lng', 'name'])
+    for (const bad of [{ region: 'x'.repeat(121) }, { placeId: 'x'.repeat(81) }, { placeId: 'a\u0007b' }, { region: 7 }, { placeId: '' }])
+      expect((await call(me, ev({ homeCity: { ...city, ...bad } }))).status).toBe(400)
+  })
 })
 
 describe('GET /state', () => {

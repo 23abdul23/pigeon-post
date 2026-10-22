@@ -10,15 +10,19 @@ async function getTrip(sub: string, tripId: string): Promise<StoredTrip | undefi
   return r.Item && clean<StoredTrip>(r.Item)
 }
 
+const KINDS = ['locality', 'poi', 'region'] as const
+
 export function parsePlace(v: unknown): Place {
   if (!isObj(v)) return bad('invalid dest')
   return {
     id: str(v.id, 200, 'dest.id'),
     name: str(v.name, 200, 'dest.name'),
+    ...(v.region !== undefined && { region: str(v.region, 120, 'dest.region') }),
     country: str(v.country, 100, 'dest.country'),
     cc: cc(v.cc, 'dest.cc'),
     lat: roundCoord(num(v.lat, -90, 90, 'dest.lat')),
     lng: roundCoord(num(v.lng, -180, 180, 'dest.lng')),
+    ...(v.kind !== undefined && { kind: KINDS.includes(v.kind as never) ? (v.kind as Place['kind']) : bad('invalid dest.kind') }),
   }
 }
 

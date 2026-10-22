@@ -69,6 +69,19 @@ describe('GET /state', () => {
     expect((await call(createTrip, ev({ id: 't2', dest, routeKm: 400 }))).status).toBe(400)
   })
 
+  it('trips_post_accepts_place_without_region', async () => {
+    ddb.on(GetCommand).resolves({ Item: { ...pk, SK: 'PROFILE', inviteCode: 'X', homeCity: home } })
+    ddb.on(PutCommand).resolves({})
+    expect((await call(createTrip, ev({ id: 't1', dest, routeKm: 400 }))).status).toBe(200)
+    expect(ddb.commandCalls(PutCommand)[0].args[0].input.Item!.dest).toEqual(dest)
+    const rich = { ...dest, id: 'photon:N240109189', region: 'Split-Dalmatia', kind: 'locality', lat: 43.50891 }
+    const r = await call(createTrip, ev({ id: 't2', dest: rich, routeKm: 400 }))
+    expect(r.status).toBe(200)
+    expect(r.body.dest).toEqual({ ...rich, lat: 43.51 })
+    expect((await call(createTrip, ev({ id: 't3', dest: { ...dest, region: 'x'.repeat(121) }, routeKm: 400 }))).status).toBe(400)
+    expect((await call(createTrip, ev({ id: 't4', dest: { ...dest, kind: 'house' }, routeKm: 400 }))).status).toBe(400)
+  })
+
   it('flight_stale_ms_matches_client', () => {
     const src = readFileSync(new URL('../../src/lib/geo.ts', import.meta.url), 'utf8')
     expect(Number(src.match(/FLIGHT_STALE_MS\s*=\s*(\d+)/)![1])).toBe(FLIGHT_STALE_MS)

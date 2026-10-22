@@ -3,7 +3,7 @@ import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { Bird, City, Settings } from '../../../src/lib/types'
 import { BIRD_IDS, roundCoord } from '../lib/constants'
 import { ddb, profileOut, tableName } from '../lib/db'
-import { bad, cc, fail, isObj, json, num, parseBody, route, str } from '../lib/http'
+import { bad, cc, fail, isObj, json, num, parseBody, placeId, route, str } from '../lib/http'
 import { codePk, PROFILE_SK, userPk } from '../lib/keys'
 
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789'
@@ -31,11 +31,13 @@ const FIELDS = {
   homeCity: (v: unknown): City => {
     if (!isObj(v)) return bad('invalid homeCity')
     return {
-      name: str(v.name, 100, 'homeCity.name'),
+      name: str(v.name, 120, 'homeCity.name'),
+      ...(v.region !== undefined && { region: str(v.region, 120, 'homeCity.region') }),
       country: str(v.country, 100, 'homeCity.country'),
       cc: cc(v.cc, 'homeCity.cc'),
       lat: roundCoord(num(v.lat, -90, 90, 'homeCity.lat')),
       lng: roundCoord(num(v.lng, -180, 180, 'homeCity.lng')),
+      ...(v.placeId !== undefined && { placeId: placeId(v.placeId, 'homeCity.placeId') }),
     }
   },
   bird: (v: unknown): Bird => {
