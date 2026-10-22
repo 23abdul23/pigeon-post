@@ -4,9 +4,15 @@ import { COGNITO_CONFIGURED } from './auth'
 import { clearOutbox, enqueue, flush, GROUPS, pendingOps, pendingTouches, setOnFlushed, touchedSince, writeSeq } from './outbox'
 import { deviceId } from './device'
 import { FLIGHT_STALE_MS } from './geo'
+import { hasLocalData, reconcileLocal } from './reconcile'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
+
+/** True once a `GET /state` of this page load has succeeded; the import runs after the first one only. */
+let firstStateSeen = false
+/** Entity groups a null server profile must not clear while this device's local data has not reached the server. */
+const LOCAL_ONLY = ['profile', 'trip', 'stories', 'stamps', 'sessions']
 
 /**
  * Fetches `GET /state` and applies every entity group without a local write pending now, pending when the fetch started,
@@ -29,7 +35,14 @@ async function pull(show: boolean): Promise<void> {
   }
   try {
     const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
-    hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
+    // A new server account with local data: upload that first (it hydrates from the reply). When the upload fails the null
+    // profile must not wipe the local data, so those groups are held until a later load imports successfully.
+    const first = !firstStateSeen
+    firstStateSeen = true
+    const unsynced = s.profile === null && hasLocalData()
+    const imported = first && unsynced && (await reconcileLocal())
+    if (unsynced && !imported) LOCAL_ONLY.forEach((g) => held.add(g))
+    if (!imported) hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
     adoptFlight(s, held)
   } catch (e) {
     setSyncStatus({ state: 'error', pending: pendingOps(), lastError: `Could not read server data: ${e instanceof Error ? e.message : 'unknown error'}` })

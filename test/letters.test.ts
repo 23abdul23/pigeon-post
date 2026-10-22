@@ -89,13 +89,13 @@ describe('letters on the client', () => {
     const incoming = letter({ id: 'new', fromId: 'bob', toId: 'me', status: 'DELIVERED' })
     const friend = { id: 'bob', name: 'Bob', city: 'Kyoto', cc: 'JP', status: 'accepted' as const, lat: 35, lng: 135 }
     vi.mocked(pendingTouches).mockReturnValue(new Set(['letters', 'friends']))
-    apiMock.mockResolvedValueOnce({ profile: null, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
+    apiMock.mockResolvedValueOnce({ profile: { inviteCode: 'X' }, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
     await refreshAll()
     expect(getState().letters.map((l) => l.id)).toEqual(['old']) // unsent local edits win
     expect(getState().friends).toEqual([])
 
     vi.mocked(pendingTouches).mockReturnValue(new Set())
-    apiMock.mockResolvedValueOnce({ profile: null, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
+    apiMock.mockResolvedValueOnce({ profile: { inviteCode: 'X' }, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
     await refreshAll()
     expect(getState().letters).toEqual([incoming])
     expect(getState().friends).toEqual([friend])
