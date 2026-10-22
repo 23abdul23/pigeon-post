@@ -4,10 +4,11 @@ import BirdViewer from '../components/BirdViewer'
 import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
 import { birdBySpecies } from '../lib/birds'
-import { computeProgress, landSession } from '../lib/flight'
+import { serverNow } from '../lib/device'
+import { computeProgress, flightIds, flightRole, heartbeat, landSession, takeOver } from '../lib/flight'
 import { fmtKm, pointAtKm } from '../lib/geo'
 import { nearestCity } from '../lib/places'
-import { getState, setState, useStore } from '../lib/store'
+import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
 import { windAt, windNote, type Wind } from '../lib/weather'
 import WelcomeBack from './WelcomeBack'
 
@@ -21,18 +22,26 @@ export default function Focus() {
   const { tripId } = useParams()
   const nav = useNavigate()
   const session = useStore((s) => s.session)
+  const flight = useStore((s) => s.flight)
+  const stories = useStore((s) => s.stories)
   const trip = useStore((s) => s.trip)
   const landing = useStore((s) => s.landing)
   const bird = useStore((s) => s.bird)
   const soundOn = useStore((s) => s.soundOn)
   const volume = useStore((s) => s.settings.volume)
-  const [now, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState(() => serverNow())
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [near, setNear] = useState('')
   const [ahead, setAhead] = useState('')
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
-  const sessionRef = useRef(session)
-  sessionRef.current = session
+  const [takingOver, setTakingOver] = useState(false)
+  // observer: another device flies this trip; the bird moves on the server clock, and only the owner heartbeats or lands
+  const observing = flightRole() === 'observer' && flight?.tripId === tripId
+  const [watched, setWatched] = useState<ActiveFlight | null>(null)
+  if (observing && flight !== watched) setWatched(flight) // remembered so its landing can be shown once it ends elsewhere
+  const live = session ?? (observing ? flight : null)
+  const liveRef = useRef(live)
+  liveRef.current = live
 
   const flying = !!session && !session.leftAtMs
   const away = !!session?.leftAtMs || landing?.reason === 'left'
@@ -40,7 +49,7 @@ export default function Focus() {
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
     const s = getState().session
-    if (s && !s.leftAtMs && Date.now() - (s.heartbeatMs ?? s.startMs) > 3000) {
+    if (s && !s.leftAtMs && serverNow() - (s.heartbeatMs ?? s.startMs) > 3000) {
       setState({ session: { ...s, leftAtMs: s.heartbeatMs ?? s.startMs } })
     }
   }, [])
@@ -49,7 +58,10 @@ export default function Focus() {
   useEffect(() => {
     const onHide = () => {
       const s = getState().session
-      if (s && !s.leftAtMs) setState({ session: { ...s, leftAtMs: Date.now() } })
+      if (s && !s.leftAtMs) {
+        setState({ session: { ...s, leftAtMs: serverNow() } })
+        heartbeat() // the server learns when this device stopped flying
+      }
     }
     const onShow = () => {
       if (getState().session?.leftAtMs) void landSession('left')
@@ -64,18 +76,24 @@ export default function Focus() {
     }
   }, [])
 
-  // Clock tick + heartbeat while flying.
+  // Clock tick + local heartbeat while flying (or watching); the server heartbeat every 30 s, owner only.
+  useEffect(() => {
+    if (!flying && !observing) return
+    const id = window.setInterval(() => {
+      setNow(serverNow())
+      const s = getState().session
+      if (s && !s.leftAtMs) setState({ session: { ...s, heartbeatMs: serverNow() } })
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [flying, observing])
+
   useEffect(() => {
     if (!flying) return
-    const id = window.setInterval(() => {
-      setNow(Date.now())
-      const s = getState().session
-      if (s && !s.leftAtMs) setState({ session: { ...s, heartbeatMs: Date.now() } })
-    }, 1000)
+    const id = window.setInterval(heartbeat, 30_000)
     return () => window.clearInterval(id)
   }, [flying])
 
-  const progress = useMemo(() => (session && trip ? computeProgress(session, trip, now) : null), [session, trip, now])
+  const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
   useEffect(() => {
     if (flying && progress && (progress.done || progress.arrived)) void landSession('completed')
@@ -87,12 +105,12 @@ export default function Focus() {
 
   // Place names for the little notes on the map.
   useEffect(() => {
-    if (!flying || !trip) return
+    if ((!flying && !observing) || !trip) return
     let cancelled = false
     const look = async () => {
-      const s = sessionRef.current
+      const s = liveRef.current
       if (!s) return
-      const p = computeProgress(s, trip, Date.now())
+      const p = computeProgress(s, trip, serverNow())
       const here = pointAtKm(trip.route, p.km).pt
       const front = pointAtKm(trip.route, Math.min(trip.routeKm, p.km + 250)).pt
       const [a, b, w] = await Promise.all([nearestCity(here[0], here[1]), nearestCity(front[0], front[1]), windAt(here[0], here[1])])
@@ -108,10 +126,14 @@ export default function Focus() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [flying, trip])
+  }, [flying, observing, trip])
 
   if (!trip || trip.id !== tripId) return <Navigate to="/home" replace />
-  if (!session && !landing) return <Navigate to="/home" replace />
+  if (!session && !landing && !observing) {
+    // a watched flight that ended elsewhere: show its landing once the synced story is here
+    const id = watched && flightIds(watched).storyId
+    return <Navigate to={id && stories.some((x) => x.id === id) ? `/landing/${id}` : '/home'} replace />
+  }
 
   if (away) return <WelcomeBack />
 
@@ -127,8 +149,8 @@ export default function Focus() {
         <FlightMap
           route={trip.route}
           getKm={() => {
-            const s = sessionRef.current
-            return s ? computeProgress(s, trip, Date.now()).km : km
+            const s = liveRef.current
+            return s ? computeProgress(s, trip, serverNow()).km : km
           }}
           className="absolute inset-0"
         />
@@ -157,9 +179,23 @@ export default function Focus() {
               <span className="size-2 rounded-full bg-sage" />
               Focus flight
             </span>
-            <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
-              End flight
-            </button>
+            {observing ? (
+              <button
+                type="button"
+                disabled={takingOver}
+                onClick={() => {
+                  setTakingOver(true)
+                  void takeOver().finally(() => setTakingOver(false))
+                }}
+                className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31] disabled:opacity-60"
+              >
+                Take over
+              </button>
+            ) : (
+              <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
+                End flight
+              </button>
+            )}
           </div>
           <div className="flex items-center justify-between pt-1">
             <div>
@@ -190,7 +226,7 @@ export default function Focus() {
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 px-4 pb-6 pt-2">
           <p className="mx-auto flex items-center gap-1.5 rounded-full bg-card-soft/70 px-4 py-1 text-[16px] text-[rgba(142,77,49,0.9)]">
             <img src="/assets/ic-leaf.svg" alt="" className="size-[10.7px]" />
-            Stay on this tab. Your bird is flying.
+            {observing ? 'Flying on your other device' : 'Stay on this tab. Your bird is flying.'}
           </p>
           <p className="-rotate-2 text-center font-hand text-[22px] font-medium leading-7 text-sage">
             heading {heading}° {COMPASS[Math.round(heading / 45) % 8]} · steady wings

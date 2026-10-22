@@ -41,7 +41,8 @@ describe('landSession', () => {
     sendMock.mockResolvedValue(null)
     setState({ trip: { ...trip, status: 'DELIVERED', progressKm: 10000 } })
     startReturn()
-    expect(sendMock).toHaveBeenLastCalledWith({ id: 'return:t1', method: 'POST', path: '/trips/t1/return', touches: ['trip'] })
+    expect(sendMock).toHaveBeenCalledWith({ id: 'return:t1', method: 'POST', path: '/trips/t1/return', touches: ['trip'] })
     expect(getState().trip).toMatchObject({ status: 'RETURNING', progressKm: 0 })
+    expect(sendMock).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'flight:t1', path: '/flight' }), expect.any(Function)) // after the return
   })
 })

@@ -6,7 +6,7 @@ import { Card, Hand, Pill, PrimaryButton, SoftButton } from '../components/ui'
 import Flag from '../components/Flag'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { useStore, type Place } from '../lib/store'
-import { startReturn, startSession } from '../lib/flight'
+import { flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip } from '../lib/trips'
 
 const DURATIONS = [15, 25, 45, 60]
@@ -27,6 +27,8 @@ export default function Dashboard() {
   const letters = useStore((s) => s.letters)
   const sessions = useStore((s) => s.sessions)
   const stamps = useStore((s) => s.stamps)
+  const flight = useStore((s) => s.flight)
+  const elsewhere = flight && flightRole() === 'observer' ? flight : null // flying on another device
   const [minutes, setMinutes] = useState(25)
   const [dest, setDest] = useState<Place | null>(null)
   const [range, setRange] = useState<(typeof RANGES)[number]>('This week')
@@ -48,6 +50,10 @@ export default function Dashboard() {
   }, [sessions, stories, stamps, range])
 
   function start() {
+    if (elsewhere) {
+      nav(`/fly/${elsewhere.tripId}`)
+      return
+    }
     if (!dest) {
       setError('Pick a place to fly to first.')
       return
@@ -64,6 +70,10 @@ export default function Dashboard() {
 
   function continueTrip() {
     if (!active) return
+    if (elsewhere) {
+      nav(`/fly/${elsewhere.tripId}`)
+      return
+    }
     if (active.status === 'DELIVERED') {
       const back = startReturn(minutes)
       if (back) nav(`/fly/${back.id}`)
@@ -170,7 +180,7 @@ export default function Dashboard() {
           </div>
           <PrimaryButton onClick={start}>
             <img src="/assets/ic-send.svg" alt="" className="size-[15px]" />
-            Start flight
+            {elsewhere ? 'Watch your flight in progress' : 'Start flight'}
           </PrimaryButton>
           <p className="flex items-center justify-center gap-1.5 text-[14px] text-ink-2">
             <img src="/assets/ic-info.svg" alt="" className="size-[13px]" />
@@ -212,7 +222,7 @@ export default function Dashboard() {
             </div>
             <SoftButton onClick={continueTrip}>
               <img src="/assets/ic-play.svg" alt="" className="size-[15px]" />
-              {active.status === 'DELIVERED' ? 'Fly home' : 'Continue trip'}
+              {elsewhere ? 'Watch flight on your other device' : active.status === 'DELIVERED' ? 'Fly home' : 'Continue trip'}
             </SoftButton>
           </Card>
         ) : (

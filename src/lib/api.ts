@@ -4,9 +4,12 @@ const BASE = import.meta.env.VITE_API_URL as string | undefined
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message = `HTTP ${status}`) {
+  /** the parsed JSON error body, when there was one (e.g. 409 `{ flight }` from `PUT /flight`) */
+  body?: unknown
+  constructor(status: number, message = `HTTP ${status}`, body?: unknown) {
     super(message)
     this.status = status
+    this.body = body
   }
 }
 
@@ -18,6 +21,6 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...(init.headers as Record<string, string>), authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new ApiError(res.status)
+  if (!res.ok) throw new ApiError(res.status, undefined, await res.json().catch(() => undefined))
   return (res.status === 204 ? undefined : await res.json()) as T
 }

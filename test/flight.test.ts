@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import mask from '../src/data/landmask.json'
-import { computeProgress } from '../src/lib/flight'
+import { serverNow } from '../src/lib/device'
+import { computeProgress, flightIds } from '../src/lib/flight'
 import { landRoute } from '../src/lib/landRoute'
 import { KM_PER_FOCUS_MINUTE, greatCircle, haversineKm, pointAtKm, routeLengthKm, type Pt } from '../src/lib/geo'
-import type { ActiveSession, Trip } from '../src/lib/store'
+import { setState, type ActiveSession, type Trip } from '../src/lib/store'
 
 const HYD: Pt = [17.38, 78.46]
 const LIS: Pt = [38.72, -9.14]
@@ -64,6 +65,29 @@ describe('computeProgress', () => {
     const p = computeProgress(session({ baseKm: trip.routeKm - 100, durationMin: 60 }), trip, 30 * 60000)
     expect(p.km).toBeCloseTo(trip.routeKm, 3)
     expect(p.arrived).toBe(true)
+  })
+})
+
+describe('server clock and flight ids', () => {
+  it('progress_uses_server_clock_offset', () => {
+    const T = 1_800_000_000_000
+    vi.useFakeTimers({ now: T + 5 * 60000 }) // this device's clock runs 5 minutes ahead
+    setState({ clockOffsetMs: -5 * 60000 }) // as measured from GET /state's serverTime
+    const s = session({ startMs: T - 10 * 60000 })
+    expect(computeProgress(s, trip, serverNow()).km).toBeCloseTo(computeProgress(s, trip, T).km, 6)
+    expect(computeProgress(s, trip, serverNow()).km).toBeCloseTo(1000, 3)
+    vi.useRealTimers()
+  })
+
+  it('session_id_is_deterministic_per_flight_and_valid', () => {
+    const a = flightIds({ tripId: 't', startMs: 1234 })
+    expect(flightIds({ tripId: 't', startMs: 1234 })).toEqual(a) // the same on every device and run
+    expect(flightIds({ tripId: 't', startMs: 1235 }).sessionId).not.toBe(a.sessionId)
+    expect(a.storyId).not.toBe(a.sessionId)
+    for (const v of [a.sessionId, a.storyId]) {
+      expect(v).toMatch(/^[\w-]{1,64}$/) // the server's id() rule
+      expect(v).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    }
   })
 })
 

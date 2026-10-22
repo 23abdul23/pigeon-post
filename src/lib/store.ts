@@ -1,13 +1,15 @@
 import { useSyncExternalStore } from 'react'
-import type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult } from './types'
+import type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult, ActiveFlight } from './types'
 
-export type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult }
+export type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult, ActiveFlight }
 
 export type ActiveSession = {
   tripId: string
   startMs: number
   durationMin: number
   baseKm: number
+  /** the trip's legs when the flight started (sent with every `PUT /flight`) */
+  legs?: number
   leftAtMs?: number
   /** last time the focus screen was alive; a stale value on load means the page was closed or reloaded */
   heartbeatMs?: number
@@ -48,7 +50,12 @@ export type State = {
   bird: Bird | null
   soundOn: boolean
   trip: Trip | null
+  /** this device's own flight (all times are server time, see `serverNow`) */
   session: ActiveSession | null
+  /** the server's view of the flight in progress, from `GET /state` or `PUT /flight` (may be another device's) */
+  flight: ActiveFlight | null
+  /** serverTime - Date.now() at the last `GET /state` */
+  clockOffsetMs: number
   landing: Landing | null
   stories: Story[]
   letters: Letter[]
@@ -69,6 +76,8 @@ const initial: State = {
   soundOn: true,
   trip: null,
   session: null,
+  flight: null,
+  clockOffsetMs: 0,
   landing: null,
   stories: [],
   letters: [],

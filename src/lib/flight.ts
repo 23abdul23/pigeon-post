@@ -1,10 +1,12 @@
 import { COGNITO_CONFIGURED } from './auth'
 import { DEMO_MODE } from './demo'
-import { KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
+import type { ApiError } from './api'
+import { deviceId, serverNow } from './device'
+import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
 import { send } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
-import { getState, setState, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
+import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
 
 export type Progress = { km: number; remainingMs: number; elapsedMs: number; done: boolean; arrived: boolean }
 
@@ -16,11 +18,99 @@ export function computeProgress(s: ActiveSession, trip: Trip, nowMs: number): Pr
   return { km, elapsedMs, remainingMs: total - elapsedMs, done: elapsedMs >= total, arrived: km >= trip.routeKm }
 }
 
-export function startSession(trip: Trip, durationMin: number) {
-  setState({
-    session: { tripId: trip.id, startMs: Date.now(), durationMin, baseKm: trip.progressKm, heartbeatMs: Date.now() },
-    landing: null,
+/** A UUID-shaped id from a stable 128-bit hash (cyrb128) of `seed`: the same on every device and run. */
+function stableId(seed: string): string {
+  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762
+  for (let i = 0; i < seed.length; i++) {
+    const k = seed.charCodeAt(i)
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067)
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233)
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213)
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179)
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067)
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233)
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213)
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179)
+  h1 ^= h2 ^ h3 ^ h4
+  h2 ^= h1
+  h3 ^= h1
+  h4 ^= h1
+  const hex = [h1, h2, h3, h4].map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+/** Session and story ids of a flight: two devices landing the same flight post the same ids, so the server replays one landing. */
+export const flightIds = (f: { tripId: string; startMs: number }) => ({ sessionId: stableId(`${f.tripId}:${f.startMs}`), storyId: stableId(`story:${f.tripId}:${f.startMs}`) })
+
+const fresh = (f: ActiveFlight) => serverNow() - f.heartbeatMs <= FLIGHT_STALE_MS
+
+/** owner: this device flies it; observer: another device flies it (fresh heartbeat); none: free to start (a stale foreign flight counts as none). */
+export function flightRole(): 'owner' | 'observer' | 'none' {
+  const { session, flight } = getState()
+  if (session) return 'owner' // a refresh or a 409 clears it when another device owns the flight
+  return flight && flight.deviceId !== deviceId() && fresh(flight) ? 'observer' : 'none'
+}
+
+const refreshSoon = () => void import('./sync').then((m) => m.refreshAll()).catch((e) => console.warn('refresh after flight rejection failed', e))
+
+/**
+ * `PUT /flight` for the local session, through `send` so it reaches the server after the trip it needs (POST /trips) and is
+ * queued on a network error or 5xx. A 4xx of the direct call comes back with its body: 409 `{ flight }` means another device
+ * owns it (become observer); 409 "already landed" or 404 means it is over (drop it and refresh). A queued PUT that is later
+ * rejected is only logged by the outbox; the next refresh reconciles (see sync.ts).
+ */
+function putFlight(s: ActiveSession, takeover = false): Promise<void> {
+  const body = {
+    tripId: s.tripId,
+    startMs: s.startMs,
+    durationMin: s.durationMin,
+    baseKm: s.baseKm,
+    legs: s.legs ?? getState().trip?.legs ?? 0,
+    deviceId: deviceId(),
+    ...(s.leftAtMs === undefined ? {} : { leftAtMs: s.leftAtMs }),
+    ...(takeover ? { takeover: true } : {}),
+  }
+  const mine = () => getState().session?.startMs === s.startMs && getState().session?.tripId === s.tripId
+  const rejected = (e: ApiError) => {
+    const other = (e.body as { flight?: ActiveFlight } | undefined)?.flight
+    if (e.status === 409 && other) {
+      setState({ flight: other, ...(mine() ? { session: null } : {}) })
+      return true
+    }
+    if (e.status === 409 || e.status === 404) {
+      if (mine()) setState({ session: null, flight: null })
+      refreshSoon()
+      return true
+    }
+    console.error('PUT /flight rejected', e, body) // 400: a client bug
+    return false
+  }
+  return send<ActiveFlight>({ id: `flight:${s.tripId}`, method: 'PUT', path: '/flight', body, touches: ['flight'] }, rejected).then((f) => {
+    if (f && mine()) setState({ flight: f })
   })
+}
+
+export function startSession(trip: Trip, durationMin: number) {
+  const now = serverNow()
+  const session: ActiveSession = { tripId: trip.id, startMs: now, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: now }
+  setState({ session, landing: null })
+  void putFlight(session)
+}
+
+/** Tells the server this device still flies (every 30 s from the Focus screen, and once on leaving the tab with `leftAtMs`). */
+export function heartbeat(): void {
+  const s = getState().session
+  if (s) void putFlight(s)
+}
+
+/** Continues the flight another device is flying: same start, distance and length; this device owns it from now on. */
+export async function takeOver(): Promise<void> {
+  const { flight: f, trip } = getState()
+  if (!f || !trip || trip.id !== f.tripId) return
+  const session: ActiveSession = { tripId: f.tripId, startMs: f.startMs, durationMin: f.durationMin, baseKm: f.baseKm, legs: f.legs ?? trip.legs, heartbeatMs: serverNow() }
+  setState({ session, landing: null })
+  await putFlight(session, true)
 }
 
 /** After delivering at a friend's city, the same route flown backwards brings the bird home. */
@@ -65,13 +155,12 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const s = st.session
     const trip = st.trip
     if (!s || !trip || trip.id !== s.tripId) return st.landing
-    const now = Date.now()
+    const now = serverNow()
     const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : now
     const p = computeProgress({ ...s, leftAtMs: s.leftAtMs ?? endMs }, trip, endMs)
     const spot = pointAtKm(trip.route, p.km).pt
     const story = await buildStory(spot[0], spot[1], p.km)
-    const id = crypto.randomUUID()
-    const sessionId = crypto.randomUUID()
+    const { storyId: id, sessionId } = flightIds(s)
     const cur = getState()
     const stampKnown = cur.stamps.some((x) => x.cc === story.cc)
     const arrived = p.arrived
@@ -108,6 +197,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
       letters,
       trip: nextTrip,
       session: null,
+      flight: null, // the landing transaction deletes it on the server
       landing: result,
       stories: [{ ...story, id, dateMs: now, saved: false }, ...cur.stories],
       sessions: [{ id: sessionId, tripId: trip.id, startMs: s.startMs, endMs, km: p.km - s.baseKm, reason }, ...cur.sessions],

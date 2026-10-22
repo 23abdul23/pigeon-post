@@ -85,7 +85,7 @@ const what = (id: string) =>
     : id.startsWith('friend-') ? 'a friend change'
     : id.startsWith('letter') ? 'a letter'
     : id.startsWith('story') ? 'a story'
-    : id.startsWith('session') ? 'your flight'
+    : id.startsWith('session') || id.startsWith('flight') ? 'your flight'
     : id.startsWith('return') ? 'your return flight'
     : id.startsWith('trip') ? 'your trip'
     : 'a change'
@@ -145,9 +145,10 @@ let chain: Promise<unknown> = Promise.resolve()
 /**
  * Sends a write now and returns the server's reply, or null when it was queued instead (offline, error, or older
  * writes still queued, which must go first). Calls run one at a time so writes reach the server in the order made.
- * Without Cognito (offline dev) nothing is sent.
+ * `rejected` sees a permanent 4xx of the direct call (with its body) and returns true when it handled it, so no error
+ * is shown. Without Cognito (offline dev) nothing is sent.
  */
-export function send<T>(op: Op): Promise<T | null> {
+export function send<T>(op: Op, rejected?: (e: ApiError) => boolean): Promise<T | null> {
   if (!COGNITO_CONFIGURED) return Promise.resolve(null)
   note(op.touches)
   active.add(op)
@@ -162,7 +163,7 @@ export function send<T>(op: Op): Promise<T | null> {
         } catch (e) {
           console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
           if (permanent(e)) {
-            setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropMessage(op, e) })
+            if (!rejected?.(e as ApiError)) setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropMessage(op, e) })
             return null
           }
         }

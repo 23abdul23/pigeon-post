@@ -22,17 +22,22 @@ export function createTrip(dest: Place, opts: { friendId?: string; letterIds?: s
     legs: 0,
     friendId: opts.friendId,
     letterIds: opts.letterIds ?? [],
+    origin: home, // the server snapshots the same home city, so every device plans this route from here
   }
   setState({ trip, landing: null })
   void send({ id: `trip:${trip.id}`, method: 'POST', path: '/trips', body: { id: trip.id, dest, routeKm: trip.routeKm, friendId: trip.friendId, letterIds: trip.letterIds }, touches: ['trip'] })
   return trip
 }
 
-/** The server keeps no route: reuse ours when it is the same leg of the same trip, else plan it again (reversed when flying home). */
+/**
+ * The server keeps no route: reuse ours when it is the same leg of the same trip, else plan it again from the trip's origin
+ * (the current home for older trips without one), reversed when flying home.
+ */
 export function withRoute(t: Omit<Trip, 'route'>, home: City | null | undefined): Trip | null {
   const local = getState().trip
   if (local?.id === t.id && (local.status === 'RETURNING') === (t.status === 'RETURNING')) return { ...t, route: local.route }
-  if (!home) return null
-  const route = planRoute([home.lat, home.lng], [t.dest.lat, t.dest.lng])
+  const from = t.origin ?? home
+  if (!from) return null
+  const route = planRoute([from.lat, from.lng], [t.dest.lat, t.dest.lng])
   return { ...t, route: t.status === 'RETURNING' ? route.reverse() : route }
 }

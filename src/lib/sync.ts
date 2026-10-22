@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 import { COGNITO_CONFIGURED } from './auth'
 import { clearOutbox, enqueue, flush, GROUPS, pendingOps, pendingTouches, setOnFlushed, touchedSince, writeSeq } from './outbox'
+import { deviceId } from './device'
+import { FLIGHT_STALE_MS } from './geo'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
-import { getState, hydrate, resetState, type Profile, type ServerState } from './store'
+import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
 
 /**
@@ -28,6 +30,7 @@ async function pull(show: boolean): Promise<void> {
   try {
     const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
     hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
+    adoptFlight(s, held)
   } catch (e) {
     setSyncStatus({ state: 'error', pending: pendingOps(), lastError: `Could not read server data: ${e instanceof Error ? e.message : 'unknown error'}` })
     throw e
@@ -35,6 +38,27 @@ async function pull(show: boolean): Promise<void> {
   const state = getSyncStatus().state
   if (pendingOps() || state === 'error') setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
   else markSynced()
+}
+
+/** A local flight younger than this may not have reached the server yet, so a missing server flight does not end it. */
+const JUST_STARTED_MS = 15_000
+
+/**
+ * Takes the server's flight and clock. The local `session` ends when another device now owns the flight (fresh), or the
+ * server has none (landed or ended elsewhere) and the session is not brand new; never while a flight write is pending.
+ * A response without `flight` (an older API) leaves both alone.
+ */
+function adoptFlight(s: ServerState, held: ReadonlySet<string>): void {
+  setState((st) => {
+    const clockOffsetMs = typeof s.serverTime === 'number' ? s.serverTime - Date.now() : st.clockOffsetMs
+    if (s.flight === undefined) return { clockOffsetMs }
+    const f = s.flight
+    const now = Date.now() + clockOffsetMs
+    const ses = st.session
+    const taken = !!f && f.deviceId !== deviceId() && now - f.heartbeatMs <= FLIGHT_STALE_MS
+    const gone = !!ses && !held.has('flight') && (taken || (!f && now - ses.startMs > JUST_STARTED_MS))
+    return { clockOffsetMs, flight: f, ...(gone ? { session: null } : {}) }
+  })
 }
 
 // One fetch at a time: concurrent callers share it, so an older response can never land after a newer one.
