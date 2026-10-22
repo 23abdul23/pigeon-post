@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="390" height="516" viewBox="0 0 390 516" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="SVG - Subtle Topographic Contour &#38; Grid Overlay" opacity="0.3" clip-path="url(#clip0_0_9)">
+<path id="Vector" opacity="0.35" d="M-50 160C36.6667 133.333 116.667 143.333 190 190C263.333 236.667 340 243.333 420 210" stroke-width="0.75" stroke="#446650"/>
+<path id="Vector_2" opacity="0.25" d="M-30 220C63.3333 193.333 150 203.333 230 250C310 296.667 380 306.667 440 280" stroke-width="0.75" stroke="#446650"/>
+<path id="Vector_3" opacity="0.3" d="M-60 380C40 340 130 346.667 210 400C290 453.333 363.333 463.333 430 430" stroke-width="0.75" stroke="#446650"/>
+<path id="Vector_4" opacity="0.2" d="M-20 540C86.6667 506.667 180 513.333 260 560C340 606.667 400 616.667 440 590" stroke-width="0.75" stroke="#446650"/>
+</g>
+<defs>
+<clipPath id="clip0_0_9">
+<rect width="390" height="516" fill="white"/>
+</clipPath>
+</defs>
+</svg>

@@ -1,0 +1,236 @@
+[
+ {
+  "id": "machu-picchu",
+  "place": "Machu Picchu",
+  "region": "Cusco Region",
+  "country": "Peru",
+  "cc": "PE",
+  "lens": "History",
+  "text": "Machu Picchu is a 15th-century Inca citadel located in the Eastern Cordillera of southern Peru on a mountain ridge at 2,430 meters (7,970 ft).",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bb/Machu_Picchu%2C_2023_%28012%29.jpg/330px-Machu_Picchu%2C_2023_%28012%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Machu_Picchu",
+  "lat": -13.16,
+  "lng": -72.55,
+  "birds": [
+   "Rufous-collared Sparrow",
+   "Sparkling Violetear",
+   "White-bellied Hummingbird"
+  ]
+ },
+ {
+  "id": "santorini",
+  "place": "Santorini",
+  "region": "Cyclades",
+  "country": "Greece",
+  "cc": "GR",
+  "lens": "Nature",
+  "text": "Santorini, officially Thira or Thera, is a Greek island in the southern Aegean Sea, about 200 km (120 mi) southeast from the mainland. It is the largest island of a small, circular archipelago formed by the Santorini caldera. It is the southernmost member of the Cyclades group of islands, with an area of approximately 73 km2 (28 mi2) and a 2021 census population of 15,480.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/2011_Dimos_Thiras.png/330px-2011_Dimos_Thiras.png?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Santorini",
+  "lat": 36.42,
+  "lng": 25.43,
+  "birds": [
+   "Yellow-legged Gull",
+   "House Sparrow",
+   "Hooded Crow"
+  ]
+ },
+ {
+  "id": "banff-national-park",
+  "place": "Banff National Park",
+  "region": "Alberta",
+  "country": "Canada",
+  "cc": "CA",
+  "lens": "Nature",
+  "text": "Banff National Park is Canada's first national park, established in 1885 as Rocky Mountains Park. Located in Alberta's Rocky Mountains, 110–180 kilometres (68–112 mi) west of Calgary, Banff encompasses 6,641 square kilometres (2,564 sq mi) of mountainous terrain, with many glaciers and ice fields, dense coniferous forest, and alpine landscapes.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/Moraine_Lake_17092005.jpg/330px-Moraine_Lake_17092005.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Banff_National_Park",
+  "lat": 51.5,
+  "lng": -116,
+  "birds": [
+   "Black-billed Magpie",
+   "Clark's Nutcracker",
+   "Common Raven"
+  ]
+ },
+ {
+  "id": "marrakesh",
+  "place": "The Souks of Marrakesh",
+  "region": "Marrakesh",
+  "country": "Morocco",
+  "cc": "MA",
+  "lens": "Food",
+  "text": "Marrakesh or Marrakech is the fourth-largest city in Morocco. It is one of the four imperial cities of Morocco and is the capital of the Marrakesh-Safi region.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9c/Pavillon_Menarag%C3%A4rten.jpg/330px-Pavillon_Menarag%C3%A4rten.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Marrakesh",
+  "lat": 31.63,
+  "lng": -8.01,
+  "birds": [
+   "House Bunting",
+   "Common Bulbul",
+   "White Stork"
+  ]
+ },
+ {
+  "id": "table-mountain-cape-town-",
+  "place": "Table Mountain",
+  "region": "Cape Town",
+  "country": "South Africa",
+  "cc": "ZA",
+  "lens": "Nature",
+  "text": "Table Mountain is a flat-topped mountain forming a prominent landmark overlooking the city of Cape Town in South Africa.…",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Table_Mountain_DanieVDM.jpg/330px-Table_Mountain_DanieVDM.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Table_Mountain",
+  "lat": -33.96,
+  "lng": 18.41,
+  "birds": [
+   "Egyptian Goose",
+   "Southern Double-collared Sunbird",
+   "African Penguin"
+  ]
+ },
+ {
+  "id": "h-long-bay",
+  "place": "Ha Long Bay",
+  "region": "Quang Ninh",
+  "country": "Vietnam",
+  "cc": "VN",
+  "lens": "Legend",
+  "text": "Hạ Long Bay or Halong Bay is a bay located in Northeastern Vietnam, administered by the city of Quảng Ninh. The name Hạ Long means \"descending dragon\". It features thousands of limestone karsts and islets in various shapes and sizes, for which it is listed as a UNESCO World Heritage Site and a popular travel destination.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/Ha_Long_Bay_in_2019.jpg/330px-Ha_Long_Bay_in_2019.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/H%E1%BA%A1_Long_Bay",
+  "lat": 20.9,
+  "lng": 107.2,
+  "birds": [
+   "Black Kite",
+   "Blue Rock-Thrush",
+   "Pacific Reef Heron"
+  ]
+ },
+ {
+  "id": "uluru",
+  "place": "Uluru",
+  "region": "Northern Territory",
+  "country": "Australia",
+  "cc": "AU",
+  "lens": "Legend",
+  "text": "Uluru, also known as Ayers Rock and officially gazetted as Uluru / Ayers Rock, is a large sandstone monolith.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/ULURU.jpg/330px-ULURU.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Uluru",
+  "lat": -25.34,
+  "lng": 131.04,
+  "birds": [
+   "Crested Pigeon",
+   "Zebra Finch",
+   "Yellow-throated Miner"
+  ]
+ },
+ {
+  "id": "hagia-sophia",
+  "place": "Hagia Sophia",
+  "region": "Istanbul",
+  "country": "Türkiye",
+  "cc": "TR",
+  "lens": "History",
+  "text": "Hagia Sophia, officially the Hagia Sophia Grand Mosque, is a mosque and a major cultural and historical site in Istanbul, Turkey. It was formerly a church (360–1453) and a museum (1935–2020).",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Hagia_Sophia_%28228968325%29.jpeg/330px-Hagia_Sophia_%28228968325%29.jpeg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Hagia_Sophia",
+  "lat": 41.01,
+  "lng": 28.98,
+  "birds": [
+   "Yellow-legged Gull",
+   "Hooded Crow",
+   "Laughing Dove"
+  ]
+ },
+ {
+  "id": "-ingvellir-national-park",
+  "place": "Thingvellir",
+  "region": "Southwest Iceland",
+  "country": "Iceland",
+  "cc": "IS",
+  "lens": "Nature",
+  "text": "Þingvellir was the site of the Alþing, the annual parliament of Iceland from the year 930 until the last session held at Þingvellir in 1798.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/%C3%9Eingvellir_from_the_information_centre.JPG/330px-%C3%9Eingvellir_from_the_information_centre.JPG?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/%C3%9Eingvellir",
+  "lat": 64.25,
+  "lng": -21.04,
+  "birds": [
+   "Greylag Goose",
+   "Redwing",
+   "Whooper Swan"
+  ]
+ },
+ {
+  "id": "angkor-wat",
+  "place": "Angkor Wat",
+  "region": "Siem Reap",
+  "country": "Cambodia",
+  "cc": "KH",
+  "lens": "History",
+  "text": "Angkor Wat is a Theravada Buddhist temple complex, originally built as a Vaishnava Hindu temple, in Siem Reap, Cambodia. It is the largest religious complex in the world. Located on a site measuring 162.6 hectares within the medieval capital of Angkor, it was constructed between 1113 and 1150 CE during the reign of the Khmer king Suryavarman II as a Hindu temple dedicated to Vishnu.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/41/Angkor_Wat.jpg/330px-Angkor_Wat.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Angkor_Wat",
+  "lat": 13.41,
+  "lng": 103.87,
+  "birds": [
+   "Common Myna",
+   "Whiskered Tern",
+   "Red-breasted Parakeet"
+  ]
+ },
+ {
+  "id": "sagrada-fam-lia",
+  "place": "Sagrada Familia",
+  "region": "Barcelona",
+  "country": "Spain",
+  "cc": "ES",
+  "lens": "Hidden spot",
+  "text": "Basílica i Temple Expiatori de la Sagrada Família, or simply Sagrada Família, is a Catholic Basilica in the Eixample district of Barcelona, Catalonia, Spain. Designed by the Catalan architect Antoni Gaudí, it is the tallest church in the world. On 7 November 2010, Pope Benedict XVI consecrated the church and proclaimed it a basilica.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/SF_maig_2_cropped.jpg/330px-SF_maig_2_cropped.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Sagrada_Fam%C3%ADlia",
+  "lat": 41.4,
+  "lng": 2.17,
+  "birds": [
+   "Monk Parakeet",
+   "Rock Pigeon",
+   "Eurasian Magpie"
+  ]
+ },
+ {
+  "id": "lofoten",
+  "place": "The Lofoten Islands",
+  "region": "Nordland",
+  "country": "Norway",
+  "cc": "NO",
+  "lens": "Nature",
+  "text": "Lofoten is an archipelago and a traditional district in the county of Nordland, Norway. Lofoten has distinctive scenery with dramatic mountains and peaks, open sea and sheltered bays, beaches, and untouched lands. There are two towns, Svolvær and Leknes — the latter approximately 169 km (105 mi) north of the Arctic Circle and 2,420 km (1,500 mi) from the North Pole.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Moskenes_Reinebringen_lub_2025-07-21_img09_Aussicht.jpg/330px-Moskenes_Reinebringen_lub_2025-07-21_img09_Aussicht.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Lofoten",
+  "lat": 68.33,
+  "lng": 14.67,
+  "birds": [
+   "White-tailed Eagle",
+   "European Herring Gull",
+   "Eurasian Oystercatcher"
+  ]
+ },
+ {
+  "id": "taj-mahal",
+  "place": "Taj Mahal",
+  "region": "Agra",
+  "country": "India",
+  "cc": "IN",
+  "lens": "History",
+  "text": "The Taj Mahal is an ivory-white marble mausoleum on the right bank of the river Yamuna in Agra, Uttar Pradesh, India. It was commissioned in 1631 by the fifth Mughal emperor, Shah Jahan, to house the tomb of his late wife, Mumtaz Mahal; it also houses the tomb of Shah Jahan himself.",
+  "photo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/Taj_Mahal_%28Edited%29.jpeg/330px-Taj_Mahal_%28Edited%29.jpeg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+  "sourceUrl": "https://en.wikipedia.org/wiki/Taj_Mahal",
+  "lat": 27.18,
+  "lng": 78.04,
+  "birds": [
+   "Painted Stork",
+   "Rose-ringed Parakeet",
+   "Oriental Darter"
+  ]
+ }
+]
