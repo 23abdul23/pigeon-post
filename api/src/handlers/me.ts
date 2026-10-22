@@ -1,8 +1,8 @@
 import { randomInt } from 'node:crypto'
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import type { Bird, City, ServerProfile, Settings } from '../../../src/lib/types'
+import type { Bird, City, Settings } from '../../../src/lib/types'
 import { BIRD_IDS, roundCoord } from '../lib/constants'
-import { clean, ddb, tableName } from '../lib/db'
+import { ddb, profileOut, tableName } from '../lib/db'
 import { bad, cc, fail, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { codePk, PROFILE_SK, userPk } from '../lib/keys'
 
@@ -98,5 +98,5 @@ export const handler = route(async (sub, event) => {
       ReturnValues: 'ALL_NEW',
     }),
   )
-  return json(200, clean<ServerProfile>(res.Attributes ?? {}))
+  return json(200, profileOut(res.Attributes ?? {}))
 })

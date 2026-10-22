@@ -12,6 +12,8 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Google OAuth client secret, read from SSM /pigeon/google-client-secret at deploy time
+  # No default: pass SesSenderEmail=<verified sender> on every `sam deploy`. While the account is in the SES sandbox,
+  # recipients must be verified identities too, and ses:SendEmail may then also need their identity ARNs as resources.
   SesSenderEmail:
     Type: String
     Description: SES-verified sender address for "A letter arrived" emails (Task 0)

@@ -137,6 +137,20 @@ describe('GET /state', () => {
     expect((await call(state, ev())).body.profile).toEqual({ name: 'Ana', inviteCode: 'X' })
   })
 
+  it('profile_responses_never_include_the_stored_email', async () => {
+    // stored for letter alerts, never sent back: not by GET /state, not by PUT /me
+    ddb.on(QueryCommand).resolves({ Items: [{ PK: 'USER#u1', SK: 'PROFILE', name: 'Ana', inviteCode: 'X', email: 'ana@example.com' }] })
+    const st = await call(state, ev())
+    expect(st.body.profile).toEqual({ name: 'Ana', inviteCode: 'X' })
+    ddb.on(QueryCommand).resolves({ Items: [] })
+    ddb.on(UpdateCommand).resolves({ Attributes: { PK: 'USER#u1', SK: 'PROFILE', name: 'Ana', inviteCode: 'X', email: 'ana@example.com' } })
+    const e = ev({ name: 'Ana' })
+    e.requestContext.authorizer.jwt.claims.email = 'ana@example.com'
+    const put = await call(me, e)
+    expect(put.body).toEqual({ name: 'Ana', inviteCode: 'X' })
+    expect(updates().at(-1)!.ExpressionAttributeValues![':email']).toBe('ana@example.com') // still stored
+  })
+
   it('get_state_returns_latest_trip_and_trip_data', async () => {
     const pk = { PK: 'USER#u1' }
     const trip = (id: string, createdMs: number) => ({ ...pk, SK: `TRIP#${id}`, id, routeKm: 100, progressKm: 0, status: 'DONE', legs: 1, letterIds: [], createdMs })

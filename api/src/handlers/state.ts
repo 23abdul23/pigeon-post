@@ -1,6 +1,6 @@
 import { QueryCommand } from '@aws-sdk/lib-dynamodb'
-import type { Friend, ServerProfile, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
-import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
+import type { Friend, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
+import { clean, ddb, profileOut, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { json, route } from '../lib/http'
 import { PROFILE_SK, userPk } from '../lib/keys'
 import { letterOut, type LetterRow } from '../lib/letters'
@@ -15,7 +15,7 @@ export const handler = route(async (sub) => {
     )
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)
-      if (sk === PROFILE_SK) s.profile = clean<ServerProfile>(item)
+      if (sk === PROFILE_SK) s.profile = profileOut(item)
       else if (sk.startsWith('TRIP#')) {
         const t = clean<StoredTrip>(item)
         if (!trip || t.createdMs > trip.createdMs) trip = t // the newest trip is the current one
