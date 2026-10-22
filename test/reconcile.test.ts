@@ -20,9 +20,10 @@ async function load() {
   vi.resetModules()
   const { api, ApiError } = await import('../src/lib/api')
   const { setState, getState } = await import('../src/lib/store')
-  const { refreshAll } = await import('../src/lib/sync')
+  const { refreshAll, loadServerState, saveProfile, OwnerUnknown } = await import('../src/lib/sync')
+  const { pendingOps } = await import('../src/lib/outbox')
   vi.mocked(api).mockReset() // the mock may outlive the module reset
-  return { api: vi.mocked(api), ApiError, setState, getState, refreshAll }
+  return { api: vi.mocked(api), ApiError, setState, getState, refreshAll, loadServerState, saveProfile, OwnerUnknown, pendingOps }
 }
 const respond = (api: ReturnType<typeof vi.mocked<typeof import('../src/lib/api').api>>, state: unknown, importResult: () => unknown) =>
   api.mockImplementation((async (path: string) => (path === '/state' ? state : importResult())) as never)
@@ -180,6 +181,43 @@ describe('reconcileLocal', () => {
     respond(t.api, empty, () => {
       throw new Error('down')
     })
+    await t.refreshAll()
+    const { getSyncStatus } = await import('../src/lib/syncStatus')
+    expect(getSyncStatus().state).toBe('offline')
+  })
+
+  it('different_user_with_failing_first_state_fetch_gets_a_clean_device_and_no_upload', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: 'A' })
+    who.sub = 'B'
+    t.api.mockRejectedValue(new Error('offline'))
+    await t.loadServerState().catch(() => undefined)
+    expect(t.getState()).toMatchObject({ homeCity: null, bird: null, trip: null, stories: [], stamps: [], ownerSub: 'B' })
+    t.saveProfile() // whatever B does next carries none of A's data
+    await Promise.resolve()
+    expect(t.api.mock.calls.some((c) => c[0] === '/import')).toBe(false)
+    expect(JSON.stringify(t.api.mock.calls)).not.toContain('Zagreb')
+    expect(JSON.stringify(t.api.mock.calls)).not.toContain('stork')
+  })
+
+  it('unknown_sub_blocks_local_writes_when_cognito_configured', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: 'A' })
+    who.sub = null // token expired and the refresh needs the network
+    await expect(t.loadServerState()).rejects.toBeInstanceOf(t.OwnerUnknown)
+    t.saveProfile()
+    expect(t.pendingOps()).toBe(0)
+    expect(t.api).not.toHaveBeenCalled()
+    expect(t.getState().stories).toEqual([story]) // untouched, just not used
+  })
+
+  it('later_polls_do_not_mark_synced_while_local_data_is_unuploaded', async () => {
+    const t = await load()
+    t.setState(local)
+    respond(t.api, empty, () => {
+      throw new Error('down')
+    })
+    await t.refreshAll()
     await t.refreshAll()
     const { getSyncStatus } = await import('../src/lib/syncStatus')
     expect(getSyncStatus().state).toBe('offline')

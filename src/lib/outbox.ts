@@ -1,5 +1,6 @@
 import { api, ApiError } from './api'
 import { COGNITO_CONFIGURED, currentSub, getUserSub } from './auth'
+import { getState } from './store'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 
 /** `touches` names the entities the write changes (see `pendingTouches`); a refresh never overwrites what is pending. */
@@ -31,6 +32,9 @@ function save(next: Queued[]) {
 
 /** Queues a write for the signed-in user; an op with the same id replaces the queued one (each op is a full PUT-style write). */
 export function enqueue(op: Op): void {
+  // Local data owned by another account (or by an unconfirmed one) is never queued for the current user's token.
+  const owner = getState().ownerSub
+  if (COGNITO_CONFIGURED && owner !== null && owner !== (currentSub() ?? null)) return void console.warn('outbox: write refused, local data belongs to another account')
   note(op.touches)
   save([...q().filter((o) => o.id !== op.id), { ...op, owner: currentSub() ?? undefined }])
   if (getSyncStatus().state !== 'synced') setSyncStatus({ pending: pendingOps() })

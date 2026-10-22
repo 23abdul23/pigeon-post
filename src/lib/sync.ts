@@ -9,6 +9,36 @@ import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
 
+/** The signed-in user cannot be determined while this device holds another account's data: nothing local may be shown or sent. */
+export class OwnerUnknown extends Error {
+  constructor() {
+    super('Could not confirm who is signed in')
+  }
+}
+
+/**
+ * Binds this device's local data to the signed-in user BEFORE anything is fetched, sent or shown (a different account gets a
+ * clean device). Returns whether the local data is this user's. Fails closed: with data owned by someone and the user unknown
+ * (token expired and offline), throws OwnerUnknown.
+ */
+async function claimUser(): Promise<boolean> {
+  let sub: string | null = null
+  try {
+    sub = (await getUserSub()) ?? null
+  } catch {
+    // unknown
+  }
+  if (sub) return claimLocalData(sub)
+  if (getState().ownerSub !== null) {
+    setSyncStatus({ state: 'offline', pending: pendingOps() })
+    throw new OwnerUnknown()
+  }
+  return false
+}
+
+/** Local data that the failed/pending first import left off the server; keeps the chip honest on every later poll of this load. */
+let unuploaded = false
+
 /** True once a `GET /state` of this page load has succeeded; the import runs after the first one only. */
 let firstStateSeen = false
 /** Entity groups a null server profile must not clear while this device's local data has not reached the server. */
@@ -21,6 +51,7 @@ const LOCAL_ONLY = ['profile', 'trip', 'stories', 'stamps', 'sessions']
  */
 async function pull(show: boolean): Promise<void> {
   if (!COGNITO_CONFIGURED) return
+  const mine = await claimUser()
   const before = pendingTouches()
   if (GROUPS.every((g) => before.has(g))) return
   const since = writeSeq()
@@ -33,16 +64,7 @@ async function pull(show: boolean): Promise<void> {
     if (prev !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
     throw e
   }
-  let importBad = false
   try {
-    // Local data belongs to one account: a different user signing in gets a clean device, and neither imports nor holds it.
-    let sub: string | null = null
-    try {
-      sub = (await getUserSub()) ?? null
-    } catch {
-      // signed out: nothing is claimed
-    }
-    const mine = sub ? claimLocalData(sub) : false
     const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
     // A new server account with local data: upload that first (it hydrates from the reply). When the upload fails the null
     // profile must not wipe the local data, so those groups are held until a later load imports successfully.
@@ -50,7 +72,8 @@ async function pull(show: boolean): Promise<void> {
     firstStateSeen = true
     const unsynced = mine && s.profile === null && hasLocalData()
     const imported = first && unsynced && (await reconcileLocal())
-    importBad = first && unsynced && !imported && importFailed()
+    if (s.profile !== null) unuploaded = false
+    else if (first) unuploaded = unsynced && !imported && importFailed()
     if (unsynced && !imported) LOCAL_ONLY.forEach((g) => held.add(g))
     if (!imported) hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
     adoptFlight(s, held)
@@ -59,7 +82,8 @@ async function pull(show: boolean): Promise<void> {
     throw e
   }
   const state = getSyncStatus().state
-  if (pendingOps() || state === 'error' || importBad) setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
+  if (unuploaded && state !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
+  else if (pendingOps() || state === 'error' || unuploaded) setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
   else markSynced()
 }
 
@@ -91,6 +115,7 @@ const pullOnce = (show: boolean) => (pulling ??= pull(show).finally(() => (pulli
 /** Sign-in load: sends queued writes first, then takes every group that has no write still pending. */
 export async function loadServerState(): Promise<void> {
   if (!COGNITO_CONFIGURED) return
+  await claimUser() // before the first flush: queued writes and local data of another account never go out
   await flush()
   await pullOnce(true)
 }
@@ -145,9 +170,20 @@ export function useServerSync(signedIn: boolean): boolean {
   useEffect(() => {
     if (!signedIn) return
     let live = true
-    ;(loading ??= loadServerState()
-      .catch((e) => console.warn('Could not load server state; using local state', e))
-      .finally(() => (loaded = true))).then(() => live && setReady(true))
+    ;(loading ??= loadServerState().then(
+      () => void (loaded = true),
+      (e) => {
+        if (e instanceof OwnerUnknown) {
+          loading = undefined // fail closed: not ready, retried on the next mount
+          throw e
+        }
+        console.warn('Could not load server state; using local state', e)
+        loaded = true
+      },
+    )).then(
+      () => live && setReady(true),
+      () => undefined,
+    )
     return () => {
       live = false
     }
