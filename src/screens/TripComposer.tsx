@@ -8,7 +8,7 @@ import { birdBySpecies } from '../lib/birds'
 import { startSession } from '../lib/flight'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { avatarColor, initials, writeLetter } from '../lib/social'
-import { getState, setState, useStore, type Letter, type Place } from '../lib/store'
+import { getState, useStore, type Letter, type Place } from '../lib/store'
 import { createTrip } from '../lib/trips'
 
 const MAX_CHARS = 600
@@ -119,12 +119,10 @@ export default function TripComposer() {
       setError(mode === 'friend' ? 'Choose a friend to fly to.' : 'Pick a place to fly to first.')
       return
     }
-    const trip = createTrip(dest, { friendId: friend?.id })
-    if (friend && withLetter && (text.trim() || files.length)) {
-      const l = writeLetter({ toId: friend.id, text: text.trim(), attachments: files, status: 'CARRIED' })
-      setState({ trip: { ...getState().trip!, letterIds: [l.id] } })
-    }
-    startSession(getState().trip ?? trip, 25)
+    // the letter first, so the trip (and POST /trips) carries its id
+    const letter = friend && withLetter && (text.trim() || files.length) ? writeLetter({ toId: friend.id, text: text.trim(), attachments: files, status: 'CARRIED' }) : null
+    const trip = createTrip(dest, { friendId: friend?.id, letterIds: letter ? [letter.id] : [] })
+    startSession(trip, 25)
     nav(`/fly/${trip.id}`)
   }
 

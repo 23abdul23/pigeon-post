@@ -3,7 +3,8 @@ import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
 import { startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
-import { getState, setState, useStore } from '../lib/store'
+import { setState, useStore } from '../lib/store'
+import { toggleStorySaved } from '../lib/stories'
 
 const ROMAN: [number, string][] = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]
 export const roman = (n: number) => {
@@ -70,9 +71,7 @@ export default function Landing() {
     nav('/mailbox')
   }
 
-  function toggleSave() {
-    setState({ stories: getState().stories.map((s) => (s.id === story.id ? { ...s, saved: !s.saved } : s)) })
-  }
+  const toggleSave = () => toggleStorySaved(story.id)
 
   return (
     <Frame>

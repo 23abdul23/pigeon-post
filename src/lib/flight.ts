@@ -1,7 +1,8 @@
 import { KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
+import { send } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
-import { getState, setState, type ActiveSession, type Landing, type Trip } from './store'
+import { getState, setState, type ActiveSession, type Landing, type SessionResult, type Trip } from './store'
 
 export type Progress = { km: number; remainingMs: number; elapsedMs: number; done: boolean; arrived: boolean }
 
@@ -26,8 +27,20 @@ export function startReturn(durationMin = 25): Trip | null {
   if (!t) return null
   const back: Trip = { ...t, route: [...t.route].reverse(), progressKm: 0, status: 'RETURNING' }
   setState({ trip: back })
+  void send({ id: `return:${t.id}`, method: 'POST', path: `/trips/${t.id}/return` })
   startSession(back, durationMin)
   return back
+}
+
+/** The server's word on a landed session (the local result stays if the call failed and was queued). */
+function adoptSession(r: SessionResult, sent: Trip) {
+  const stamp = r.stamp
+  setState((st) => ({
+    // the server keeps no route, so keep ours; and leave the trip alone if it moved on meanwhile (e.g. already flying home)
+    trip: st.trip === sent ? { ...sent, ...r.trip, route: sent.route } : st.trip,
+    stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, saved: x.saved } : x)),
+    stamps: !stamp ? st.stamps : st.stamps.some((x) => x.cc === stamp.cc) ? st.stamps.map((x) => (x.cc === stamp.cc ? stamp : x)) : [...st.stamps, stamp],
+  }))
 }
 
 let landing: Promise<Landing | null> | null = null
@@ -49,6 +62,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const spot = pointAtKm(trip.route, p.km).pt
     const story = await buildStory(spot[0], spot[1], p.km)
     const id = crypto.randomUUID()
+    const sessionId = crypto.randomUUID()
     const cur = getState()
     const stampKnown = cur.stamps.some((x) => x.cc === story.cc)
     const arrived = p.arrived
@@ -85,11 +99,13 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
       session: null,
       landing: result,
       stories: [{ ...story, id, dateMs: now, saved: false }, ...cur.stories],
-      sessions: [{ id: crypto.randomUUID(), tripId: trip.id, startMs: s.startMs, endMs, km: p.km - s.baseKm, reason }, ...cur.sessions],
+      sessions: [{ id: sessionId, tripId: trip.id, startMs: s.startMs, endMs, km: p.km - s.baseKm, reason }, ...cur.sessions],
       stamps: stampKnown
         ? cur.stamps.map((x) => (x.cc === story.cc ? { ...x, visits: x.visits + 1 } : x))
         : [...cur.stamps, { cc: story.cc, country: story.country, firstMs: now, visits: 1 }],
     })
+    const body = { id: sessionId, startMs: s.startMs, endMs, reason, kmGained: p.km - s.baseKm, story: { ...story, id } }
+    void send<SessionResult>({ id: `session:${sessionId}`, method: 'POST', path: `/trips/${trip.id}/sessions`, body }).then((r) => r && adoptSession(r, nextTrip))
     return result
   })().finally(() => {
     landing = null

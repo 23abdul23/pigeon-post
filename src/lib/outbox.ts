@@ -1,5 +1,5 @@
 import { api, ApiError } from './api'
-import { currentSub, getUserSub } from './auth'
+import { COGNITO_CONFIGURED, currentSub, getUserSub } from './auth'
 
 export type Op = { id: string; method: string; path: string; body?: unknown }
 type Queued = Op & { owner?: string }
@@ -52,7 +52,7 @@ export function flush(): Promise<void> {
 async function run() {
   clearTimeout(timer)
   // Never send one user's queued writes with another user's token (e.g. A's session lapsed, B signed in).
-  const sub = await getUserSub()
+  const sub = await getUserSub().catch(() => null)
   if (sub) save(q().filter((o) => o.owner === sub))
   while (q().length) {
     const op = q()[0]
@@ -68,4 +68,30 @@ async function run() {
     attempt = 0
     save(q().filter((o) => o !== op)) // by identity: a newer op with the same id, queued meanwhile, stays
   }
+}
+
+let chain: Promise<unknown> = Promise.resolve()
+
+/**
+ * Sends a write now and returns the server's reply, or null when it was queued instead (offline, error, or older
+ * writes still queued, which must go first). Calls run one at a time so writes reach the server in the order made.
+ * Without Cognito (offline dev) nothing is sent.
+ */
+export function send<T>(op: Op): Promise<T | null> {
+  if (!COGNITO_CONFIGURED) return Promise.resolve(null)
+  const p = chain.then(async () => {
+    if (!q().length) {
+      try {
+        return await api<T>(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
+      } catch (e) {
+        console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
+        if (permanent(e)) return null
+      }
+    }
+    enqueue(op)
+    void flush()
+    return null
+  })
+  chain = p.catch(() => null)
+  return p
 }

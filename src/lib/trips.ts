@@ -1,6 +1,7 @@
 import { greatCircle, haversineKm, routeLengthKm, type Pt } from './geo'
 import { landRoute } from './landRoute'
-import { getState, setState, type Place, type Trip } from './store'
+import { send } from './outbox'
+import { getState, setState, type City, type Place, type Trip } from './store'
 
 /** Route from home to dest as [lat, lng] points, following land where it can (see landRoute.ts). Short hops stay a straight line. */
 export function planRoute(from: Pt, to: Pt): Pt[] {
@@ -23,5 +24,15 @@ export function createTrip(dest: Place, opts: { friendId?: string; letterIds?: s
     letterIds: opts.letterIds ?? [],
   }
   setState({ trip, landing: null })
+  void send({ id: `trip:${trip.id}`, method: 'POST', path: '/trips', body: { id: trip.id, dest, routeKm: trip.routeKm, friendId: trip.friendId, letterIds: trip.letterIds } })
   return trip
+}
+
+/** The server keeps no route: reuse ours when it is the same leg of the same trip, else plan it again (reversed when flying home). */
+export function withRoute(t: Omit<Trip, 'route'>, home: City | null | undefined): Trip | null {
+  const local = getState().trip
+  if (local?.id === t.id && (local.status === 'RETURNING') === (t.status === 'RETURNING')) return { ...t, route: local.route }
+  if (!home) return null
+  const route = planRoute([home.lat, home.lng], [t.dest.lat, t.dest.lng])
+  return { ...t, route: t.status === 'RETURNING' ? route.reverse() : route }
 }

@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
 import { playCoo } from '../lib/sound'
-import { getState, setState, useStore, type Story } from '../lib/store'
+import { useStore, type Story } from '../lib/store'
+import { toggleStorySaved } from '../lib/stories'
 
 const LENSES: Story['lens'][] = ['Hidden spot', 'Nature', 'Food', 'Legend', 'History']
 const TAPES = [
@@ -41,9 +42,6 @@ export default function Journal() {
     setParams(next, { replace: true })
   }
 
-  function toggleSave(id: string) {
-    setState({ stories: getState().stories.map((s) => (s.id === id ? { ...s, saved: !s.saved } : s)) })
-  }
 
   return (
     <AppLayout>
@@ -174,7 +172,7 @@ export default function Journal() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => toggleSave(s.id)}
+                      onClick={() => toggleStorySaved(s.id)}
                       aria-pressed={s.saved}
                       aria-label={s.saved ? 'Remove from keepsakes' : 'Save to keepsakes'}
                       className={`flex size-8 items-center justify-center rounded-full ${s.saved ? 'bg-[rgba(255,181,151,0.4)]' : ''}`}

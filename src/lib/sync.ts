@@ -3,13 +3,15 @@ import { api } from './api'
 import { COGNITO_CONFIGURED } from './auth'
 import { enqueue, flush, pendingOps } from './outbox'
 import { getState, hydrate, type Profile, type ServerState } from './store'
+import { withRoute } from './trips'
 
 /** Pulls `GET /state` into the store. No-op without Cognito (offline dev keeps its local state). */
 export async function loadServerState(): Promise<void> {
   if (!COGNITO_CONFIGURED) return
   await flush()
   if (pendingOps()) return // unsent local edits win until they reach the server
-  hydrate(await api<ServerState>('/state'))
+  const s = await api<ServerState>('/state')
+  hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity) })
 }
 
 /** Saves the local profile with `PUT /me` through the outbox (retried if offline). */

@@ -5,7 +5,8 @@ import MiniMap from '../components/MiniMap'
 import { fmtKm } from '../lib/geo'
 import { dms } from './Landing'
 import { playCoo } from '../lib/sound'
-import { getState, setState, useStore } from '../lib/store'
+import { useStore } from '../lib/store'
+import { toggleStorySaved } from '../lib/stories'
 
 const BIRD_ICONS = [
   { icon: '/assets/sd-b1.svg', bg: 'bg-sky', w: 'h-[15px] w-[13.5px]', tag: 'Canopy' },
@@ -34,9 +35,7 @@ export default function JournalDetail() {
     return acc
   }, [])
 
-  function toggleSave() {
-    setState({ stories: getState().stories.map((s) => (s.id === story.id ? { ...s, saved: !s.saved } : s)) })
-  }
+  const toggleSave = () => toggleStorySaved(story.id)
 
   async function dispatch() {
     const text = `${story.place}, ${story.country}: ${story.text}`

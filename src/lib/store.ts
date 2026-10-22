@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
-import type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState } from './types'
+import type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult } from './types'
 
-export type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState }
+export type { City, Bird, Place, Trip, Story, Letter, Friend, Stamp, SessionLog, Settings, Profile, ServerProfile, ServerState, SessionResult }
 
 export type ActiveSession = {
   tripId: string
@@ -104,10 +104,14 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l())
 }
 
-/** Applies `GET /state`. Only the profile is server-owned so far; trips, stories, letters etc. stay local until their tasks move them. */
-export function hydrate(s: ServerState): void {
+/** Applies `GET /state` (its trip with the route recomputed). Letters and friends stay local until their tasks move them. */
+export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): void {
   const p = s.profile
   setState((st) => ({
+    trip: s.trip,
+    stories: s.stories,
+    stamps: s.stamps,
+    sessions: s.sessions,
     homeCity: p?.homeCity ?? null,
     bird: p?.bird ?? null,
     settings: { ...defaultSettings, ...p?.settings },

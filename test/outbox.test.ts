@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
-vi.mock('../src/lib/auth', () => ({ currentSub: vi.fn(), getUserSub: vi.fn() }))
+vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: vi.fn() }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
 import { api, ApiError } from '../src/lib/api'
 import { currentSub, getUserSub } from '../src/lib/auth'
-import { enqueue, flush } from '../src/lib/outbox'
+import { enqueue, flush, send } from '../src/lib/outbox'
 
 const apiMock = vi.mocked(api)
 const sent = () => apiMock.mock.calls.map(([path]) => path)
@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   apiMock.mockReset()
   vi.mocked(currentSub).mockReset()
-  vi.mocked(getUserSub).mockReset()
+  vi.mocked(getUserSub).mockReset().mockResolvedValue(null) // async like the real one
 })
 afterEach(async () => {
   apiMock.mockResolvedValue(undefined)
@@ -78,5 +78,34 @@ describe('outbox', () => {
     enqueue({ id: 'me', method: 'PUT', path: '/me', body: { name: 'B' } })
     await flush()
     expect(sent()).toEqual(['/me']) // the owner's own ops still go out
+  })
+
+  it('outbox_flush_survives_a_failing_getUserSub', async () => {
+    vi.mocked(getUserSub).mockRejectedValue(new Error('storage broken'))
+    apiMock.mockResolvedValue(undefined)
+    enqueue({ id: 'a', method: 'PUT', path: '/a' })
+    await expect(flush()).resolves.toBeUndefined()
+    expect(sent()).toEqual(['/a'])
+  })
+
+  it('send_returns_reply_or_queues_and_keeps_order', async () => {
+    apiMock.mockResolvedValueOnce({ ok: 1 })
+    expect(await send({ id: 'trip:t', method: 'POST', path: '/trips' })).toEqual({ ok: 1 })
+    expect(queued()).toEqual([])
+
+    apiMock.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    expect(await send({ id: 'session:s', method: 'POST', path: '/trips/t/sessions' })).toBeNull()
+    expect(queued()).toEqual(['session:s'])
+    // something is still queued: a later write waits behind it instead of overtaking
+    expect(await send({ id: 'return:t', method: 'POST', path: '/trips/t/return' })).toBeNull()
+    expect(queued()).toEqual(['session:s', 'return:t'])
+    apiMock.mockResolvedValue(undefined)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(sent().slice(-2)).toEqual(['/trips/t/sessions', '/trips/t/return'])
+    expect(queued()).toEqual([])
+
+    apiMock.mockRejectedValueOnce(new ApiError(404))
+    expect(await send({ id: 'story-save:x', method: 'PUT', path: '/stories/x' })).toBeNull()
+    expect(queued()).toEqual([]) // the server will never accept it: not queued
   })
 })

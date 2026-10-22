@@ -1,5 +1,6 @@
 import { nearestCity } from './places'
-import type { Story } from './store'
+import { send } from './outbox'
+import { getState, setState, type Story } from './store'
 
 type Lens = Story['lens']
 
@@ -83,4 +84,12 @@ export async function buildStory(lat: number, lng: number, km: number): Promise<
     lat,
     lng,
   }
+}
+
+/** Toggles a story's keepsake flag locally and on the server (`PUT /stories/{id}`). */
+export function toggleStorySaved(id: string): void {
+  const story = getState().stories.find((s) => s.id === id)
+  if (!story) return
+  setState({ stories: getState().stories.map((s) => (s.id === id ? { ...s, saved: !s.saved } : s)) })
+  void send({ id: `story-save:${id}`, method: 'PUT', path: `/stories/${id}`, body: { saved: !story.saved } })
 }
