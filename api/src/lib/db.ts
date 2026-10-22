@@ -11,9 +11,9 @@ export function clean<T>(item: Record<string, unknown>): T {
   return rest as T
 }
 
-/** The profile as the API returns it: the stored sign-in email (letter alerts only) never leaves the server. */
+/** The profile as the API returns it: the stored sign-in email (letter alerts only) and the import marker never leave the server. */
 export const profileOut = (item: Record<string, unknown>): ServerProfile => {
-  const { email: _e, ...p } = clean<ServerProfile & { email?: string }>(item)
+  const { email: _e, importedAt: _i, ...p } = clean<ServerProfile & { email?: string; importedAt?: number }>(item)
   return p
 }
 

@@ -10,7 +10,7 @@ async function getTrip(sub: string, tripId: string): Promise<StoredTrip | undefi
   return r.Item && clean<StoredTrip>(r.Item)
 }
 
-function parsePlace(v: unknown): Place {
+export function parsePlace(v: unknown): Place {
   if (!isObj(v)) return bad('invalid dest')
   return {
     id: str(v.id, 200, 'dest.id'),

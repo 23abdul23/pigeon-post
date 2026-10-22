@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Pigeon Post - static site (S3 + CloudFront) and serverless API
+Description: Fost - static site (S3 + CloudFront) and serverless API
 
 Parameters:
   GoogleClientId:
@@ -369,6 +369,46 @@ Resources:
             ApiId: !Ref HttpApi
             Method: PUT
             Path: /me
+
+  ImportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-import'
+      RetentionInDays: 14
+
+  ImportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/import.ts]
+    Properties:
+      CodeUri: api/
+      Handler: import.handler
+      Timeout: 15 # up to ~1000 conditional puts, ten at a time
+      LoggingConfig:
+        LogGroup: !Ref ImportLogGroup
+      Policies:
+        - Statement:
+            # profile read/create (same as PUT /me), conditional puts of trip/stories/stamps/sessions, the state read, importedAt
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+              Resource: !GetAtt PigeonPost.Arn
+            - Effect: Allow
+              Action: [dynamodb:Query] # invite-code collision check
+              Resource: !Sub '${PigeonPost.Arn}/index/GSI1'
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /import
 
   CreateTripLogGroup:
     Type: AWS::Logs::LogGroup

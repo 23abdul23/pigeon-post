@@ -5,7 +5,7 @@ import { json, route } from '../lib/http'
 import { flightSk, PROFILE_SK, userPk } from '../lib/keys'
 import { letterOut, type LetterRow } from '../lib/letters'
 
-export const handler = route(async (sub) => {
+export async function buildState(sub: string): Promise<ServerState> {
   const s: ServerState = { profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [], flight: null, serverTime: Date.now() }
   let trip: StoredTrip | undefined
   let ExclusiveStartKey: Record<string, unknown> | undefined
@@ -38,5 +38,7 @@ export const handler = route(async (sub) => {
   s.sessions.sort((a, b) => b.endMs - a.endMs)
   s.stamps.sort((a, b) => a.firstMs - b.firstMs)
   s.letters.sort((a, b) => b.dateMs - a.dateMs)
-  return json(200, s)
-})
+  return s
+}
+
+export const handler = route(async (sub) => json(200, await buildState(sub)))

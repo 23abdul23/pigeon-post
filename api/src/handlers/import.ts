@@ -1,0 +1,132 @@
+import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import type { City, SessionLog, Stamp, Story, Trip } from '../../../src/lib/types'
+import { ddb, isConditionFail, tableName, type StoredTrip } from '../lib/db'
+import { bad, cc, fail, id, isObj, json, num, parseBody, route, str } from '../lib/http'
+import { PROFILE_SK, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
+import { queryAll } from '../lib/letters'
+import { parseProfileFields, saveProfile } from './me'
+import { REASONS, parseStory } from './sessions'
+import { buildState } from './state'
+import { parsePlace } from './trips'
+
+const MAX_BODY = 256 * 1024
+const MAX_STORIES = 200
+const MAX_STAMPS = 300
+const MAX_SESSIONS = 500
+const CONCURRENCY = 10
+const STATUSES: readonly unknown[] = ['OUTBOUND', 'DELIVERED', 'RETURNING', 'PAUSED', 'DONE'] satisfies Trip['status'][]
+
+const list = (v: unknown, max: number, what: string): unknown[] => {
+  if (v === undefined) return []
+  return Array.isArray(v) && v.length <= max ? v : bad(`invalid ${what} (at most ${max})`)
+}
+
+function parseImportedStory(v: unknown): Story {
+  const s = parseStory(v) // same validators as the session endpoint (coordinates rounded)
+  const o = v as Record<string, unknown>
+  if (typeof o.saved !== 'boolean') bad('invalid story.saved')
+  return { ...s, dateMs: num(o.dateMs, 0, 1e14, 'story.dateMs'), saved: o.saved as boolean, km: num(o.km, 0, 1e6, 'story.km') }
+}
+
+function parseStamp(v: unknown): Stamp {
+  if (!isObj(v)) return bad('invalid stamp')
+  return { cc: cc(v.cc, 'stamp.cc'), country: str(v.country, 100, 'stamp.country'), firstMs: num(v.firstMs, 0, 1e14, 'stamp.firstMs'), visits: Math.round(num(v.visits, 1, 1e6, 'stamp.visits')) }
+}
+
+function parseSession(v: unknown): SessionLog {
+  if (!isObj(v)) return bad('invalid session')
+  if (!REASONS.includes(v.reason)) bad('invalid session.reason')
+  return {
+    id: id(v.id, 'session.id'),
+    tripId: id(v.tripId, 'session.tripId'),
+    startMs: num(v.startMs, 0, 1e14, 'session.startMs'),
+    endMs: num(v.endMs, 0, 1e14, 'session.endMs'),
+    km: num(v.km, 0, 1e6, 'session.km'),
+    reason: v.reason as SessionLog['reason'],
+  }
+}
+
+/** The trip without `route`/`origin` (the server stores the home city as origin; the client recomputes the route). friendId and letterIds are not imported: local friends and letters do not exist on the server. */
+function parseTrip(v: unknown): Omit<StoredTrip, 'origin' | 'createdMs'> {
+  if (!isObj(v)) return bad('invalid trip')
+  if (!STATUSES.includes(v.status)) bad('invalid trip.status')
+  const routeKm = num(v.routeKm, 1, 50000, 'trip.routeKm')
+  return {
+    id: id(v.id, 'trip.id'),
+    dest: parsePlace(v.dest),
+    routeKm,
+    progressKm: num(v.progressKm, 0, routeKm, 'trip.progressKm'),
+    status: v.status as Trip['status'],
+    legs: Math.round(num(v.legs, 0, 1e5, 'trip.legs')),
+    letterIds: [],
+  }
+}
+
+/**
+ * Writes each item with `attribute_not_exists(PK)`, ten at a time. An item that is already there (a re-run after a partial
+ * failure, or the server's own copy) is skipped, never overwritten. Individual PutItems rather than BatchWriteItem, which cannot be conditional.
+ */
+async function putNew(items: Record<string, unknown>[]): Promise<void> {
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    await Promise.all(
+      items.slice(i, i + CONCURRENCY).map(async (Item) => {
+        try {
+          await ddb.send(new PutCommand({ TableName: tableName(), Item, ConditionExpression: 'attribute_not_exists(PK)' }))
+        } catch (e) {
+          if (!isConditionFail(e)) throw e
+        }
+      }),
+    )
+  }
+}
+
+/**
+ * POST /import: uploads what this device stored locally before the account had any server data. Nothing on the server is
+ * overwritten and every write is conditional, so it can be re-run after a crash; `importedAt` on the profile is set last and,
+ * once set, later imports are refused with 409.
+ */
+export const handler = route(async (sub, event) => {
+  if ((event.body?.length ?? 0) > MAX_BODY) return fail(413, 'import too large')
+  const b = parseBody(event.body)
+  const fields = b.profile === undefined ? {} : isObj(b.profile) ? parseProfileFields(b.profile) : bad('invalid profile')
+  const stories = list(b.stories, MAX_STORIES, 'stories').map(parseImportedStory)
+  const stamps = list(b.stamps, MAX_STAMPS, 'stamps').map(parseStamp)
+  const sessions = list(b.sessions, MAX_SESSIONS, 'sessions').map(parseSession)
+  const trip = b.trip === undefined || b.trip === null ? undefined : parseTrip(b.trip)
+
+  const PK = userPk(sub)
+  const existing = (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK, SK: PROFILE_SK }, ConsistentRead: true }))).Item
+  if (existing?.importedAt) return fail(409, 'already imported')
+
+  // the server's own profile fields win; the import only fills what is missing
+  for (const k of Object.keys(fields)) if (existing?.[k] !== undefined) delete fields[k]
+  const origin = (existing?.homeCity ?? fields.homeCity) as City | undefined
+  if (trip && !origin) bad('a trip needs a home city')
+
+  await saveProfile(sub, event.requestContext.authorizer.jwt.claims.email, fields) // creates the profile (and its invite code) if needed
+  // an existing server trip (of any id) means the imported one is dropped
+  if (trip && !(await queryAll<{ SK: string }>(PK, 'TRIP#')).some((t) => t.SK !== tripSk(trip.id))) {
+    await putNew([{ PK, SK: tripSk(trip.id), ...trip, origin, createdMs: Date.now() }])
+  }
+  await putNew([
+    ...stories.map((s) => ({ PK, SK: storySk(s.id), ...s })),
+    ...stamps.map((s) => ({ PK, SK: stampSk(s.cc), ...s })),
+    ...sessions.map((s) => ({ PK, SK: sessionSk(s.id), ...s })),
+  ])
+
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: tableName(),
+        Key: { PK, SK: PROFILE_SK },
+        UpdateExpression: 'SET importedAt = :now',
+        ConditionExpression: 'attribute_not_exists(importedAt)',
+        ExpressionAttributeValues: { ':now': Date.now() },
+      }),
+    )
+  } catch (e) {
+    if (isConditionFail(e)) return fail(409, 'already imported') // a concurrent import finished first
+    throw e
+  }
+  return json(200, await buildState(sub))
+})

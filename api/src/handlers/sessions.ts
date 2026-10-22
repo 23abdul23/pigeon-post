@@ -41,10 +41,10 @@ async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Lett
   }
 }
 
-const REASONS: readonly unknown[] = ['completed', 'left', 'ended'] satisfies SessionLog['reason'][]
+export const REASONS: readonly unknown[] = ['completed', 'left', 'ended'] satisfies SessionLog['reason'][]
 const LENSES: readonly unknown[] = ['Legend', 'Food', 'Hidden spot', 'Nature', 'History'] satisfies Story['lens'][]
 
-function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
+export function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
   if (!isObj(v)) return bad('invalid story')
   const birds = v.birds ?? []
   if (!Array.isArray(birds) || birds.length > 10) bad('invalid story.birds')

@@ -49,9 +49,8 @@ const FIELDS = {
   },
 }
 
-/** Validates a (partial) Profile body; fields left out keep their stored value. */
-function parse(body: string | undefined): Record<string, unknown> {
-  const v = parseBody(body)
+/** Validates a (partial) Profile object; fields left out keep their stored value. */
+export function parseProfileFields(v: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, val] of Object.entries(v)) {
     if (!Object.hasOwn(FIELDS, k)) bad(`unknown field ${k}`)
@@ -60,8 +59,11 @@ function parse(body: string | undefined): Record<string, unknown> {
   return out
 }
 
-export const handler = route(async (sub, event) => {
-  const fields = parse(event.body)
+/**
+ * Creates or updates the caller's profile with already-validated `fields`, allocating the invite code on first write.
+ * Shared by PUT /me and POST /import. Returns the stored item (ALL_NEW).
+ */
+export async function saveProfile(sub: string, email: unknown, fields: Record<string, unknown>): Promise<Record<string, unknown>> {
 
   // Best-effort uniqueness: regenerate while another user already holds the code. Not atomic (GSIs cannot enforce
   // uniqueness), but 34^8 codes make a race negligible; POST /friends/request refuses an ambiguous code anyway.
@@ -77,7 +79,6 @@ export const handler = route(async (sub, event) => {
   // if_not_exists is an atomic conditional write: concurrent first PUTs agree on one code and later PUTs keep it.
   const sets = ['inviteCode = if_not_exists(inviteCode, :code)', 'GSI1PK = if_not_exists(GSI1PK, :gsi1pk)', 'GSI1SK = :gsi1sk']
   // the sign-in email, kept on the profile only for letter alerts (friend and letter rows copy whitelisted fields, never this)
-  const email = event.requestContext.authorizer.jwt.claims.email
   if (typeof email === 'string' && email.length <= 254) {
     values[':email'] = email
     sets.push('email = :email')
@@ -98,5 +99,9 @@ export const handler = route(async (sub, event) => {
       ReturnValues: 'ALL_NEW',
     }),
   )
-  return json(200, profileOut(res.Attributes ?? {}))
-})
+  return res.Attributes ?? {}
+}
+
+export const handler = route(async (sub, event) =>
+  json(200, profileOut(await saveProfile(sub, event.requestContext.authorizer.jwt.claims.email, parseProfileFields(parseBody(event.body))))),
+)
