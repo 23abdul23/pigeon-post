@@ -75,6 +75,20 @@ describe('PUT /me', () => {
     expect((await call(me, ev({ settings: { volume: 40, channel: 'browser' } }))).status).toBe(200)
   })
 
+  it('put_me_regenerates_an_invite_code_that_is_taken_and_503s_if_it_keeps_colliding', async () => {
+    ddb.on(QueryCommand).resolvesOnce({ Items: [{ GSI1PK: 'x' }] }).resolves({ Items: [] })
+    await call(me, ev({ name: 'Ana' }))
+    expect(ddb.commandCalls(QueryCommand)).toHaveLength(2) // first code taken, second free
+    const [first, second] = ddb.commandCalls(QueryCommand).map((c) => c.args[0].input.ExpressionAttributeValues![':pk'])
+    expect(second).not.toBe(first)
+    expect(updates()[0].ExpressionAttributeValues![':gsi1pk']).toBe(second)
+
+    ddb.reset()
+    ddb.on(QueryCommand).resolves({ Items: [{ GSI1PK: 'x' }] })
+    expect((await call(me, ev({ name: 'Ana' }))).status).toBe(503)
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0)
+  })
+
   it('put_me_creates_invite_code_once_and_keeps_it', async () => {
     const first = await call(me, ev({ name: 'Ana' }))
     const u = updates()[0]

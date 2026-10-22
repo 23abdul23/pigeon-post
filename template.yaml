@@ -269,6 +269,9 @@ Resources:
             - Effect: Allow
               Action: [dynamodb:UpdateItem]
               Resource: !GetAtt PigeonPost.Arn
+            - Effect: Allow
+              Action: [dynamodb:Query] # invite-code collision check
+              Resource: !Sub '${PigeonPost.Arn}/index/GSI1'
       Events:
         Route:
           Type: HttpApi
@@ -413,6 +416,50 @@ Resources:
             ApiId: !Ref HttpApi
             Method: PUT
             Path: /stories/{id}
+
+  FriendsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-friends'
+      RetentionInDays: 14
+
+  # One function for the four friend routes; they share the same permissions (TransactWriteItems needs the per-item actions).
+  FriendsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/friends.ts]
+    Properties:
+      CodeUri: api/
+      Handler: friends.handler
+      LoggingConfig:
+        LogGroup: !Ref FriendsLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem]
+              Resource: !GetAtt PigeonPost.Arn
+            - Effect: Allow
+              Action: [dynamodb:Query]
+              Resource: !Sub '${PigeonPost.Arn}/index/GSI1'
+      Events:
+        Request:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: /friends/request }
+        Accept:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: '/friends/{id}/accept' }
+        Decline:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: '/friends/{id}/decline' }
+        Remove:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: '/friends/{id}' }
 
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm

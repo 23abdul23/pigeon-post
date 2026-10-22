@@ -5,3 +5,4 @@ export const tripSk = (id: string) => `TRIP#${id}`
 export const sessionSk = (id: string) => `SESSION#${id}`
 export const storySk = (id: string) => `STORY#${id}`
 export const stampSk = (cc: string) => `STAMP#${cc}`
+export const friendSk = (otherSub: string) => `FRIEND#${otherSub}`

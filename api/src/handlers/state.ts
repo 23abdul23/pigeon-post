@@ -1,5 +1,5 @@
 import { QueryCommand } from '@aws-sdk/lib-dynamodb'
-import type { ServerProfile, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
+import type { Friend, ServerProfile, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
 import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { json, route } from '../lib/http'
 import { PROFILE_SK, userPk } from '../lib/keys'
@@ -14,7 +14,7 @@ export const handler = route(async (sub) => {
     )
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)
-      // Later tasks dispatch their SK prefixes here (FRIEND#, LETTER#, SENT#).
+      // Later tasks dispatch their SK prefixes here (LETTER#, SENT#).
       if (sk === PROFILE_SK) s.profile = clean<ServerProfile>(item)
       else if (sk.startsWith('TRIP#')) {
         const t = clean<StoredTrip>(item)
@@ -24,6 +24,7 @@ export const handler = route(async (sub) => {
         s.sessions.push(log)
       } else if (sk.startsWith('STORY#')) s.stories.push(clean<Story>(item))
       else if (sk.startsWith('STAMP#')) s.stamps.push(clean<Stamp>(item))
+      else if (sk.startsWith('FRIEND#')) s.friends.push(clean<Friend>(item))
     }
     ExclusiveStartKey = page.LastEvaluatedKey
   } while (ExclusiveStartKey)

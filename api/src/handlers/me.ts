@@ -1,9 +1,9 @@
 import { randomInt } from 'node:crypto'
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { Bird, City, ServerProfile, Settings } from '../../../src/lib/types'
 import { BIRD_IDS, roundCoord } from '../lib/constants'
 import { clean, ddb, tableName } from '../lib/db'
-import { bad, cc, isObj, json, num, parseBody, route, str } from '../lib/http'
+import { bad, cc, fail, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { codePk, PROFILE_SK, userPk } from '../lib/keys'
 
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789'
@@ -63,7 +63,15 @@ function parse(body: string | undefined): Record<string, unknown> {
 export const handler = route(async (sub, event) => {
   const fields = parse(event.body)
 
-  const code = newInviteCode()
+  // Best-effort uniqueness: regenerate while another user already holds the code. Not atomic (GSIs cannot enforce
+  // uniqueness), but 34^8 codes make a race negligible; POST /friends/request refuses an ambiguous code anyway.
+  let code = newInviteCode()
+  for (let i = 0; i < 5; i++) {
+    const taken = await ddb.send(new QueryCommand({ TableName: tableName(), IndexName: 'GSI1', KeyConditionExpression: 'GSI1PK = :pk', ExpressionAttributeValues: { ':pk': codePk(code) }, Limit: 1 }))
+    if (!taken?.Items?.length) break
+    if (i === 4) return fail(503, 'could not allocate an invite code; retry')
+    code = newInviteCode()
+  }
   const names: Record<string, string> = {}
   const values: Record<string, unknown> = { ':code': code, ':gsi1pk': codePk(code), ':gsi1sk': userPk(sub) }
   // if_not_exists is an atomic conditional write: concurrent first PUTs agree on one code and later PUTs keep it.
