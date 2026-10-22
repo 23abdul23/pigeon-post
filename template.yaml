@@ -7,11 +7,14 @@ Parameters:
     Type: String
     Description: Google OAuth client ID (not secret)
   # CloudFormation cannot resolve ssm-secure for Cognito IdP, so the deploy command passes the secret in from SSM, e.g.
-  #   sam deploy --parameter-overrides GoogleClientId=<id> GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon)
+  #   sam deploy --parameter-overrides GoogleClientId=<id> SesSenderEmail=<verified sender> GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon)
   GoogleClientSecret:
     Type: String
     NoEcho: true
     Description: Google OAuth client secret, read from SSM /pigeon/google-client-secret at deploy time
+  SesSenderEmail:
+    Type: String
+    Description: SES-verified sender address for "A letter arrived" emails (Task 0)
 
 Globals:
   Function:
@@ -336,12 +339,19 @@ Resources:
       Handler: sessions.handler
       LoggingConfig:
         LogGroup: !Ref SessionsLogGroup
+      Environment:
+        Variables:
+          SES_SENDER: !Ref SesSenderEmail
       Policies:
         - Statement:
             # Query + UpdateItem: the arrival step reads my letters and moves both copies (mine and my friend's)
             - Effect: Allow
               Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem]
               Resource: !GetAtt PigeonPost.Arn
+            # "A letter arrived" email, from the verified sender only (the recipient's email is read from their profile row)
+            - Effect: Allow
+              Action: [ses:SendEmail]
+              Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}'
       Events:
         Route:
           Type: HttpApi
@@ -563,6 +573,58 @@ Resources:
         Url:
           Type: HttpApi
           Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /uploads/url }
+
+  AccountLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-account'
+      RetentionInDays: 14
+
+  # DELETE /me: my rows, my friends' rows about me, in-flight letter copies, my attachments and my Cognito user.
+  AccountFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/account.ts]
+    Properties:
+      CodeUri: api/
+      Handler: account.handler
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref AccountLogGroup
+      Environment:
+        Variables:
+          LETTERS_BUCKET: !Ref LettersBucket
+          USER_POOL_ID: !Ref UserPool
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:Query, dynamodb:BatchWriteItem, dynamodb:DeleteItem, dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+            - Effect: Allow
+              Action: [s3:ListBucket]
+              Resource: !GetAtt LettersBucket.Arn
+              Condition:
+                StringLike:
+                  s3:prefix: ['letters/*']
+            - Effect: Allow
+              Action: [s3:DeleteObject] # DeleteObjects checks this per key
+              Resource: !Sub '${LettersBucket.Arn}/letters/*'
+            - Effect: Allow
+              Action: [cognito-idp:AdminDeleteUser]
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: DELETE
+            Path: /me
 
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm

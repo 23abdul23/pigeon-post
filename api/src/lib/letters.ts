@@ -35,7 +35,7 @@ export function move(l: LetterRow, from: Letter['status'], to: Letter['status'],
   return [copy(userPk(l.toId), letterSk(l.id)), copy(userPk(l.fromId), sentSk(l.id))]
 }
 
-/** Every row in `pk` whose SK starts with `prefix` (paged, consistent). */
+/** Every row in `pk` whose SK starts with `prefix` (paged, consistent); an empty prefix means the whole partition. */
 export async function queryAll<T>(pk: string, prefix: string): Promise<T[]> {
   const out: T[] = []
   let ExclusiveStartKey: Record<string, unknown> | undefined
@@ -44,8 +44,8 @@ export async function queryAll<T>(pk: string, prefix: string): Promise<T[]> {
       new QueryCommand({
         TableName: tableName(),
         ConsistentRead: true,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        ExpressionAttributeValues: { ':pk': pk, ':sk': prefix },
+        KeyConditionExpression: prefix ? 'PK = :pk AND begins_with(SK, :sk)' : 'PK = :pk',
+        ExpressionAttributeValues: prefix ? { ':pk': pk, ':sk': prefix } : { ':pk': pk },
         ExclusiveStartKey,
       }),
     )

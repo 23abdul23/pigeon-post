@@ -29,7 +29,7 @@ Fill in by hand. IDs, ARNs and names only; never secret values (those go in SSM)
 
 ## Sign-in (Task 2)
 
-- Deploy passes `GoogleClientId` and `GoogleClientSecret` (read from SSM `/pigeon/google-client-secret`); see the comment on the parameters in `template.yaml`.
+- Deploy passes `GoogleClientId`, `GoogleClientSecret` (read from SSM `/pigeon/google-client-secret`) and `SesSenderEmail` (the verified SES sender); see the comment on the parameters in `template.yaml`.
 - Add the stack output `GoogleRedirectUri` (`https://pigeon-post-<account-id>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`) to the Google OAuth client's authorized redirect URIs.
 - `.env.production` holds placeholder `VITE_COGNITO_*` / `VITE_API_URL` values. Replace them with stack outputs `UserPoolId`, `UserPoolClientId`, `CognitoDomain`, `ApiUrl` before building for deploy. They are not secrets.
 - Local dev without `VITE_COGNITO_*` keeps the offline mock sign-in.

@@ -105,6 +105,17 @@ describe('PUT /me', () => {
     expect(second.body).toEqual({ name: 'Ana', inviteCode: 'KEEPME22' })
   })
 
+  it('put_me_keeps_the_sign_in_email_for_letter_alerts', async () => {
+    const e = ev({ settings: { notifyLetter: true } })
+    e.requestContext.authorizer.jwt.claims.email = 'ana@example.com'
+    expect((await call(me, e)).status).toBe(200)
+    expect(updates()[0].UpdateExpression).toContain('email = :email')
+    expect(updates()[0].ExpressionAttributeValues![':email']).toBe('ana@example.com')
+    await call(me, ev({}))
+    expect(updates()[1].UpdateExpression).not.toContain('email') // no claim, nothing written
+    expect(updates()[1].ExpressionAttributeNames).toBeUndefined()
+  })
+
   it('put_me_rejects_bad_json_and_unknown_fields', async () => {
     expect((await call(me, { ...ev(), body: '{nope' } as APIGatewayProxyEventV2WithJWTAuthorizer)).status).toBe(400)
     expect((await call(me, ev({ inviteCode: 'AAAAAAAA' }))).status).toBe(400)

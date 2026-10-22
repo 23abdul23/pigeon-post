@@ -76,6 +76,12 @@ export const handler = route(async (sub, event) => {
   const values: Record<string, unknown> = { ':code': code, ':gsi1pk': codePk(code), ':gsi1sk': userPk(sub) }
   // if_not_exists is an atomic conditional write: concurrent first PUTs agree on one code and later PUTs keep it.
   const sets = ['inviteCode = if_not_exists(inviteCode, :code)', 'GSI1PK = if_not_exists(GSI1PK, :gsi1pk)', 'GSI1SK = :gsi1sk']
+  // the sign-in email, kept on the profile only for letter alerts (friend and letter rows copy whitelisted fields, never this)
+  const email = event.requestContext.authorizer.jwt.claims.email
+  if (typeof email === 'string' && email.length <= 254) {
+    values[':email'] = email
+    sets.push('email = :email')
+  }
   for (const [k, v] of Object.entries(fields)) {
     names[`#${k}`] = k
     values[`:${k}`] = v
@@ -87,7 +93,7 @@ export const handler = route(async (sub, event) => {
       TableName: tableName(),
       Key: { PK: userPk(sub), SK: PROFILE_SK },
       UpdateExpression: `SET ${sets.join(', ')}`,
-      ExpressionAttributeNames: sets.length > 3 ? names : undefined,
+      ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
       ExpressionAttributeValues: values,
       ReturnValues: 'ALL_NEW',
     }),

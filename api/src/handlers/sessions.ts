@@ -6,6 +6,7 @@ import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
 import { letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
+import { notifyLetterArrived } from '../lib/notify'
 
 // A transaction holds at most 100 items: 4 for the session itself, 2 per letter (both copies).
 // ponytail: letters beyond the cap keep their status (a sender's extra CARRIED letters go on the next visit); split into a follow-up step if real mailboxes get that big.
@@ -141,6 +142,9 @@ export const handler = route(async (sub, event) => {
 
     try {
       await ddb.send(new TransactWriteCommand({ TransactItems: items }))
+      // one email per recipient (an arrival hands letters to one person); a replay returned above, so this runs once
+      const to = new Map(result.delivered.map((l) => [l.toId === 'me' ? sub : l.toId, l.fromName]))
+      await Promise.all([...to].map(([toId, fromName]) => notifyLetterArrived(toId, fromName)))
       return json(200, result)
     } catch (e) {
       if ((e as Error)?.name !== 'TransactionCanceledException') throw e
