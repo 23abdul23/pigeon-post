@@ -157,6 +157,7 @@ describe('flight handoff', () => {
     const landing = await landIfStillOwner('left')
     expect(landing).toMatchObject({ reason: 'left', tripId: 't1' })
     await vi.waitFor(() => expect(paths()).toContain('/trips/t1/sessions'))
+    expect(paths()).toContain('/state')
     expect(paths().indexOf('/state')).toBeLessThan(paths().indexOf('/trips/t1/sessions'))
   })
 
@@ -190,5 +191,25 @@ describe('flight handoff', () => {
     expect(bodyOf(flightCalls()[0])).toMatchObject({ leftAtMs: left })
     markLeft() // already left: nothing more
     expect(getState().session!.leftAtMs).toBe(left)
+  })
+
+  // last in the file: the hanging refresh stays the shared in-flight pull
+  it('returning_device_lands_after_refresh_timeout_when_network_hangs', async () => {
+    vi.useFakeTimers()
+    try {
+      setState({ session: leftSession() })
+      apiMock.mockImplementation((() => new Promise(() => {})) as never) // lie-fi: nothing ever answers
+      let landed: unknown = 'pending'
+      void landIfStillOwner('left').then((l) => (landed = l))
+      await vi.advanceTimersByTimeAsync(3900)
+      expect(landed).toBe('pending')
+      expect(getState().session).not.toBeNull()
+      await vi.advanceTimersByTimeAsync(200)
+      expect(landed).toMatchObject({ reason: 'left', tripId: 't1' })
+      expect(getState().session).toBeNull()
+      expect(getState().stories).toHaveLength(1) // landed exactly once
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

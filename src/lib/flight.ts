@@ -115,15 +115,19 @@ export function markLeft(): void {
 /**
  * Lands a flight this device left (tab back, or reopened), but only if it still owns it: a refresh first, so a device
  * that was taken over meanwhile becomes the observer instead of landing the other device's flight short. Offline, the
- * refresh fails and it lands as before.
+ * refresh fails, or hangs past `waitMs` (fetch has no timeout), and it lands as before.
  */
-export async function landIfStillOwner(reason: Landing['reason']): Promise<Landing | null> {
+export async function landIfStillOwner(reason: Landing['reason'], waitMs = 4000): Promise<Landing | null> {
   const s = getState().session
   if (!s) return null
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    await (await import('./sync')).refreshAll()
+    const { refreshAll } = await import('./sync')
+    await Promise.race([refreshAll(), new Promise((_, reject) => (timer = setTimeout(() => reject(new Error('refresh timed out')), waitMs)))])
   } catch (e) {
     console.warn('refresh before landing failed; landing anyway', e)
+  } finally {
+    clearTimeout(timer)
   }
   const cur = getState().session
   if (!cur || cur.tripId !== s.tripId || cur.startMs !== s.startMs || flightRole() === 'observer') return null
