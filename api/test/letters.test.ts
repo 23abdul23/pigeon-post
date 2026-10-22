@@ -234,6 +234,22 @@ describe('arrival', () => {
     expect(row('USER#b', 'SENT#orphan')).toBeUndefined() // no stub row recreated
   })
 
+  it('home_arrival_skips_a_picked_up_letter_whose_sender_copy_is_missing', async () => {
+    await write('b', { id: 'reply', toId: 'a', status: 'WAITING' })
+    await write('b', { id: 'orphan', toId: 'a', status: 'WAITING' })
+    seedTrip('a')
+    expect((await fly('a', 's1')).body.pickedUp).toHaveLength(2)
+    table.delete(k('USER#b', 'SENT#orphan')) // Bob's copy went with his account while Ann flew home
+    await call(returnTrip, ev({ sub: 'a', id: 't1' }))
+    table.get(k('USER#a', 'TRIP#t1'))!.progressKm = 900
+    const home = await fly('a', 's2')
+    expect(home.status).toBe(200) // the flight home still lands
+    expect(home.body.delivered.map((l: { id: string }) => l.id)).toEqual(['reply'])
+    expect(status('USER#a', 'LETTER#orphan')).toBe('CARRIED')
+    expect(status('USER#a', 'LETTER#reply')).toBe('DELIVERED')
+    expect(row('USER#b', 'SENT#orphan')).toBeUndefined()
+  })
+
   it('arrival_twice_does_not_duplicate_or_redeliver', async () => {
     await write('a', {})
     await write('b', { id: 'reply', toId: 'a', status: 'WAITING' })

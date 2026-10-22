@@ -28,10 +28,11 @@ async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Lett
   }
   // a letter whose other copy is gone (account deletion) is skipped: moving it would cancel every attempt and the flight would never land
   const get = async (PK: string, SK: string) => (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK, SK }, ConsistentRead: true }))).Item
-  const mirrored = async (ls: LetterRow[], other: (l: LetterRow) => [string, string]) =>
-    (await Promise.all(ls.map(async (l) => ((await get(...other(l))) ? l : undefined)))).filter((l): l is LetterRow => !!l)
-  deliver = await mirrored(deliver.slice(0, MAX_LETTER_MOVES), (l) => [userPk(l.toId), letterSk(l.id)])
-  pickUp = await mirrored(pickUp.slice(0, MAX_LETTER_MOVES - deliver.length), (l) => [userPk(l.fromId), sentSk(l.id)])
+  // the other copy is the one outside my partition: the recipient's LETTER# for a letter I sent, the sender's SENT# otherwise
+  const hasOtherCopy = async (l: LetterRow) => !!(await (l.fromId === sub ? get(userPk(l.toId), letterSk(l.id)) : get(userPk(l.fromId), sentSk(l.id))))
+  const mirrored = async (ls: LetterRow[]) => (await Promise.all(ls.map(async (l) => ((await hasOtherCopy(l)) ? l : undefined)))).filter((l): l is LetterRow => !!l)
+  deliver = await mirrored(deliver.slice(0, MAX_LETTER_MOVES))
+  pickUp = await mirrored(pickUp.slice(0, MAX_LETTER_MOVES - deliver.length))
   return {
     delivered: deliver.map((l) => letterOut({ ...l, status: 'DELIVERED' }, sub)),
     pickedUp: pickUp.map((l) => letterOut({ ...l, status: 'CARRIED' }, sub)),
