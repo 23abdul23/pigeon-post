@@ -405,7 +405,8 @@ Resources:
             Method: POST
             Path: /trips
 
-  # Transaction: session/trip/stamp/story are Puts, arrival letter moves are Updates; reads check idempotency, the trip and the stamp.
+  # Transaction: session/trip/stamp/story are Puts, arrival letter moves are Updates, the FLIGHT row is a Delete (or a
+  # ConditionCheck when it belongs to another trip); reads check idempotency, the trip, the stamp and the flight.
   SessionsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -435,7 +436,7 @@ Resources:
         - Statement:
             # Query + UpdateItem: the arrival step reads my letters and moves both copies (mine and my friend's)
             - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem]
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:ConditionCheckItem]
               Resource: !GetAtt PigeonPost.Arn
             # "A letter arrived" email, from the verified sender only (the recipient's email is read from their profile row)
             - !If
@@ -451,6 +452,42 @@ Resources:
             ApiId: !Ref HttpApi
             Method: POST
             Path: /trips/{id}/sessions
+
+  FlightLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-flight'
+      RetentionInDays: 14
+
+  # The flight in progress (one FLIGHT row per user): start, heartbeat, take over, abandon.
+  FlightFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/flight.ts]
+    Properties:
+      CodeUri: api/
+      Handler: flight.handler
+      LoggingConfig:
+        LogGroup: !Ref FlightLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Put:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: PUT, Path: /flight }
+        Delete:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: /flight }
 
   ReturnTripLogGroup:
     Type: AWS::Logs::LogGroup

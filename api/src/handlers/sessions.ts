@@ -4,13 +4,13 @@ import { clampKm } from '../lib/clamp'
 import { roundCoord } from '../lib/constants'
 import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
-import { letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
+import { flightSk, letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
 import { notifyLetterArrived } from '../lib/notify'
 
-// A transaction holds at most 100 items: 4 for the session itself, 2 per letter (both copies).
+// A transaction holds at most 100 items: 5 for the session itself (session, trip, stamp, story, flight), 2 per letter (both copies).
 // ponytail: letters beyond the cap keep their status (a sender's extra CARRIED letters go on the next visit); split into a follow-up step if real mailboxes get that big.
-const MAX_LETTER_MOVES = 48
+const MAX_LETTER_MOVES = 47
 
 /**
  * The arrival rule (Flow.md section 6), run once: only on the session that takes the trip to routeKm.
@@ -99,6 +99,7 @@ export const handler = route(async (sub, event) => {
     if (!tripRow) return fail(404, 'trip not found')
     const trip = clean<StoredTrip>(tripRow)
     const stampRow = await get(stampSk(storyIn.cc))
+    const flightRow = await get(flightSk())
 
     const now = Date.now()
     const progressKm = Math.min(trip.routeKm, trip.progressKm + clampKm(kmGained, startMs, endMs))
@@ -136,6 +137,11 @@ export const handler = route(async (sub, event) => {
         },
       },
       { Put: { TableName, Item: { PK, SK: storySk(story.id), ...story }, ConditionExpression: 'attribute_not_exists(PK)' } },
+      // landing ends this trip's flight; another trip's flight is left alone. Both are checked against what we read, so a
+      // flight started or replaced meanwhile makes this attempt retry instead of deleting the wrong one or missing it.
+      flightRow && flightRow.tripId !== tripId
+        ? { ConditionCheck: { TableName, Key: { PK, SK: flightSk() }, ConditionExpression: 'tripId <> :t', ExpressionAttributeValues: { ':t': tripId } } }
+        : { Delete: { TableName, Key: { PK, SK: flightSk() }, ConditionExpression: 'attribute_not_exists(PK) OR tripId = :t', ExpressionAttributeValues: { ':t': tripId } } },
       // each letter write is conditional on its current status: a letter that moved meanwhile cancels this attempt, which re-reads
       ...letters.items,
     ]

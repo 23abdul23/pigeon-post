@@ -117,7 +117,7 @@ beforeEach(() => {
     return { Attributes: applyUpdate(i) }
   })
   ddb.on(TransactWriteCommand).callsFake((i) => {
-    const items = i.TransactItems as any[]
+    const items = (i.TransactItems as any[]).filter((t) => t.Put || t.Update) // the FLIGHT delete/check: api/test/flight.test.ts
     if (items.some((t) => (t.Put ? !holds(t.Put, table.get(k(t.Put.Item.PK, t.Put.Item.SK))) : !holds(t.Update, table.get(k(t.Update.Key.PK, t.Update.Key.SK)))))) throw cancelled()
     for (const t of items) t.Put ? table.set(k(t.Put.Item.PK, t.Put.Item.SK), t.Put.Item) : applyUpdate(t.Update)
     return {}

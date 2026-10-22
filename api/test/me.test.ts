@@ -128,7 +128,7 @@ describe('GET /state', () => {
     ddb.on(QueryCommand).resolves({ Items: [] })
     const r = await call(state, ev())
     expect(r.status).toBe(200)
-    expect(r.body).toEqual({ profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [] })
+    expect(r.body).toEqual({ profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [], flight: null, serverTime: expect.any(Number) })
     expect(ddb.commandCalls(QueryCommand)[0].args[0].input.ExpressionAttributeValues).toEqual({ ':pk': 'USER#u1' })
   })
 

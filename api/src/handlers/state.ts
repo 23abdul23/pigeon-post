@@ -1,12 +1,12 @@
 import { QueryCommand } from '@aws-sdk/lib-dynamodb'
 import type { Friend, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
-import { clean, ddb, profileOut, tableName, tripOut, type StoredTrip } from '../lib/db'
+import { clean, ddb, flightOut, profileOut, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { json, route } from '../lib/http'
-import { PROFILE_SK, userPk } from '../lib/keys'
+import { flightSk, PROFILE_SK, userPk } from '../lib/keys'
 import { letterOut, type LetterRow } from '../lib/letters'
 
 export const handler = route(async (sub) => {
-  const s: ServerState = { profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [] }
+  const s: ServerState = { profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [], flight: null, serverTime: Date.now() }
   let trip: StoredTrip | undefined
   let ExclusiveStartKey: Record<string, unknown> | undefined
   do {
@@ -16,6 +16,8 @@ export const handler = route(async (sub) => {
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)
       if (sk === PROFILE_SK) s.profile = profileOut(item)
+      // TTL deletes lazily, so an expired flight can still be read
+      else if (sk === flightSk()) s.flight = Number(item.ttl) * 1000 > s.serverTime ? flightOut(item) : null
       else if (sk.startsWith('TRIP#')) {
         const t = clean<StoredTrip>(item)
         if (!trip || t.createdMs > trip.createdMs) trip = t // the newest trip is the current one

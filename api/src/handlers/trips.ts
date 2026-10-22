@@ -1,9 +1,9 @@
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import type { Place } from '../../../src/lib/types'
+import type { City, Place } from '../../../src/lib/types'
 import { roundCoord } from '../lib/constants'
 import { clean, ddb, isConditionFail, tableName, tripOut, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
-import { tripSk, userPk } from '../lib/keys'
+import { PROFILE_SK, tripSk, userPk } from '../lib/keys'
 
 async function getTrip(sub: string, tripId: string): Promise<StoredTrip | undefined> {
   const r = await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK: userPk(sub), SK: tripSk(tripId) }, ConsistentRead: true }))
@@ -27,9 +27,13 @@ export const createTrip = route(async (sub, event) => {
   const b = parseBody(event.body)
   const letterIds = b.letterIds ?? []
   if (!Array.isArray(letterIds) || letterIds.length > 20) bad('invalid letterIds')
+  // the route starts at the home city as it is now, so every device draws the same route even if home changes later
+  const profile = (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK: userPk(sub), SK: PROFILE_SK }, ConsistentRead: true }))).Item
+  const origin = (profile?.homeCity as City | undefined) ?? bad('set a home city first')
   const trip: StoredTrip = {
     id: id(b.id, 'id'),
     dest: parsePlace(b.dest),
+    origin,
     routeKm: num(b.routeKm, 1, 50000, 'routeKm'),
     friendId: optStr(b.friendId, 64, 'friendId'),
     letterIds: (letterIds as unknown[]).map((l) => id(l, 'letterIds')),

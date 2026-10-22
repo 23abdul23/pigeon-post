@@ -1,5 +1,7 @@
 /** Server copy of the client's scale constant (src/lib/geo.ts); a test asserts they match. */
 export const KM_PER_FOCUS_MINUTE = 100
+/** Server copy of the client's flight-ownership timeout (src/lib/geo.ts): no heartbeat for this long and another device may take over. */
+export const FLIGHT_STALE_MS = 90000
 
 /** The 7 bird ids in src/lib/birds.ts; a test asserts they match. */
 export const BIRD_IDS = ['hawk', 'stork', 'flamingo', 'parrot', 'gull', 'seagull', 'hummingbird'] as const

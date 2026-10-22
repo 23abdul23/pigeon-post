@@ -1,4 +1,4 @@
-import type { ServerProfile, Trip } from '../../../src/lib/types'
+import type { ActiveFlight, ServerProfile, Trip } from '../../../src/lib/types'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 
@@ -20,4 +20,8 @@ export const profileOut = (item: Record<string, unknown>): ServerProfile => {
 /** A stored trip: the API contract's Trip (no `route`) plus when it was created, which picks the current trip. */
 export type StoredTrip = Omit<Trip, 'route'> & { createdMs: number }
 export const tripOut = ({ createdMs: _c, ...t }: StoredTrip): Omit<Trip, 'route'> => t
+export const flightOut = (item: Record<string, unknown>): ActiveFlight => {
+  const { ttl: _t, ...f } = clean<ActiveFlight & { ttl?: number }>(item)
+  return f
+}
 export const isConditionFail = (e: unknown) => (e as Error)?.name === 'ConditionalCheckFailedException'

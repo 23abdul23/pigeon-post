@@ -62,7 +62,8 @@ beforeEach(() => {
   ddb.on(GetCommand).callsFake((input) => ({ Item: table.get(key(input.Key)) }))
   ddb.on(QueryCommand).resolves({ Items: [] }) // no letters here; api/test/letters.test.ts covers the arrival rule
   ddb.on(TransactWriteCommand).callsFake((input) => {
-    const puts = input.TransactItems.map((t: { Put: { Item: Record<string, unknown>; ConditionExpression?: string } }) => t.Put)
+    // the FLIGHT delete/check is covered by api/test/flight.test.ts; here only the Puts matter
+    const puts = input.TransactItems.flatMap((t: { Put?: { Item: Record<string, unknown>; ConditionExpression?: string } }) => (t.Put ? [t.Put] : []))
     if (puts.some((p: { Item: Record<string, unknown>; ConditionExpression?: string }) => p.ConditionExpression === 'attribute_not_exists(PK)' && table.has(key(p.Item))))
       throw new TransactionCanceledException({ message: 'cancelled', $metadata: {} })
     for (const p of puts) table.set(key(p.Item), p.Item)
@@ -147,7 +148,7 @@ describe('POST /trips/{id}/sessions', () => {
         before()
         throw new TransactionCanceledException({ message: 'cancelled', $metadata: {}, CancellationReasons: [{ Code: 'None' }, { Code: 'ConditionalCheckFailed' }] })
       }
-      for (const t of input.TransactItems) table.set(key(t.Put.Item), t.Put.Item)
+      for (const t of input.TransactItems) if (t.Put) table.set(key(t.Put.Item), t.Put.Item)
       return {}
     })
   }
@@ -187,6 +188,8 @@ describe('POST /trips/{id}/sessions', () => {
 
 describe('POST /trips and /trips/{id}/return', () => {
   it('post_trip_creates_outbound_trip_and_is_idempotent', async () => {
+    const home = { name: 'Zagreb', country: 'Croatia', cc: 'HR', lat: 45.81, lng: 15.98 }
+    table.set('USER#u1|PROFILE', { PK: 'USER#u1', SK: 'PROFILE', inviteCode: 'X', homeCity: home })
     ddb.on(PutCommand).callsFake((input) => {
       if (table.has(key(input.Item))) throw Object.assign(new Error('exists'), { name: 'ConditionalCheckFailedException' })
       table.set(key(input.Item), input.Item)
@@ -195,7 +198,7 @@ describe('POST /trips and /trips/{id}/return', () => {
     const body = { id: 't9', dest: { ...dest, lat: 43.50812 }, routeKm: 400, friendId: 'f1' }
     const r = await call(createTrip, ev({ body }))
     expect(r.status).toBe(200)
-    expect(r.body).toEqual({ id: 't9', dest: { ...dest, lat: 43.51 }, routeKm: 400, friendId: 'f1', letterIds: [], progressKm: 0, status: 'OUTBOUND', legs: 0 })
+    expect(r.body).toEqual({ id: 't9', dest: { ...dest, lat: 43.51 }, routeKm: 400, friendId: 'f1', letterIds: [], progressKm: 0, status: 'OUTBOUND', legs: 0, origin: home })
     expect(await call(createTrip, ev({ body }))).toEqual(r)
     expect((await call(createTrip, ev({ body: { ...body, dest: { ...dest, cc: 'XYZ' } } }))).status).toBe(400)
   })

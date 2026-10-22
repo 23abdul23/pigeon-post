@@ -15,7 +15,12 @@ export type Trip = {
   legs: number
   friendId?: string
   letterIds: string[]
+  /** home city when the trip was created (older trips lack it; the client falls back to the current home) */
+  origin?: City
 }
+
+/** The flight in progress, owned by one device (`PUT /flight`); `heartbeatMs` is server time. */
+export type ActiveFlight = { tripId: string; startMs: number; durationMin: number; baseKm: number; deviceId: string; leftAtMs?: number; heartbeatMs: number }
 
 export type Story = {
   id: string
@@ -96,6 +101,9 @@ export type ServerState = {
   friends: Friend[]
   stamps: Stamp[]
   sessions: SessionLog[]
+  flight: ActiveFlight | null
+  /** the server's Date.now(), for the client's clock offset */
+  serverTime: number
 }
 /** `POST /trips/{id}/sessions` (API contract). */
 export type SessionResult = { trip: Omit<Trip, 'route'>; stamp?: Stamp; story: Story; delivered: Letter[]; pickedUp: Letter[] }

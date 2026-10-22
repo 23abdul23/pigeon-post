@@ -1,4 +1,6 @@
 export const KM_PER_FOCUS_MINUTE = 100
+/** A flight with no heartbeat for this long may be taken over by another device (server copy: api/src/lib/constants.ts). */
+export const FLIGHT_STALE_MS = 90000
 
 export type LatLng = { lat: number; lng: number }
 export type Pt = [lat: number, lng: number]
