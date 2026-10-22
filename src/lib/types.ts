@@ -55,7 +55,8 @@ export type Friend = {
   name: string
   city: string
   cc: string
-  status: 'accepted' | 'pending_in' | 'pending_out'
+  /** 'removed': they deleted their account (DELETE /me); shown until dismissed */
+  status: 'accepted' | 'pending_in' | 'pending_out' | 'removed'
   activity?: string
   photo?: string
   /** simulated friend flight toward the user's home */

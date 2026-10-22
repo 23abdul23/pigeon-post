@@ -7,8 +7,8 @@ import { Frame } from '../components/Layout'
 import { birdBySpecies } from '../lib/birds'
 import { DEMO_MODE, loadDemoData } from '../lib/demo'
 import { playCoo } from '../lib/sound'
-import { resetState, setState, useStore, type Settings as SettingsT } from '../lib/store'
-import { saveProfile } from '../lib/sync'
+import { setState, useStore, type Settings as SettingsT } from '../lib/store'
+import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
 
 const SECTIONS = [
@@ -32,6 +32,8 @@ export default function Settings() {
   const [draft, setDraft] = useState<SettingsT>(saved)
   const [name, setName] = useState(user?.name ?? '')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [toast, setToast] = useState('')
   const refs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -82,9 +84,17 @@ export default function Settings() {
     nav('/signin', { replace: true })
   }
 
-  function deleteAccount() {
-    resetState()
-    clearOutbox()
+  async function deleteAccount() {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteServerAccount()
+    } catch {
+      setDeleting(false)
+      setDeleteError("Your account wasn't deleted. Check your connection and try again.")
+      return
+    }
+    if (COGNITO_CONFIGURED) return void cognitoSignOut()
     nav('/signin', { replace: true, state: { farewell: true } })
   }
 
@@ -272,13 +282,18 @@ export default function Settings() {
         <div role="dialog" aria-modal="true" aria-label="Delete account" className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-6">
           <div className="w-full max-w-[360px] rounded-2xl bg-white p-5 text-center shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
             <h2 className="font-serif text-[20px] font-semibold text-ink">Delete your account?</h2>
-            <p className="pt-1 text-[14px] text-ink-2">Your stamps, stories and letters on this device will be removed. This can't be undone.</p>
+            <p className="pt-1 text-[14px] text-ink-2">Your account, stamps, stories and letters will be removed, and letters still in the air are dropped. This can't be undone.</p>
+            {deleteError && (
+              <p role="alert" className="pt-3 text-[14px] font-semibold text-[#ba1a1a]">
+                {deleteError}
+              </p>
+            )}
             <div className="flex gap-2 pt-4">
-              <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2">
+              <button type="button" disabled={deleting} onClick={() => (setConfirmDelete(false), setDeleteError(''))} className="flex-1 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2 disabled:opacity-60">
                 Keep it
               </button>
-              <button type="button" onClick={deleteAccount} className="flex-1 rounded-full bg-[#ba1a1a] py-2.5 text-[14px] font-bold text-white">
-                Delete
+              <button type="button" disabled={deleting} onClick={deleteAccount} className="flex-1 rounded-full bg-[#ba1a1a] py-2.5 text-[14px] font-bold text-white disabled:opacity-60">
+                {deleting ? 'Deleting...' : deleteError ? 'Try again' : 'Delete'}
               </button>
             </div>
           </div>

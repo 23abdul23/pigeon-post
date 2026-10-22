@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
 import MiniMap from '../components/MiniMap'
-import { acceptFriend, avatarColor, declineFriend, initials, settleRequests } from '../lib/social'
+import { acceptFriend, avatarColor, declineFriend, initials, removeFriend, settleRequests } from '../lib/social'
 import { useStore, type Friend } from '../lib/store'
 import { countryName } from '../lib/geo'
 
@@ -31,6 +31,7 @@ export default function Friends() {
   const accepted = friends.filter((f) => f.status === 'accepted')
   const incoming = friends.filter((f) => f.status === 'pending_in')
   const outgoing = friends.filter((f) => f.status === 'pending_out')
+  const removed = friends.filter((f) => f.status === 'removed') // they deleted their account
   const shown = useMemo(() => {
     const n = q.trim().toLowerCase()
     return n ? accepted.filter((f) => f.name.toLowerCase().includes(n) || f.city.toLowerCase().includes(n)) : accepted
@@ -135,6 +136,21 @@ export default function Friends() {
                 </article>
               ))}
             </div>
+
+            {removed.map((f) => (
+              <article key={f.id} className="flex items-center justify-between rounded-2xl bg-card-soft p-3.5 opacity-80 shadow-[0_2px_8px_-2px_rgba(62,58,54,0.05)]">
+                <div className="flex items-center gap-3">
+                  <Avatar f={f} />
+                  <div>
+                    <h2 className="font-serif text-[16px] font-semibold leading-6 text-ink">{f.name}</h2>
+                    <p className="text-[14px] leading-5 text-ink-2">Friend removed: they closed their account</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => removeFriend(f.id)} aria-label={`Dismiss ${f.name}`} className="rounded-full bg-line px-3 py-1.5 text-[12px] font-semibold text-ink-2">
+                  Dismiss
+                </button>
+              </article>
+            ))}
 
             {incoming.length > 0 && (
               <button type="button" onClick={() => setParams({ tab: 'requests' })} className="mt-1 flex items-center justify-between rounded-2xl bg-[#ffdbcd] p-3.5 text-left shadow-[0_1px_1px_rgba(0,0,0,0.05)]">

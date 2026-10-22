@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { COGNITO_CONFIGURED } from './auth'
-import { enqueue, flush, pendingOps } from './outbox'
-import { getState, hydrate, setState, type Profile, type ServerState } from './store'
+import { clearOutbox, enqueue, flush, pendingOps } from './outbox'
+import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
 
 /** Pulls `GET /state` into the store. No-op without Cognito (offline dev keeps its local state). */
@@ -69,4 +69,11 @@ export function useServerSync(signedIn: boolean): boolean {
     }
   }, [signedIn])
   return ready
+}
+
+/** `DELETE /me` sent directly (never queued), then this device forgets the account. Throws, keeping everything, if the server did not delete. */
+export async function deleteAccount(): Promise<void> {
+  if (COGNITO_CONFIGURED) await api('/me', { method: 'DELETE' })
+  clearOutbox()
+  resetState()
 }
