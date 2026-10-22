@@ -277,6 +277,143 @@ Resources:
             Method: PUT
             Path: /me
 
+  CreateTripLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-create-trip'
+      RetentionInDays: 14
+
+  CreateTripFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/trips.ts]
+    Properties:
+      CodeUri: api/
+      Handler: trips.createTrip
+      LoggingConfig:
+        LogGroup: !Ref CreateTripLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:GetItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /trips
+
+  # Transaction: session/trip/stamp/story are all Puts; reads check idempotency, the trip and the stamp.
+  SessionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-sessions'
+      RetentionInDays: 14
+
+  SessionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/sessions.ts]
+    Properties:
+      CodeUri: api/
+      Handler: sessions.handler
+      LoggingConfig:
+        LogGroup: !Ref SessionsLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /trips/{id}/sessions
+
+  ReturnTripLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-return-trip'
+      RetentionInDays: 14
+
+  ReturnTripFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/trips.ts]
+    Properties:
+      CodeUri: api/
+      Handler: trips.returnTrip
+      LoggingConfig:
+        LogGroup: !Ref ReturnTripLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:UpdateItem, dynamodb:GetItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /trips/{id}/return
+
+  StoriesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-stories'
+      RetentionInDays: 14
+
+  StoriesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/stories.ts]
+    Properties:
+      CodeUri: api/
+      Handler: stories.handler
+      LoggingConfig:
+        LogGroup: !Ref StoriesLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: PUT
+            Path: /stories/{id}
+
   Api5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

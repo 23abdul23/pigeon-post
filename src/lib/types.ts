@@ -96,3 +96,5 @@ export type ServerState = {
   stamps: Stamp[]
   sessions: SessionLog[]
 }
+/** `POST /trips/{id}/sessions` (API contract). */
+export type SessionResult = { trip: Omit<Trip, 'route'>; stamp?: Stamp; story: Story; delivered: Letter[]; pickedUp: Letter[] }

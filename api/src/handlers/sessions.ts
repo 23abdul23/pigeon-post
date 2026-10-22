@@ -1,0 +1,103 @@
+import { GetCommand, TransactWriteCommand, type TransactWriteCommandInput } from '@aws-sdk/lib-dynamodb'
+import type { SessionLog, SessionResult, Stamp, Story, Trip } from '../../../src/lib/types'
+import { clampKm } from '../lib/clamp'
+import { roundCoord } from '../lib/constants'
+import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
+import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
+import { sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
+
+type TransactItem = NonNullable<TransactWriteCommandInput['TransactItems']>[number]
+
+const REASONS: readonly unknown[] = ['completed', 'left', 'ended'] satisfies SessionLog['reason'][]
+const LENSES: readonly unknown[] = ['Legend', 'Food', 'Hidden spot', 'Nature', 'History'] satisfies Story['lens'][]
+
+function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
+  if (!isObj(v)) return bad('invalid story')
+  const birds = v.birds ?? []
+  if (!Array.isArray(birds) || birds.length > 10) bad('invalid story.birds')
+  if (!LENSES.includes(v.lens)) bad('invalid story.lens')
+  return {
+    id: id(v.id, 'story.id'),
+    place: str(v.place, 200, 'story.place'),
+    region: optStr(v.region, 200, 'story.region'),
+    country: str(v.country, 100, 'story.country'),
+    cc: cc(v.cc, 'story.cc'),
+    lens: v.lens as Story['lens'],
+    text: str(v.text, 2000, 'story.text'),
+    photo: optStr(v.photo, 1000, 'story.photo'),
+    sourceUrl: optStr(v.sourceUrl, 1000, 'story.sourceUrl'),
+    birds: (birds as unknown[]).map((b) => str(b, 100, 'story.birds')),
+    lat: roundCoord(num(v.lat, -90, 90, 'story.lat')),
+    lng: roundCoord(num(v.lng, -180, 180, 'story.lng')),
+  }
+}
+
+/**
+ * POST /trips/{id}/sessions: records a landed session. One transaction writes the session, trip progress, stamp and story.
+ * Idempotent on the client-generated session id: a replay returns the stored result and counts nothing twice.
+ */
+export const handler = route(async (sub, event) => {
+  const tripId = id(event.pathParameters?.id, 'trip id')
+  const b = parseBody(event.body)
+  const sessionId = id(b.id, 'id')
+  const startMs = num(b.startMs, 0, 1e14, 'startMs')
+  const endMs = num(b.endMs, 0, 1e14, 'endMs')
+  if (!REASONS.includes(b.reason)) bad('invalid reason')
+  const kmGained = num(b.kmGained, 0, 1e6, 'kmGained')
+  const storyIn = parseStory(b.story)
+
+  const PK = userPk(sub)
+  const TableName = tableName()
+  const get = async (SK: string) => (await ddb.send(new GetCommand({ TableName, Key: { PK, SK }, ConsistentRead: true }))).Item
+  const replay = async () => {
+    const s = await get(sessionSk(sessionId))
+    if (!s) return undefined
+    if (s.tripId !== tripId) return fail(409, 'session id belongs to another trip')
+    return json(200, s.result)
+  }
+
+  const seen = await replay()
+  if (seen) return seen
+  const tripRow = await get(tripSk(tripId)) // the caller's own partition, so someone else's trip is simply not there
+  if (!tripRow) return fail(404, 'trip not found')
+  const trip = clean<StoredTrip>(tripRow)
+  const stampRow = await get(stampSk(storyIn.cc))
+
+  const now = Date.now()
+  const progressKm = Math.min(trip.routeKm, trip.progressKm + clampKm(kmGained, startMs, endMs))
+  const arrived = progressKm >= trip.routeKm
+  // Same rules as the client's landSession (src/lib/flight.ts).
+  const status: Trip['status'] = !arrived ? trip.status : trip.status === 'RETURNING' || !trip.friendId ? 'DONE' : 'DELIVERED'
+  const nextTrip: StoredTrip = { ...trip, progressKm, legs: trip.legs + 1, status }
+  const stamp: Stamp = stampRow
+    ? { ...clean<Stamp>(stampRow), visits: Number(stampRow.visits) + 1 }
+    : { cc: storyIn.cc, country: storyIn.country, firstMs: now, visits: 1 }
+  const story: Story = { ...storyIn, km: progressKm, dateMs: now, saved: false }
+  const log: SessionLog = { id: sessionId, tripId, startMs, endMs, km: progressKm - trip.progressKm, reason: b.reason as SessionLog['reason'] }
+  // stored on the session row so a replay returns it unchanged
+  const result: SessionResult = { trip: tripOut(nextTrip), stamp, story, delivered: [], pickedUp: [] }
+
+  const items: TransactItem[] = [
+    { Put: { TableName, Item: { PK, SK: sessionSk(sessionId), ...log, result }, ConditionExpression: 'attribute_not_exists(PK)' } },
+    // optimistic lock: a concurrent session on this trip makes one of the two retry instead of losing progress
+    { Put: { TableName, Item: { PK, SK: tripSk(tripId), ...nextTrip }, ConditionExpression: 'legs = :legs', ExpressionAttributeValues: { ':legs': trip.legs } } },
+    {
+      Put: {
+        TableName,
+        Item: { PK, SK: stampSk(stamp.cc), ...stamp },
+        ...(stampRow ? { ConditionExpression: 'visits = :visits', ExpressionAttributeValues: { ':visits': stampRow.visits } } : { ConditionExpression: 'attribute_not_exists(PK)' }),
+      },
+    },
+    { Put: { TableName, Item: { PK, SK: storySk(story.id), ...story }, ConditionExpression: 'attribute_not_exists(PK)' } },
+  ]
+  // Task 6 adds the arrival step here: when `arrived`, append the letter writes to `items` and fill result.delivered / pickedUp.
+
+  try {
+    await ddb.send(new TransactWriteCommand({ TransactItems: items }))
+  } catch (e) {
+    if ((e as Error)?.name !== 'TransactionCanceledException') throw e
+    // a concurrent replay of this session won the race: return what it stored
+    return (await replay()) ?? fail(409, 'trip changed meanwhile; retry')
+  }
+  return json(200, result)
+})

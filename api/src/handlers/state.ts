@@ -1,21 +1,12 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from 'aws-lambda'
 import { QueryCommand } from '@aws-sdk/lib-dynamodb'
-import type { ServerProfile, ServerState } from '../../../src/lib/types'
-import { getUserId, Unauthorized } from '../lib/auth'
-import { clean, ddb, tableName } from '../lib/db'
-import { json } from '../lib/http'
+import type { ServerProfile, ServerState, SessionLog, Stamp, Story } from '../../../src/lib/types'
+import { clean, ddb, tableName, tripOut, type StoredTrip } from '../lib/db'
+import { json, route } from '../lib/http'
 import { PROFILE_SK, userPk } from '../lib/keys'
 
-export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) => {
-  let sub: string
-  try {
-    sub = getUserId(event)
-  } catch (e) {
-    if (e instanceof Unauthorized) return json(401, { error: 'unauthorized' })
-    throw e
-  }
-
+export const handler = route(async (sub) => {
   const s: ServerState = { profile: null, trip: null, stories: [], letters: [], friends: [], stamps: [], sessions: [] }
+  let trip: StoredTrip | undefined
   let ExclusiveStartKey: Record<string, unknown> | undefined
   do {
     const page = await ddb.send(
@@ -23,11 +14,24 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) =>
     )
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)
-      // Later tasks dispatch their SK prefixes here (TRIP#, SESSION#, STORY#, STAMP#, FRIEND#, LETTER#, SENT#).
+      // Later tasks dispatch their SK prefixes here (FRIEND#, LETTER#, SENT#).
       if (sk === PROFILE_SK) s.profile = clean<ServerProfile>(item)
+      else if (sk.startsWith('TRIP#')) {
+        const t = clean<StoredTrip>(item)
+        if (!trip || t.createdMs > trip.createdMs) trip = t // the newest trip is the current one
+      } else if (sk.startsWith('SESSION#')) {
+        const { result: _r, ...log } = clean<SessionLog & { result: unknown }>(item)
+        s.sessions.push(log)
+      } else if (sk.startsWith('STORY#')) s.stories.push(clean<Story>(item))
+      else if (sk.startsWith('STAMP#')) s.stamps.push(clean<Stamp>(item))
     }
     ExclusiveStartKey = page.LastEvaluatedKey
   } while (ExclusiveStartKey)
 
+  s.trip = trip ? tripOut(trip) : null
+  // the client's order: newest stories and sessions first, stamps in the order they were earned
+  s.stories.sort((a, b) => b.dateMs - a.dateMs)
+  s.sessions.sort((a, b) => b.endMs - a.endMs)
+  s.stamps.sort((a, b) => a.firstMs - b.firstMs)
   return json(200, s)
-}
+})

@@ -1,3 +1,4 @@
+import type { Trip } from '../../../src/lib/types'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
 
@@ -9,3 +10,8 @@ export function clean<T>(item: Record<string, unknown>): T {
   const { PK: _pk, SK: _sk, GSI1PK: _g1, GSI1SK: _g2, ...rest } = item
   return rest as T
 }
+
+/** A stored trip: the API contract's Trip (no `route`) plus when it was created, which picks the current trip. */
+export type StoredTrip = Omit<Trip, 'route'> & { createdMs: number }
+export const tripOut = ({ createdMs: _c, ...t }: StoredTrip): Omit<Trip, 'route'> => t
+export const isConditionFail = (e: unknown) => (e as Error)?.name === 'ConditionalCheckFailedException'

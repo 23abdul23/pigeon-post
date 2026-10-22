@@ -111,4 +111,26 @@ describe('GET /state', () => {
     ddb.on(QueryCommand).resolves({ Items: [{ PK: 'USER#u1', SK: 'PROFILE', GSI1PK: 'CODE#X', GSI1SK: 'USER#u1', name: 'Ana', inviteCode: 'X' }] })
     expect((await call(state, ev())).body.profile).toEqual({ name: 'Ana', inviteCode: 'X' })
   })
+
+  it('get_state_returns_latest_trip_and_trip_data', async () => {
+    const pk = { PK: 'USER#u1' }
+    const trip = (id: string, createdMs: number) => ({ ...pk, SK: `TRIP#${id}`, id, routeKm: 100, progressKm: 0, status: 'DONE', legs: 1, letterIds: [], createdMs })
+    ddb.on(QueryCommand).resolves({
+      Items: [
+        trip('old', 1),
+        trip('new', 2),
+        { ...pk, SK: 'SESSION#s1', id: 's1', tripId: 'new', startMs: 1, endMs: 2, km: 5, reason: 'left', result: { big: true } },
+        { ...pk, SK: 'SESSION#s2', id: 's2', tripId: 'new', startMs: 3, endMs: 4, km: 5, reason: 'completed', result: {} },
+        { ...pk, SK: 'STAMP#HR', cc: 'HR', country: 'Croatia', firstMs: 1, visits: 2 },
+        { ...pk, SK: 'STORY#a', id: 'a', dateMs: 1 },
+        { ...pk, SK: 'STORY#b', id: 'b', dateMs: 2 },
+      ],
+    })
+    const b = (await call(state, ev())).body
+    expect(b.trip).toEqual({ id: 'new', routeKm: 100, progressKm: 0, status: 'DONE', legs: 1, letterIds: [] })
+    expect(b.sessions.map((s: { id: string }) => s.id)).toEqual(['s2', 's1']) // newest first, like the client
+    expect(b.sessions[1]).toEqual({ id: 's1', tripId: 'new', startMs: 1, endMs: 2, km: 5, reason: 'left' })
+    expect(b.stamps).toEqual([{ cc: 'HR', country: 'Croatia', firstMs: 1, visits: 2 }])
+    expect(b.stories.map((s: { id: string }) => s.id)).toEqual(['b', 'a'])
+  })
 })

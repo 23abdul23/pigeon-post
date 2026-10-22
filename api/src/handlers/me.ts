@@ -1,24 +1,14 @@
 import { randomInt } from 'node:crypto'
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from 'aws-lambda'
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { Bird, City, ServerProfile, Settings } from '../../../src/lib/types'
-import { getUserId, Unauthorized } from '../lib/auth'
 import { BIRD_IDS, roundCoord } from '../lib/constants'
 import { clean, ddb, tableName } from '../lib/db'
-import { json } from '../lib/http'
+import { bad, cc, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { codePk, PROFILE_SK, userPk } from '../lib/keys'
 
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789'
 const newInviteCode = () => Array.from({ length: 8 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join('')
 
-class BadRequest extends Error {}
-const bad = (msg: string): never => {
-  throw new BadRequest(msg)
-}
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const str = (v: unknown, max: number, what: string) => (typeof v === 'string' && v.trim() && v.length <= max ? v.trim() : bad(`invalid ${what}`))
-const num = (v: unknown, min: number, max: number, what: string) =>
-  typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : bad(`invalid ${what}`)
 const bool = (v: unknown) => typeof v === 'boolean'
 
 // Typed against Settings so a new client setting fails to compile until it is allowed here.
@@ -40,11 +30,10 @@ const FIELDS = {
   name: (v: unknown) => str(v, 64, 'name'), // default name is the email local part (max 64)
   homeCity: (v: unknown): City => {
     if (!isObj(v)) return bad('invalid homeCity')
-    const cc = str(v.cc, 2, 'homeCity.cc')
     return {
       name: str(v.name, 100, 'homeCity.name'),
       country: str(v.country, 100, 'homeCity.country'),
-      cc: /^[A-Z]{2}$/.test(cc) ? cc : bad('invalid homeCity.cc'),
+      cc: cc(v.cc, 'homeCity.cc'),
       lat: roundCoord(num(v.lat, -90, 90, 'homeCity.lat')),
       lng: roundCoord(num(v.lng, -180, 180, 'homeCity.lng')),
     }
@@ -62,13 +51,7 @@ const FIELDS = {
 
 /** Validates a (partial) Profile body; fields left out keep their stored value. */
 function parse(body: string | undefined): Record<string, unknown> {
-  let v: unknown
-  try {
-    v = JSON.parse(body ?? '')
-  } catch {
-    return bad('invalid JSON')
-  }
-  if (!isObj(v)) return bad('body must be an object')
+  const v = parseBody(body)
   const out: Record<string, unknown> = {}
   for (const [k, val] of Object.entries(v)) {
     if (!Object.hasOwn(FIELDS, k)) bad(`unknown field ${k}`)
@@ -77,17 +60,8 @@ function parse(body: string | undefined): Record<string, unknown> {
   return out
 }
 
-export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) => {
-  let sub: string
-  let fields: Record<string, unknown>
-  try {
-    sub = getUserId(event)
-    fields = parse(event.body)
-  } catch (e) {
-    if (e instanceof Unauthorized) return json(401, { error: 'unauthorized' })
-    if (e instanceof BadRequest) return json(400, { error: e.message })
-    throw e
-  }
+export const handler = route(async (sub, event) => {
+  const fields = parse(event.body)
 
   const code = newInviteCode()
   const names: Record<string, string> = {}
@@ -111,4 +85,4 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) =>
     }),
   )
   return json(200, clean<ServerProfile>(res.Attributes ?? {}))
-}
+})
