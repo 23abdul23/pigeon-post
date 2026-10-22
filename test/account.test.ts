@@ -22,7 +22,7 @@ beforeEach(() => {
 describe('deleteAccount', () => {
   it('delete_account_calls_delete_me_then_clears_local_state', async () => {
     apiMock.mockRejectedValueOnce(new ApiError(503)).mockResolvedValue(undefined)
-    enqueue({ id: 'me', method: 'PUT', path: '/me', body: {} })
+    enqueue({ id: 'me', method: 'PUT', path: '/me', body: {}, touches: ['profile'] })
     // a failed delete keeps everything, so the user can try again
     await expect(deleteAccount()).rejects.toThrow()
     expect(getState().homeCity).toEqual(city)

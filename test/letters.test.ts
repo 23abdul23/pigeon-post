@@ -4,17 +4,17 @@ const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
 vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: vi.fn() }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
-vi.mock('../src/lib/outbox', () => ({ send: vi.fn(), flush: vi.fn(async () => {}), pendingOps: vi.fn(() => 0), enqueue: vi.fn() }))
+vi.mock('../src/lib/outbox', () => ({ send: vi.fn(), flush: vi.fn(async () => {}), pendingOps: vi.fn(() => 0), pendingTouches: vi.fn(() => new Set<string>()), enqueue: vi.fn() }))
 vi.mock('../src/lib/stories', () => ({
   buildStory: vi.fn(async (lat: number, lng: number, km: number) => ({ place: 'Kyoto', country: 'Japan', cc: 'JP', lens: 'Nature', text: 'Moss.', birds: [], km, lat, lng })),
 }))
 
 import { api } from '../src/lib/api'
 import { landSession } from '../src/lib/flight'
-import { pendingOps, send } from '../src/lib/outbox'
+import { pendingOps, pendingTouches, send } from '../src/lib/outbox'
 import { attachmentUrl, uploadAttachment, writeLetter } from '../src/lib/social'
 import { getState, setState, type Letter, type Trip } from '../src/lib/store'
-import { refreshMail } from '../src/lib/sync'
+import { refreshAll } from '../src/lib/sync'
 
 const sendMock = vi.mocked(send)
 const apiMock = vi.mocked(api)
@@ -41,6 +41,7 @@ describe('letters on the client', () => {
       method: 'POST',
       path: '/letters',
       body: { id: l.id, toId: 'bob', text: 'Hello', status: 'WAITING', attachmentKeys: ['letters/sub/k1'], attachments: [{ name: 'cv.pdf', size: 1000, type: 'application/pdf' }] },
+      touches: [`letter:${l.id}`],
     })
     reply({ ...l, fromName: 'Ann (server)', attachments: [att] })
     await vi.waitFor(() => expect(getState().letters[0].fromName).toBe('Ann (server)'))
@@ -83,19 +84,21 @@ describe('letters on the client', () => {
     expect(await attachmentUrl({ name: 'a', size: 1, dataUrl: 'data:x' })).toBe('data:x')
   })
 
-  it('refreshMail_applies_letters_and_friends_and_skips_while_ops_pending', async () => {
+  it('refreshAll_applies_letters_and_friends_and_skips_groups_with_pending_ops', async () => {
     setState({ trip, letters: [letter({ id: 'old' })] })
     const incoming = letter({ id: 'new', fromId: 'bob', toId: 'me', status: 'DELIVERED' })
     const friend = { id: 'bob', name: 'Bob', city: 'Kyoto', cc: 'JP', status: 'accepted' as const, lat: 35, lng: 135 }
-    vi.mocked(pendingOps).mockReturnValue(1)
-    await refreshMail()
-    expect(apiMock).not.toHaveBeenCalled() // unsent local edits win
-
-    vi.mocked(pendingOps).mockReturnValue(0)
+    vi.mocked(pendingTouches).mockReturnValue(new Set(['letters', 'friends']))
     apiMock.mockResolvedValueOnce({ profile: null, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
-    await refreshMail()
+    await refreshAll()
+    expect(getState().letters.map((l) => l.id)).toEqual(['old']) // unsent local edits win
+    expect(getState().friends).toEqual([])
+
+    vi.mocked(pendingTouches).mockReturnValue(new Set())
+    apiMock.mockResolvedValueOnce({ profile: null, trip: null, stories: [], stamps: [], sessions: [], letters: [incoming], friends: [friend] })
+    await refreshAll()
     expect(getState().letters).toEqual([incoming])
     expect(getState().friends).toEqual([friend])
-    expect(getState().trip).toBe(trip) // a running flight is left alone
+    expect(getState().trip).toBeNull() // the trip group is the server's now; the active flight (session) is Task 4's
   })
 })

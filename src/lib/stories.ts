@@ -112,5 +112,5 @@ export function toggleStorySaved(id: string): void {
   const story = getState().stories.find((s) => s.id === id)
   if (!story) return
   setState({ stories: getState().stories.map((s) => (s.id === id ? { ...s, saved: !s.saved } : s)) })
-  void send({ id: `story-save:${id}`, method: 'PUT', path: `/stories/${id}`, body: { saved: !story.saved } })
+  void send({ id: `story-save:${id}`, method: 'PUT', path: `/stories/${id}`, body: { saved: !story.saved }, touches: [`story:${id}`] })
 }

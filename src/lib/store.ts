@@ -107,21 +107,29 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l())
 }
 
-/** Applies `GET /state` (its trip with the route recomputed). */
-export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): void {
+/** Applies `GET /state` (its trip with the route recomputed), except the entity groups in `held` (local writes pending). */
+export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }, held: ReadonlySet<string> = new Set()): void {
   const p = s.profile
+  const take = <T>(group: string, v: T): T | undefined => (held.has(group) ? undefined : v)
+  const patch: Partial<State> = {
+    trip: take('trip', s.trip),
+    stories: take('stories', s.stories),
+    stamps: take('stamps', s.stamps),
+    sessions: take('sessions', s.sessions),
+    friends: take('friends', s.friends),
+    letters: take('letters', s.letters),
+  }
   setState((st) => ({
-    trip: s.trip,
-    stories: s.stories,
-    stamps: s.stamps,
-    sessions: s.sessions,
-    friends: s.friends,
-    letters: s.letters,
-    inviteCode: p?.inviteCode ?? null,
-    homeCity: p?.homeCity ?? null,
-    bird: p?.bird ?? null,
-    settings: { ...defaultSettings, ...p?.settings },
-    user: st.user && p?.name ? { ...st.user, name: p.name } : st.user,
+    ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)),
+    ...(held.has('profile')
+      ? {}
+      : {
+          inviteCode: p?.inviteCode ?? null,
+          homeCity: p?.homeCity ?? null,
+          bird: p?.bird ?? null,
+          settings: { ...defaultSettings, ...p?.settings },
+          user: st.user && p?.name ? { ...st.user, name: p.name } : st.user,
+        }),
   }))
 }
 

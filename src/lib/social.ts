@@ -92,17 +92,17 @@ export function requestFriend(p: Person) {
 // Local state changes first; the API write goes through the outbox (retried when offline; a no-op without Cognito).
 export function acceptFriend(id: string) {
   setState({ friends: getState().friends.map((f) => (f.id === id ? { ...f, status: 'accepted' } : f)) })
-  void send({ id: `friend-accept:${id}`, method: 'POST', path: `/friends/${id}/accept` })
+  void send({ id: `friend-accept:${id}`, method: 'POST', path: `/friends/${id}/accept`, touches: ['friends'] })
 }
 
 export function declineFriend(id: string) {
   setState({ friends: getState().friends.filter((f) => f.id !== id) })
-  void send({ id: `friend-decline:${id}`, method: 'POST', path: `/friends/${id}/decline` })
+  void send({ id: `friend-decline:${id}`, method: 'POST', path: `/friends/${id}/decline`, touches: ['friends'] })
 }
 
 export function removeFriend(id: string) {
   setState({ friends: getState().friends.filter((f) => f.id !== id) })
-  void send({ id: `friend-remove:${id}`, method: 'DELETE', path: `/friends/${id}` })
+  void send({ id: `friend-remove:${id}`, method: 'DELETE', path: `/friends/${id}`, touches: ['friends'] })
 }
 
 export function writeLetter(input: {
@@ -135,7 +135,7 @@ export function writeLetter(input: {
     attachmentKeys: attachments.map((a) => a.key),
     attachments: attachments.map(({ name, size, type }) => ({ name, size, type })),
   }
-  void send<Letter>({ id: `letter:${letter.id}`, method: 'POST', path: '/letters', body }).then(
+  void send<Letter>({ id: `letter:${letter.id}`, method: 'POST', path: '/letters', body, touches: [`letter:${letter.id}`] }).then(
     (r) => r && setState((s) => ({ letters: s.letters.map((l) => (l.id === r.id ? { ...r, attachments: r.attachments.map((a, i) => ({ ...a, dataUrl: l.attachments[i]?.dataUrl })) } : l)) })),
   )
   return letter

@@ -1,5 +1,24 @@
 import { Link } from 'react-router-dom'
 import { setState, useStore } from '../lib/store'
+import { retrySync, useSyncStatus } from '../lib/sync'
+
+const chip = 'rounded-full px-3 py-1 text-[12px] font-medium'
+
+/** Sync state, hidden when all is saved. Never shown without Cognito (the status then stays 'synced'). */
+function SyncChip() {
+  const { state, pending } = useSyncStatus()
+  return (
+    <div aria-live="polite">
+      {state === 'syncing' && <span className={`${chip} bg-sage/15 text-ink-2`}>Syncing…</span>}
+      {state === 'offline' && <span className={`${chip} bg-ink/10 text-ink-2`}>{pending ? `Offline, ${pending} waiting` : 'Offline'}</span>}
+      {state === 'error' && (
+        <button type="button" onClick={() => void retrySync()} className={`${chip} bg-[#8e4d31]/15 text-[#8e4d31]`}>
+          Sync problem. Tap to retry
+        </button>
+      )}
+    </div>
+  )
+}
 
 export default function Header({ title, back, hand }: { title?: string; back?: string; hand?: string }) {
   const soundOn = useStore((s) => s.soundOn)
@@ -29,6 +48,7 @@ export default function Header({ title, back, hand }: { title?: string; back?: s
           )}
         </div>
         <div className="flex items-center gap-1">
+          <SyncChip />
           <button
             type="button"
             aria-label={soundOn ? 'Mute sound' : 'Unmute sound'}

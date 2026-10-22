@@ -49,7 +49,7 @@ export default function OpenedLetter() {
   function toggleSave() {
     const saved = !letter!.saved
     setState({ letters: getState().letters.map((l) => (l.id === letter!.id ? { ...l, saved } : l)) })
-    void send({ id: `letter-save:${letter!.id}`, method: 'PUT', path: `/letters/${letter!.id}`, body: { saved } })
+    void send({ id: `letter-save:${letter!.id}`, method: 'PUT', path: `/letters/${letter!.id}`, body: { saved }, touches: [`letter:${letter!.id}`] })
   }
 
   async function share() {

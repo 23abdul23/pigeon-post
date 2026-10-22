@@ -1,36 +1,61 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { COGNITO_CONFIGURED } from './auth'
-import { clearOutbox, enqueue, flush, pendingOps } from './outbox'
-import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
+import { clearOutbox, enqueue, flush, pendingOps, pendingTouches } from './outbox'
+import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
+import { getState, hydrate, resetState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
 
-/** Pulls `GET /state` into the store. No-op without Cognito (offline dev keeps its local state). */
+const GROUPS = ['profile', 'trip', 'stories', 'stamps', 'sessions', 'friends', 'letters']
+
+/**
+ * Fetches `GET /state` and applies every entity group without a pending local write (checked before and after the fetch,
+ * so a write made meanwhile wins). Never touches the active flight (`session`) or `landing`. No-op without Cognito.
+ */
+async function pull(): Promise<void> {
+  if (!COGNITO_CONFIGURED) return
+  const before = pendingTouches()
+  if (GROUPS.every((g) => before.has(g))) return
+  const prev = getSyncStatus().state
+  if (prev !== 'error') setSyncStatus({ state: 'syncing', pending: pendingOps() })
+  let s: ServerState
+  try {
+    s = await api<ServerState>('/state')
+  } catch (e) {
+    if (prev !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
+    throw e
+  }
+  const held = new Set([...before, ...pendingTouches()])
+  hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
+  if (prev === 'error') setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
+  else if (pendingOps()) setSyncStatus({ state: 'offline', pending: pendingOps() })
+  else markSynced()
+}
+
+/** Sign-in load: sends queued writes first, then takes every group that has no write still pending. */
 export async function loadServerState(): Promise<void> {
   if (!COGNITO_CONFIGURED) return
   await flush()
-  if (pendingOps()) return // unsent local edits win until they reach the server
-  const s = await api<ServerState>('/state')
-  hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity) })
+  await pull()
 }
 
-/**
- * The 30 s mail poll: takes only letters and friends from `GET /state`, so a running flight (trip, session, landing) is never
- * overwritten. Skipped while local writes are unsent, before and after the fetch (a letter written meanwhile wins).
- */
-export async function refreshMail(): Promise<void> {
-  if (!COGNITO_CONFIGURED || pendingOps()) return
-  const s = await api<ServerState>('/state')
-  if (pendingOps()) return
-  setState({ letters: s.letters, friends: s.friends })
+/** The 30 s poll and tab-visible refresh: server state for every entity group without a pending local write. */
+export const refreshAll = pull
+
+/** The Header chip's tap: clears a shown error, sends what is queued, then refreshes. */
+export async function retrySync(): Promise<void> {
+  if (!COGNITO_CONFIGURED) return
+  setSyncStatus({ state: 'syncing', lastError: undefined, pending: pendingOps() })
+  await flush()
+  await pull().catch((e) => console.warn('retry refresh failed', e))
 }
 
 const POLL_MS = 30_000
-/** Polls mail every 30 s while the tab is visible and the user is signed in (and once on becoming visible again). */
-export function useMailPoll(signedIn: boolean): void {
+/** Polls server state every 30 s while the tab is visible and the user is signed in (and once on becoming visible again). */
+export function useStatePoll(signedIn: boolean): void {
   useEffect(() => {
     if (!signedIn || !COGNITO_CONFIGURED) return
-    const tick = () => document.visibilityState === 'visible' && refreshMail().catch((e) => console.warn('mail poll failed', e))
+    const tick = () => document.visibilityState === 'visible' && refreshAll().catch((e) => console.warn('state poll failed', e))
     const id = window.setInterval(tick, POLL_MS)
     document.addEventListener('visibilitychange', tick)
     return () => {
@@ -48,7 +73,7 @@ export function saveProfile(): void {
   if (s.user?.name) body.name = s.user.name
   if (s.homeCity) body.homeCity = s.homeCity
   if (s.bird) body.bird = s.bird
-  enqueue({ id: 'me', method: 'PUT', path: '/me', body })
+  enqueue({ id: 'me', method: 'PUT', path: '/me', body, touches: ['profile'] })
   void flush()
 }
 
@@ -77,3 +102,5 @@ export async function deleteAccount(): Promise<void> {
   clearOutbox()
   resetState()
 }
+
+export { useSyncStatus, type SyncStatus } from './syncStatus'

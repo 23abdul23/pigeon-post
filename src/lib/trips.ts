@@ -24,7 +24,7 @@ export function createTrip(dest: Place, opts: { friendId?: string; letterIds?: s
     letterIds: opts.letterIds ?? [],
   }
   setState({ trip, landing: null })
-  void send({ id: `trip:${trip.id}`, method: 'POST', path: '/trips', body: { id: trip.id, dest, routeKm: trip.routeKm, friendId: trip.friendId, letterIds: trip.letterIds } })
+  void send({ id: `trip:${trip.id}`, method: 'POST', path: '/trips', body: { id: trip.id, dest, routeKm: trip.routeKm, friendId: trip.friendId, letterIds: trip.letterIds }, touches: ['trip'] })
   return trip
 }
 

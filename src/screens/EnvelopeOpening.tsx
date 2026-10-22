@@ -36,7 +36,7 @@ export default function EnvelopeOpening() {
   if (!letter) return <Navigate to="/mailbox" replace />
 
   function finish() {
-    if (letter!.status === 'DELIVERED') void send({ id: `letter-open:${letterId}`, method: 'POST', path: `/letters/${letterId}/open` })
+    if (letter!.status === 'DELIVERED') void send({ id: `letter-open:${letterId}`, method: 'POST', path: `/letters/${letterId}/open`, touches: [`letter:${letterId}`] })
     setState({ letters: getState().letters.map((l) => (l.id === letterId && l.status === 'DELIVERED' ? { ...l, status: 'OPENED' as const } : l)) })
     nav(`/mailbox/${letterId}`, { replace: true })
   }
