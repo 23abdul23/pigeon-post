@@ -18,6 +18,13 @@ Parameters:
     Type: String
     Description: SES-verified sender address for "A letter arrived" emails (Task 0)
 
+  # Confirm this id in the Bedrock console (model access granted in Task 0); the "us." prefix is a cross-region inference profile.
+  BedrockModelId:
+    Type: String
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    AllowedPattern: '^us\.anthropic\..+'
+    Description: Bedrock inference profile id used for story polish
+
 Globals:
   Function:
     Runtime: nodejs22.x
@@ -429,6 +436,52 @@ Resources:
             ApiId: !Ref HttpApi
             Method: PUT
             Path: /stories/{id}
+
+  ComposeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-compose'
+      RetentionInDays: 14
+
+  ComposeFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        EntryPoints: [src/handlers/compose.ts]
+    Properties:
+      CodeUri: api/
+      Handler: compose.handler
+      Timeout: 20
+      LoggingConfig:
+        LogGroup: !Ref ComposeLogGroup
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+              Resource: !GetAtt PigeonPost.Arn
+            # Only this model: the inference profile, plus the foundation model it routes to (the profile id minus "us.").
+            - Effect: Allow
+              Action: [bedrock:InvokeModel]
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}'
+                - !Sub
+                  - 'arn:${AWS::Partition}:bedrock:*::foundation-model/${Base}'
+                  - Base: !Select [1, !Split ['us.', !Ref BedrockModelId]]
+      Events:
+        Route:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /stories/compose
 
   FriendsLogGroup:
     Type: AWS::Logs::LogGroup

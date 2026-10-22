@@ -1,3 +1,5 @@
+import { api } from './api'
+import { COGNITO_CONFIGURED } from './auth'
 import { nearestCity } from './places'
 import { send } from './outbox'
 import { getState, setState, type Story } from './store'
@@ -39,6 +41,18 @@ type Near = { query?: { pages?: Record<string, Page> } }
 type Occ = { results?: { vernacularName?: string; species?: string }[] }
 type Inat = { results?: { taxon?: { preferred_common_name?: string; name?: string } }[] }
 
+/** Optional Bedrock polish of the facts via POST /stories/compose; any failure (429, offline, signed out, slow) keeps the plain text. */
+async function polish(placeId: string, lens: Lens, facts: string): Promise<string> {
+  if (!COGNITO_CONFIGURED) return facts
+  try {
+    const slow = new Promise<never>((_, rej) => window.setTimeout(() => rej(new Error('timeout')), 5000))
+    const r = await Promise.race([api<{ text?: string }>('/stories/compose', { method: 'POST', body: JSON.stringify({ placeId, lens, facts }) }), slow])
+    return r.text?.trim() || facts
+  } catch {
+    return facts
+  }
+}
+
 /** Nearby places first, then the closest bundled city, then a plain fallback. Never throws. */
 export async function buildStory(lat: number, lng: number, km: number): Promise<Omit<Story, 'id' | 'dateMs' | 'saved'>> {
   const city = await nearestCity(lat, lng)
@@ -70,13 +84,16 @@ export async function buildStory(lat: number, lng: number, km: number): Promise<
   }
 
   const cats = (pick?.categories ?? []).map((c) => c.title).join(' ')
+  const lens = pickLens(`${cats} ${text}`)
+  const place = pick?.title ?? city.name
+  const polished = pick?.extract ? await polish(place.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64) || 'place', lens, text) : text
   return {
-    place: pick?.title ?? city.name,
+    place,
     region: city.name === (pick?.title ?? city.name) ? undefined : city.name,
     country: city.country,
     cc: city.cc,
-    lens: pickLens(`${cats} ${text}`),
-    text,
+    lens,
+    text: polished,
     photo: pick?.thumbnail?.source,
     sourceUrl: pick?.fullurl,
     birds,
