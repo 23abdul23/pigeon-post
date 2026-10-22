@@ -76,7 +76,56 @@ sam logs --stack-name pigeon-post --name StateFunction --tail --profile pigeon
 sam logs --stack-name pigeon-post --start-time '30min ago' --profile pigeon
 ```
 
-Function names: `HealthFunction`, `StateFunction`, `MeFunction`, `CreateTripFunction`, `SessionsFunction`, `ReturnTripFunction`, `StoriesFunction`, `ComposeFunction`, `FriendsFunction`, `LettersFunction`, `UploadsFunction`, `AccountFunction`. Log groups are `/aws/lambda/pigeon-post-<name>` with 14 day retention. The `Api5xxAlarm` alarm fires on more than 5 API 5xx responses in 5 minutes.
+Function names: `HealthFunction`, `StateFunction`, `MeFunction`, `ImportFunction`, `CreateTripFunction`, `SessionsFunction`, `FlightFunction`, `ReturnTripFunction`, `StoriesFunction`, `ComposeFunction`, `PlacesFunction`, `FriendsFunction`, `LettersFunction`, `UploadsFunction`, `AccountFunction`. Log groups are `/aws/lambda/pigeon-post-<name>` with 14 day retention. The `Api5xxAlarm` alarm fires on more than 5 API 5xx responses in 5 minutes.
+
+## Confirm data is saved
+
+```
+aws dynamodb scan --table-name <TableName> --projection-expression "PK,SK" --profile pigeon
+```
+
+For a signed-in user who has onboarded and flown, expect under `USER#<sub>`: `PROFILE`, `TRIP#<id>`, `FLIGHT` (only while a flight is in progress), `SESSION#<id>`, `STORY#<id>`, `STAMP#<cc>`, and, once friends and letters exist, `FRIEND#<sub>`, `LETTER#<id>`, `SENT#<id>`; plus `GEOUSE#<yyyymmdd>` (that day's place search count). Shared items: `GEO#<hash>` / `SEARCH` and `GEO#<hash>` / `REVERSE` (place cache), `GEO#GLOBAL` / `USE#<yyyymmdd>` (all-users count). An empty scan after a sign-in means the API is not saving: check `sam logs` for init errors and the bundle smoke gate below.
+
+## Place search
+
+`GET /places/search` and `GET /places/reverse` (`PlacesFunction`, `api/src/handlers/places.ts`) proxy two free upstreams in order: Photon (`PhotonBaseUrl`, default `https://photon.komoot.io`; search and reverse) and the Open-Meteo geocoder (`OpenMeteoGeocodingUrl`, default `https://geocoding-api.open-meteo.com`; search only). The browser never calls them.
+
+- **Cache**: every upstream answer is stored in the table (`GEO#...` items) for 30 days (DynamoDB TTL on `ttl`), shared by all users. Cached answers cost no upstream call and count against no cap.
+- **Caps** (uncached lookups, per UTC day; one lookup may try both upstreams): 200 per user (over it: 429) and 8,000 across all users (over it: 503), kept below Open-Meteo's free 10,000 calls a day. Queries are 2 to 80 characters; at most 8 results; 2.5 s timeout per upstream.
+- **When both upstreams fail** (or the global budget is spent): the API answers 503 and the app searches the bundled GeoNames cities (50,000+ people) instead, with the note "Offline results" under the list. Reverse lookups (map tap, "Use my location") fall back to the nearest bundled city.
+- **Swap the upstream** (a self-hosted or paid Photon, another Open-Meteo-compatible host): redeploy with `--parameter-overrides PhotonBaseUrl=https://... OpenMeteoGeocodingUrl=https://...` (or change the template defaults). No client release is needed. `GeocoderContact` (optional URL or email) is added to the `User-Agent` the upstreams see (`PigeonPost/1.0 (<contact>)`; empty: `PigeonPost/1.0`); set it so their operators can reach you. `sam deploy` keeps old values for omitted parameters.
+- **Attribution** must stay: "© OpenStreetMap contributors" under server results and on the map, and "Place data: OpenStreetMap, GeoNames. Map tiles: OpenFreeMap." in Settings > About.
+- **Terms**: Open-Meteo is free for non-commercial use only, and the public Photon server is fair-use with no availability guarantee. If Fost becomes commercial, Open-Meteo needs a paid key (or another second choice) and Photon should be self-hosted or paid: swap them with the parameters above.
+
+## Bundle smoke gate
+
+Already a deploy blocker: see "Bundle smoke test is a deploy blocker" under [Things that are easy to forget](#things-that-are-easy-to-forget).
+
+## Reset a stuck flight
+
+A flight whose owner device went silent is stale after 90 s without a heartbeat: any of the user's devices may then start a new flight or take it over, and the `FLIGHT` item expires by TTL 24 h after its planned end. To clear it at once (it is abandoned, not landed: no session, story or stamp):
+
+```
+aws dynamodb delete-item --table-name <TableName> --key '{"PK":{"S":"USER#<sub>"},"SK":{"S":"FLIGHT"}}' --profile pigeon
+```
+
+`DELETE /flight` (signed-in user's ID token) does the same; it deletes the user's flight whichever device owns it. The app does not call it today. After either, the devices drop the flight on their next refresh (within 30 s, or on tab focus).
+
+## Sync troubleshooting
+
+The Header chip (`src/components/Header.tsx`) shows the client sync status (`src/lib/syncStatus.ts`), and is hidden when everything is saved:
+
+- **Syncing…**: sending queued writes or loading `GET /state`.
+- **Offline** / **Offline, N waiting**: the API could not be reached (network error or 5xx); writes stay queued in `localStorage` (`pigeon-post:outbox`) and are retried with backoff (up to 60 s apart) and on the next sign-in load.
+- **Sync problem. Tap to retry**: the server refused a write for good (a 4xx other than 401/429: that write was dropped), local data could not be imported, or a `GET /state` reply could not be applied. The reason is in `lastError` (the chip's tooltip and accessible label, e.g. "Could not save your trip: HTTP 400"). Tapping sends what is queued and refreshes. A lost flight race (another device owns the flight, or it already landed) is not a problem: the device just becomes the observer.
+
+Refresh runs on sign-in, every 30 s while the tab is visible, on tab focus and after a successful flush; a refresh never overwrites an entity that has a write pending. For server-side causes read `sam logs` (`StateFunction`, `MeFunction`, `SessionsFunction`, `FlightFunction`, `ImportFunction`).
+
+## Multiple devices, and switching accounts on one browser
+
+- Same account on several devices: each browser has its own device id (`localStorage` `pigeon-post:device`). A flight belongs to the device that started or took it over; the others show it as "Flying on your other device" with the same distance (all use the server clock) and a Take over button. Two devices landing the same flight post the same session id, so the server records one session, story and stamp.
+- Local data made before the first sign-in (or before saving worked) is uploaded once with `POST /import` when the account has no server profile; the server refuses a second import (409).
+- The local data on a browser belongs to the first account that signs in there (`ownerSub`). A different Google account signing in on the same browser gets a clean device: the previous account's data and queued writes are wiped from that browser (never uploaded to the new account; the previous account's server data is untouched), and only sound on/off is kept. Signing back in with the first account restores everything from the server. If the signed-in user cannot be confirmed (expired token while offline) and the browser holds an account's data, the app shows and sends nothing until it can.
 
 ## Reset a user
 
