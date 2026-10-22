@@ -9,3 +9,14 @@ profile = "pigeon"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+
+# CI: no named profile (credentials come from the GitHub OIDC role), non-interactive.
+[ci.global.parameters]
+stack_name = "pigeon-post"
+region = "us-east-1"
+
+[ci.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+resolve_s3 = true
