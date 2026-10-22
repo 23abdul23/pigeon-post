@@ -19,7 +19,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) =>
   let ExclusiveStartKey: Record<string, unknown> | undefined
   do {
     const page = await ddb.send(
-      new QueryCommand({ TableName: tableName(), KeyConditionExpression: 'PK = :pk', ExpressionAttributeValues: { ':pk': userPk(sub) }, ExclusiveStartKey }),
+      new QueryCommand({ TableName: tableName(), ConsistentRead: true, KeyConditionExpression: 'PK = :pk', ExpressionAttributeValues: { ':pk': userPk(sub) }, ExclusiveStartKey }),
     )
     for (const item of page.Items ?? []) {
       const sk = String(item.SK)

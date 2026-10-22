@@ -37,7 +37,7 @@ const SETTINGS: { [K in keyof Settings]: (v: unknown) => boolean } = {
 }
 
 const FIELDS = {
-  name: (v: unknown) => str(v, 60, 'name'),
+  name: (v: unknown) => str(v, 64, 'name'), // default name is the email local part (max 64)
   homeCity: (v: unknown): City => {
     if (!isObj(v)) return bad('invalid homeCity')
     const cc = str(v.cc, 2, 'homeCity.cc')
