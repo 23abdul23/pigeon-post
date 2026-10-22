@@ -23,24 +23,26 @@ const putFlight = route(async (sub, event) => {
   const durationMin = Number.isInteger(b.durationMin) ? num(b.durationMin, 5, 120, 'durationMin') : bad('invalid durationMin')
   const deviceId = typeof b.deviceId === 'string' && /^[\w-]{8,64}$/.test(b.deviceId) ? b.deviceId : bad('invalid deviceId')
   const leftAtMs = b.leftAtMs === undefined ? undefined : num(b.leftAtMs, startMs, now + 5 * MIN, 'leftAtMs')
-  const legs = b.legs === undefined ? undefined : Number.isInteger(b.legs) ? num(b.legs, 0, 1e6, 'legs') : bad('invalid legs')
+  // the trip's legs when the flight started: a landing always adds one, so even a 0 km landing ends the flight
+  const legs = Number.isInteger(b.legs) ? num(b.legs, 0, 1e6, 'legs') : bad('invalid legs')
 
   const PK = userPk(sub)
   const TableName = tableName()
   const Key = { PK, SK: flightSk() }
   const get = async (SK: string) => (await ddb.send(new GetCommand({ TableName, Key: { PK, SK }, ConsistentRead: true }))).Item
-  const trip = await get(tripSk(tripId)) // the caller's own partition, so someone else's trip is simply not there
-  if (!trip || (trip.status !== 'OUTBOUND' && trip.status !== 'RETURNING')) return fail(404, 'no flying trip with that id')
-  const baseKm = num(b.baseKm, 0, Number(trip.routeKm), 'baseKm')
-  // A landing moves the trip on (progressKm, and always legs), so a flight that no longer starts where the trip stands has
-  // landed: a late or retried heartbeat must not bring it back. Old rows and clients without `legs` get the km check only.
-  const landed = (f: Record<string, unknown>) =>
-    Math.abs(Number(f.baseKm) - Number(trip.progressKm)) > 0.01 || (f.legs !== undefined && f.legs !== trip.legs)
   const alreadyLanded = () => json(409, { error: 'flight already landed' })
 
   let heartbeat = false
   for (let attempt = 0; attempt < 2; attempt++) {
+    // flight first, then the trip, every pass: a landing that commits in between shows up as a moved-on trip
     const cur = await get(flightSk())
+    const trip = await get(tripSk(tripId)) // the caller's own partition, so someone else's trip is simply not there
+    if (!trip || (trip.status !== 'OUTBOUND' && trip.status !== 'RETURNING')) return fail(404, 'no flying trip with that id')
+    const baseKm = num(b.baseKm, 0, Number(trip.routeKm), 'baseKm')
+    // A landing moves the trip on (progressKm, and always legs), so a flight that no longer starts where the trip stands has
+    // landed: a late or retried heartbeat must not bring it back. Old rows without `legs` get the km check only.
+    const landed = (f: Record<string, unknown>) =>
+      Math.abs(Number(f.baseKm) - Number(trip.progressKm)) > 0.01 || (f.legs !== undefined && f.legs !== trip.legs)
     try {
       if (cur?.deviceId === deviceId && cur.startMs === startMs) {
         if (landed(cur)) return alreadyLanded()
@@ -60,7 +62,7 @@ const putFlight = route(async (sub, event) => {
       if (heartbeat && !cur) return alreadyLanded() // our flight vanished between the read and the update: the landing deleted it
       if (cur && cur.deviceId !== deviceId && now - Number(cur.heartbeatMs) <= FLIGHT_STALE_MS && b.takeover !== true) return json(409, { flight: flightOut(cur) })
       if (landed({ baseKm, legs })) return alreadyLanded()
-      const flight: ActiveFlight = { tripId, startMs, durationMin, baseKm, deviceId, leftAtMs, heartbeatMs: now, legs: Number(trip.legs) }
+      const flight: ActiveFlight = { tripId, startMs, durationMin, baseKm, deviceId, leftAtMs, heartbeatMs: now, legs }
       await ddb.send(
         new PutCommand({
           TableName,
