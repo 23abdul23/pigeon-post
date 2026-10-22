@@ -104,6 +104,17 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l())
 }
 
+/** Applies `GET /state`. Only the profile is server-owned so far; trips, stories, letters etc. stay local until their tasks move them. */
+export function hydrate(s: ServerState): void {
+  const p = s.profile
+  setState((st) => ({
+    homeCity: p?.homeCity ?? null,
+    bird: p?.bird ?? null,
+    settings: { ...defaultSettings, ...p?.settings },
+    user: st.user && p?.name ? { ...st.user, name: p.name } : st.user,
+  }))
+}
+
 export function resetState() {
   state = initial
   try {

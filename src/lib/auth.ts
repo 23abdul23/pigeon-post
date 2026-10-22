@@ -45,11 +45,18 @@ export async function signOut(): Promise<void> {
   location.assign(`${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(`${location.origin}/signin`)}`)
 }
 
+// Concurrent callers (parallel api() calls) share one refresh instead of each spending the refresh token.
+let refreshing: Promise<User | null> | undefined
+
 /** The stored user, refreshed via the refresh token when the ID token has expired; null if unusable. */
 async function liveUser(): Promise<User | null> {
   if (!COGNITO_CONFIGURED) return null
   let user = await um().getUser()
-  if (user?.expired && user.refresh_token) user = await um().signinSilent().catch(() => null)
+  if (user?.expired && user.refresh_token)
+    user = await (refreshing ??= um()
+      .signinSilent()
+      .catch(() => null)
+      .finally(() => (refreshing = undefined)))
   return user && !user.expired ? user : null
 }
 

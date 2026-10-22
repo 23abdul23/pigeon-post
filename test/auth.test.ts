@@ -39,6 +39,12 @@ describe('auth client', () => {
     mgr.signinSilent.mockResolvedValue(fresh)
     expect(await getIdToken()).toBe('new')
   })
+  it('getIdToken_shares_one_refresh_between_concurrent_calls', async () => {
+    mgr.getUser.mockResolvedValue(stale('r'))
+    mgr.signinSilent.mockResolvedValue(fresh)
+    expect(await Promise.all([getIdToken(), getIdToken(), getIdToken()])).toEqual(['new', 'new', 'new'])
+    expect(mgr.signinSilent).toHaveBeenCalledTimes(1)
+  })
   it('getIdToken_null_when_silent_refresh_fails', async () => {
     mgr.getUser.mockResolvedValue(stale('r'))
     mgr.signinSilent.mockRejectedValue(new Error('revoked'))

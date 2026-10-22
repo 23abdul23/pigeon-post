@@ -6,6 +6,7 @@ import MiniMap from '../components/MiniMap'
 import Flag from '../components/Flag'
 import { searchPlaces, toCity } from '../lib/places'
 import { getState, setState, type Place } from '../lib/store'
+import { saveProfile } from '../lib/sync'
 
 const fmtCoord = (lat: number, lng: number) =>
   `${Math.abs(Math.round(lat * 10000) / 10000).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(Math.round(lng * 10000) / 10000).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`
@@ -55,6 +56,7 @@ export default function HomeCity() {
   function next() {
     if (!selected) return
     setState({ homeCity: toCity(selected) })
+    saveProfile()
     nav(fromSettings ? '/settings/city' : '/onboarding/bird')
   }
 

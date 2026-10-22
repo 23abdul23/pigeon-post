@@ -6,6 +6,7 @@ import Header from '../components/Header'
 import { Frame } from '../components/Layout'
 import { BIRDS, MODEL_CREDIT, randomBirdName } from '../lib/birds'
 import { getState, setState } from '../lib/store'
+import { saveProfile } from '../lib/sync'
 
 export default function ChooseBird() {
   const nav = useNavigate()
@@ -22,6 +23,7 @@ export default function ChooseBird() {
 
   function start() {
     setState({ bird: { species: selected.id, name: name.trim() || 'Pip' } })
+    saveProfile()
     nav(fromSettings ? '/settings/birds' : '/home', { replace: true })
   }
 

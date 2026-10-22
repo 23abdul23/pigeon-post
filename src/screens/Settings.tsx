@@ -8,6 +8,8 @@ import { birdBySpecies } from '../lib/birds'
 import { DEMO_MODE, loadDemoData } from '../lib/demo'
 import { playCoo } from '../lib/sound'
 import { resetState, setState, useStore, type Settings as SettingsT } from '../lib/store'
+import { saveProfile } from '../lib/sync'
+import { clearOutbox } from '../lib/outbox'
 
 const SECTIONS = [
   ['profile', 'Profile'],
@@ -47,6 +49,7 @@ export default function Settings() {
   function save() {
     const trimmed = name.trim() || user?.name || 'Traveler'
     setState({ settings: draft, user: user ? { ...user, name: trimmed } : user })
+    saveProfile()
     setName(trimmed)
     flash('Changes saved.')
   }
@@ -74,6 +77,7 @@ export default function Settings() {
 
   function signOut() {
     setState({ user: null })
+    clearOutbox()
     if (COGNITO_CONFIGURED) return void cognitoSignOut()
     nav('/signin', { replace: true })
   }

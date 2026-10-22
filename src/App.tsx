@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setState, useStore } from './lib/store'
+import { useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
 import ChooseBird from './screens/ChooseBird'
 import Dashboard from './screens/Dashboard'
@@ -29,6 +30,8 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   const bird = useStore((s) => s.bird)
   const loc = useLocation()
   const auth = useAuth()
+  // Signed-in users get their profile from the server (GET /state) before the onboarding checks below.
+  const synced = useServerSync(COGNITO_CONFIGURED && auth.status === 'signedIn')
   // With Cognito the session is the source of truth; mirror it into the store for screens that read `user`.
   useEffect(() => {
     if (COGNITO_CONFIGURED && auth.status === 'signedIn' && !user) {
@@ -38,7 +41,7 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   if (COGNITO_CONFIGURED) {
     if (auth.status === 'loading') return null
     if (auth.status === 'signedOut') return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
-    if (!user) return null
+    if (!user || !synced) return null
   } else if (!user) return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
   if (!onboarding) {
     if (!home) return <Navigate to="/onboarding/city" replace />
