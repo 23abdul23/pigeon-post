@@ -10,7 +10,8 @@ vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../sr
 
 import { api, ApiError } from '../src/lib/api'
 import { attributionFor, createPlaceSearch, HOME_SEARCH_KIND } from '../src/lib/placeSearch'
-import { placeLabel, searchBundledPlaces, searchPlaces, toCity } from '../src/lib/places'
+import { locate, placeLabel, reversePlace, searchBundledPlaces, searchPlaces, toCity } from '../src/lib/places'
+import { getState } from '../src/lib/store'
 import type { Place } from '../src/lib/types'
 
 const apiMock = vi.mocked(api)
@@ -200,5 +201,75 @@ describe('createPlaceSearch', () => {
   it('search_results_show_osm_attribution_when_source_is_photon', () => {
     expect(attributionFor('server')).toBe('© OpenStreetMap contributors')
     expect(attributionFor('bundled')).toBeNull()
+  })
+})
+
+describe('reversePlace', () => {
+  it('reverse_place_rounds_coordinates_before_calling_api', async () => {
+    apiMock.mockResolvedValue({ place: paris, source: 'photon' })
+    const r = await reversePlace(48.856613, 2.352222)
+    expect(r).toEqual({ place: paris, source: 'server' })
+    const [path, init] = apiMock.mock.calls[0]
+    const u = new URL(path, 'http://x')
+    expect(u.pathname).toBe('/places/reverse')
+    expect(Object.fromEntries(u.searchParams)).toEqual({ lat: '48.86', lng: '2.35' })
+    expect(path).not.toContain('48.8566')
+    expect(init?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('reverse_place_falls_back_to_nearest_bundled_city_with_distance', async () => {
+    apiMock.mockRejectedValueOnce(new ApiError(503))
+    const near = await reversePlace(45.814442, 15.977981)
+    expect(near.source).toBe('bundled')
+    expect(near.place).toMatchObject({ name: 'Zagreb', cc: 'HR' })
+    expect(near.approxKm).toBeLessThan(50)
+    // no Cognito: never calls the server; a remote spot reports how far the nearest city is
+    flags.cognito = false
+    apiMock.mockClear()
+    const far = await reversePlace(23.5, 12.0) // the Sahara
+    expect(apiMock).not.toHaveBeenCalled()
+    expect(far.source).toBe('bundled')
+    expect(far.place).not.toBeNull()
+    expect(far.approxKm).toBeGreaterThan(50)
+    expect(Number.isFinite(far.approxKm)).toBe(true)
+  })
+
+  it('reverse_place_ocean_from_server_returns_null_place', async () => {
+    apiMock.mockResolvedValue({ place: null, source: 'photon' })
+    expect(await reversePlace(-48.88, -123.39)).toEqual({ place: null, source: 'server' })
+  })
+
+  it('reverse_place_for_a_home_city_ignores_a_landmark', async () => {
+    apiMock.mockResolvedValue({ place: { ...paris, id: 'photon:W5013364', name: 'Eiffel Tower', kind: 'poi' }, source: 'photon' })
+    const r = await reversePlace(48.858, 2.294, 'city')
+    expect(r.source).toBe('bundled')
+    expect(r.place).toMatchObject({ name: expect.stringMatching(/^Paris/), cc: 'FR' }) // the bundled set has Paris districts
+    expect(r.place?.name).not.toBe('Eiffel Tower')
+  })
+})
+
+describe('locate', () => {
+  const geoWith = (impl: Geolocation['getCurrentPosition']) => ({ getCurrentPosition: impl })
+
+  it('geolocation_result_is_rounded_and_not_stored_raw', async () => {
+    const reverse = vi.fn(async (_lat: number, _lng: number, _kind?: string) => ({ place: paris, source: 'server' as const }))
+    const geo = geoWith((ok) => ok({ coords: { latitude: 48.856613, longitude: 2.352222, accuracy: 12 } } as GeolocationPosition))
+    const r = await locate(geo, reverse)
+    expect(reverse).toHaveBeenCalledWith(48.86, 2.35, 'city')
+    expect(r).toEqual({ ok: true, place: paris, source: 'server' })
+    expect(JSON.stringify(r)).not.toContain('48.8566')
+    expect(JSON.stringify(getState())).not.toContain('48.8566')
+  })
+
+  it('locate_handles_permission_denied_with_friendly_message', async () => {
+    const reverse = vi.fn()
+    for (const code of [1, 2, 3]) {
+      const geo = geoWith((_ok, fail) => fail!({ code, message: 'x', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError))
+      const r = await locate(geo, reverse)
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.message).toMatch(code === 1 ? /permission/i : /could not|couldn't/i)
+    }
+    expect((await locate(undefined, reverse)).ok).toBe(false) // no geolocation API at all
+    expect(reverse).not.toHaveBeenCalled()
   })
 })

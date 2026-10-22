@@ -99,7 +99,7 @@ export async function nearestCity(lat: number, lng: number): Promise<Place & { d
   let bestD = Infinity
   for (const r of all) {
     const dLat = r[2] - lat
-    const dLng = (r[3] - lng) * Math.cos((lat * Math.PI) / 180)
+    const dLng = (((r[3] - lng + 540) % 360) - 180) * Math.cos((lat * Math.PI) / 180) // shortest way round, also for unwrapped route longitudes
     const d = dLat * dLat + dLng * dLng
     if (d < bestD) {
       bestD = d
@@ -107,4 +107,52 @@ export async function nearestCity(lat: number, lng: number): Promise<Place & { d
     }
   }
   return { ...toPlace(best), distKm: Math.sqrt(bestD) * 111 }
+}
+
+const round2 = (x: number) => Math.round(x * 100) / 100
+
+export type ReverseResult = { place: Place | null; source: PlaceSource; approxKm?: number }
+
+/**
+ * What is at a map tap (`GET /places/reverse`). Coordinates are rounded to 2 decimals (about 1 km) before anything sees them.
+ * Server `place: null` means open water. Any server failure, or no Cognito, gives the nearest bundled city with `approxKm`.
+ * `kind: 'city'` (home) never returns a landmark or region: those fall through to the nearest bundled city.
+ */
+export async function reversePlace(lat: number, lng: number, kind: PlaceKind = 'any'): Promise<ReverseResult> {
+  lat = round2(lat)
+  lng = round2(lng)
+  if (COGNITO_CONFIGURED) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(new DOMException('reverse lookup timed out', 'TimeoutError')), SERVER_TIMEOUT_MS)
+    try {
+      const params = new URLSearchParams({ lat: lat.toFixed(2), lng: lng.toFixed(2) })
+      const { place } = await api<{ place: Place | null }>(`/places/reverse?${params}`, { signal: ctrl.signal })
+      if (!place) return { place: null, source: 'server' }
+      if (kind === 'any' || !place.kind || place.kind === 'locality') return { place, source: 'server' }
+    } catch {
+      // 400, 429, 503, timeout, offline: the bundled cities below
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  const { distKm, ...place } = await nearestCity(lat, lng)
+  return { place, source: 'bundled', approxKm: distKm }
+}
+
+export type LocateResult = ({ ok: true } & ReverseResult) | { ok: false; message: string }
+
+/** "Use my location": asks the browser once, keeps only the rounded position, and names it at city level. Never stores the position. */
+export async function locate(geo: Pick<Geolocation, 'getCurrentPosition'> | undefined, reverse: typeof reversePlace = reversePlace): Promise<LocateResult> {
+  const fallback = "We couldn't find your location. Search for your city instead."
+  if (!geo) return { ok: false, message: fallback }
+  let at: [number, number]
+  try {
+    at = await new Promise((res, rej) =>
+      geo.getCurrentPosition((p) => res([round2(p.coords.latitude), round2(p.coords.longitude)]), rej, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }),
+    )
+  } catch (e) {
+    const denied = (e as GeolocationPositionError | undefined)?.code === 1
+    return { ok: false, message: denied ? 'Location permission is off. Search for your city instead, or allow location in your browser settings.' : fallback }
+  }
+  return { ok: true, ...(await reverse(at[0], at[1], 'city')) }
 }

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
 import MiniMap from '../components/MiniMap'
+import PlaceMapPicker from '../components/PlaceMapPicker'
 import PlaceSearch from '../components/PlaceSearch'
 import { birdBySpecies } from '../lib/birds'
 import { startSession } from '../lib/flight'
@@ -10,7 +11,7 @@ import { fmtKm, haversineKm } from '../lib/geo'
 import { COGNITO_CONFIGURED } from '../lib/auth'
 import { avatarColor, initials, uploadAttachment, writeLetter } from '../lib/social'
 import { getState, useStore, type Letter, type Place } from '../lib/store'
-import { createTrip } from '../lib/trips'
+import { createTrip, tripProblem } from '../lib/trips'
 
 const MAX_CHARS = 600
 const MAX_BYTES = 5 * 1024 * 1024
@@ -51,6 +52,8 @@ export default function TripComposer() {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Letter['attachments']>([])
   const [error, setError] = useState('')
+  const [courseError, setCourseError] = useState('')
+  const [mapOpen, setMapOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [listening, setListening] = useState(false)
   const rec = useRef<SR | null>(null)
@@ -135,7 +138,12 @@ export default function TripComposer() {
 
   function start(withLetter: boolean) {
     if (!dest) {
-      setError(mode === 'friend' ? 'Choose a friend to fly to.' : 'Pick a place to fly to first.')
+      setCourseError(mode === 'friend' ? 'Choose a friend to fly to.' : 'Pick a place to fly to first.')
+      return
+    }
+    const problem = tripProblem(dest) // before the letter is written, so a refused trip leaves no letter behind
+    if (problem) {
+      setCourseError(problem)
       return
     }
     // the letter first, so the trip (and POST /trips) carries its id
@@ -210,7 +218,7 @@ export default function TripComposer() {
                 type="button"
                 role="radio"
                 aria-checked={mode === m}
-                onClick={() => setMode(m)}
+                onClick={() => (setMode(m), setCourseError(''))}
                 className={`flex flex-1 items-center justify-center gap-1 rounded-full py-1.5 text-[12px] tracking-[0.36px] ${mode === m ? 'bg-white font-bold text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'font-semibold text-ink-2'}`}
               >
                 {m === 'place' ? 'A place' : 'A friend'}
@@ -221,7 +229,25 @@ export default function TripComposer() {
 
           {mode === 'place' ? (
             <div className="pt-2">
-              <PlaceSearch kind="any" value={place} onChange={setPlace} />
+              <div className="flex items-center gap-2">
+                <PlaceSearch kind="any" value={place} onChange={(p) => (setPlace(p), setCourseError(''))} />
+                <button
+                  type="button"
+                  onClick={() => setMapOpen((o) => !o)}
+                  aria-expanded={mapOpen}
+                  className="shrink-0 rounded-full bg-white px-3 py-2.5 text-[12px] font-bold tracking-[0.36px] text-[#8e4d31] shadow-[0_1px_1px_rgba(0,0,0,0.05)]"
+                >
+                  Pick on map
+                </button>
+              </div>
+              {mapOpen && (
+                <PlaceMapPicker
+                  kind="any"
+                  initial={home ? [home.lat, home.lng] : undefined}
+                  onPick={(p) => (setPlace(p), setCourseError(''), setMapOpen(false))}
+                  onClose={() => setMapOpen(false)}
+                />
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 pt-2">
@@ -240,7 +266,7 @@ export default function TripComposer() {
                   <button
                     key={f.id}
                     type="button"
-                    onClick={() => setFriendId(f.id)}
+                    onClick={() => (setFriendId(f.id), setCourseError(''))}
                     aria-pressed={on}
                     className={`flex items-center justify-between rounded-xl p-2.5 text-left ${on ? 'bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'bg-[rgba(239,231,225,0.6)] opacity-80'}`}
                   >
@@ -267,6 +293,12 @@ export default function TripComposer() {
                 )
               })}
             </div>
+          )}
+
+          {courseError && (
+            <p role="alert" className="px-1 text-[13px] text-[#ba1a1a]">
+              {courseError}
+            </p>
           )}
 
           {dest && home && (

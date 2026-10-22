@@ -3,8 +3,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
 import Header from '../components/Header'
 import MiniMap from '../components/MiniMap'
+import PlaceMapPicker from '../components/PlaceMapPicker'
 import Flag from '../components/Flag'
-import { placeLabel, toCity, type PlaceSource } from '../lib/places'
+import { locate, placeLabel, toCity, type PlaceSource } from '../lib/places'
 import { createPlaceSearch, HOME_SEARCH_KIND } from '../lib/placeSearch'
 import { placeDetail, PlaceSourceNote } from '../components/PlaceSearch'
 import { getState, setState, type Place } from '../lib/store'
@@ -25,6 +26,9 @@ export default function HomeCity() {
   )
   const [searched, setSearched] = useState(false)
   const [source, setSource] = useState<PlaceSource>('server')
+  const [mapOpen, setMapOpen] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const [note, setNote] = useState('') // why "Use my location" did not pick, or how far the nearest city is
   const searcher = useRef<ReturnType<typeof createPlaceSearch>>(null)
   searcher.current ??= createPlaceSearch({
     kind: HOME_SEARCH_KIND,
@@ -47,6 +51,19 @@ export default function HomeCity() {
     searcher.current!.cancel()
     setSelected(p)
     setText(placeLabel(p))
+    setNote('')
+  }
+
+  async function useMyLocation() {
+    setLocating(true)
+    setNote('')
+    const r = await locate(navigator.geolocation) // only the rounded position is used, and it is never stored
+    setLocating(false)
+    if (!r.ok) return setNote(r.message)
+    if (!r.place) return setNote("We couldn't name a city there. Search for your city instead.")
+    pick(r.place)
+    setMapOpen(false)
+    if (r.approxKm !== undefined && r.approxKm > 50) setNote(`Nearest city, about ${Math.round(r.approxKm).toLocaleString('en-US')} km away`)
   }
 
   function clear() {
@@ -109,6 +126,38 @@ export default function HomeCity() {
               </button>
             )}
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setMapOpen((o) => !o)}
+              aria-expanded={mapOpen}
+              className="rounded-full bg-white px-3.5 py-2 text-[12px] font-bold tracking-[0.36px] text-[#8e4d31] shadow-[0_1px_1px_rgba(0,0,0,0.05)]"
+            >
+              Pick on map
+            </button>
+            <button
+              type="button"
+              onClick={() => void useMyLocation()}
+              disabled={locating}
+              className="rounded-full bg-white px-3.5 py-2 text-[12px] font-bold tracking-[0.36px] text-[#8e4d31] shadow-[0_1px_1px_rgba(0,0,0,0.05)] disabled:opacity-60"
+            >
+              {locating ? 'Locating…' : 'Use my location'}
+            </button>
+          </div>
+          {note && (
+            <p role="status" className="px-1 pt-1.5 text-[13px] text-ink-2">
+              {note}
+            </p>
+          )}
+          {mapOpen && (
+            <PlaceMapPicker
+              kind={HOME_SEARCH_KIND}
+              initial={selected ? [selected.lat, selected.lng] : undefined}
+              onPick={(p) => (pick(p), setMapOpen(false))}
+              onClose={() => setMapOpen(false)}
+            />
+          )}
 
           {(showList || selected) && (
             <div className="mt-2 flex flex-col gap-1 rounded-2xl bg-white p-2 shadow-[0_8px_24px_-4px_rgba(62,58,54,0.12)]">
