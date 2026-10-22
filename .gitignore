@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .superpowers/
+api/node_modules
+api/.aws-sam
+.aws-sam
