@@ -189,7 +189,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : now
     const p = computeProgress({ ...s, leftAtMs: s.leftAtMs ?? endMs }, trip, endMs)
     const spot = pointAtKm(trip.route, p.km).pt
-    const story = await buildStory(spot[0], spot[1], p.km)
+    const story = await buildStory(spot[0], ((spot[1] + 540) % 360) - 180, p.km) // routes carry unwrapped longitudes
     const { storyId: id, sessionId } = flightIds(s)
     const cur = getState()
     const stampKnown = cur.stamps.some((x) => x.cc === story.cc)

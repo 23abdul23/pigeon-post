@@ -57,7 +57,10 @@ export function greatCircle(a: Pt, b: Pt, stepKm = 50): Pt[] {
     const x = A * Math.cos(rad(a[0])) * Math.cos(rad(a[1])) + B * Math.cos(rad(b[0])) * Math.cos(rad(b[1]))
     const y = A * Math.cos(rad(a[0])) * Math.sin(rad(a[1])) + B * Math.cos(rad(b[0])) * Math.sin(rad(b[1]))
     const z = A * Math.sin(rad(a[0])) + B * Math.sin(rad(b[0]))
-    out.push([deg(Math.atan2(z, Math.hypot(x, y))), deg(Math.atan2(y, x))])
+    const last = out.length ? out[out.length - 1][1] : a[1]
+    const lng = Math.hypot(x, y) < 1e-12 ? last : deg(Math.atan2(y, x)) // at a pole every longitude is the same point
+    // unwrapped like landRoute's, so a hop over the antimeridian draws as one short line, not a world-wide jump
+    out.push([deg(Math.atan2(z, Math.hypot(x, y))), lng + 360 * Math.round((last - lng) / 360)])
   }
   return out
 }

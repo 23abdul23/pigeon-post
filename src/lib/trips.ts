@@ -8,15 +8,30 @@ export function planRoute(from: Pt, to: Pt): Pt[] {
   return haversineKm({ lat: from[0], lng: from[1] }, { lat: to[0], lng: to[1] }) < 300 ? greatCircle(from, to, 50) : landRoute(from, to)
 }
 
+/** A trip that cannot start; `message` is written for the user. */
+export class TripError extends Error {
+  name = 'TripError'
+}
+
+export const MIN_TRIP_KM = 50
+
+/** Why a trip to `dest` cannot start, in words for the user; null when it can. */
+export function tripProblem(dest: { lat: number; lng: number }): string | null {
+  const home = getState().homeCity
+  return home && haversineKm(home, dest) < MIN_TRIP_KM ? 'That is too close to home to send a bird. Pick somewhere farther away.' : null
+}
+
 export function createTrip(dest: Place, opts: { friendId?: string; letterIds?: string[] } = {}): Trip {
   const home = getState().homeCity
   if (!home) throw new Error('Home city is required before starting a trip')
+  const problem = tripProblem(dest)
+  if (problem) throw new TripError(problem)
   const route = planRoute([home.lat, home.lng], [dest.lat, dest.lng])
   const trip: Trip = {
     id: crypto.randomUUID(),
     dest,
     route,
-    routeKm: Math.max(50, routeLengthKm(route)),
+    routeKm: Math.max(MIN_TRIP_KM, routeLengthKm(route)), // the floor only matters for trips planned before the distance check
     progressKm: 0,
     status: 'OUTBOUND',
     legs: 0,

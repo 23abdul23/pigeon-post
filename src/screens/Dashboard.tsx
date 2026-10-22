@@ -8,7 +8,7 @@ import { deviceId } from '../lib/device'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { useStore, type Place } from '../lib/store'
 import { flightRole, startReturn, startSession } from '../lib/flight'
-import { createTrip } from '../lib/trips'
+import { createTrip, tripProblem } from '../lib/trips'
 
 const DURATIONS = [15, 25, 45, 60]
 const RANGES = ['This week', 'Month', 'All time'] as const
@@ -67,8 +67,9 @@ export default function Dashboard() {
       setError('Pick a place to fly to first.')
       return
     }
-    if (home && haversineKm(home, dest) < 20) {
-      setError('That is too close to home. Try somewhere farther.')
+    const problem = tripProblem(dest)
+    if (problem) {
+      setError(problem)
       return
     }
     setError('')

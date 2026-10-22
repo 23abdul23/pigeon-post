@@ -9,45 +9,66 @@ import { haversineKm, type Pt } from './geo'
 const ROWS = 180
 const COLS = 360
 const WATER_COST = 3
-const isLand = (r: number, c: number) => (mask as string[])[r][c] === '1'
+const LAND = Uint8Array.from((mask as string[]).join(''), (ch) => (ch === '1' ? 1 : 0))
+const isLand = (n: number) => LAND[n] === 1
 const cellOf = ([lat, lng]: Pt): [number, number] => [
   Math.min(ROWS - 1, Math.max(0, Math.floor(90 - lat))),
   (((Math.floor(lng + 180) % COLS) + COLS) % COLS),
 ]
 const centre = (r: number, c: number): Pt => [89.5 - r, c - 179.5]
+// km from a cell in row r to its neighbour (dr, dc); depends only on the row, so it is computed once
+const STEP = Array.from({ length: ROWS }, (_, r) =>
+  [-1, 0, 1].map((dr) => [-1, 0, 1].map((dc) => (r + dr < 0 || r + dr >= ROWS ? 0 : haversineKm({ lat: 89.5 - r, lng: 0 }, { lat: 89.5 - r - dr, lng: dc })))),
+)
+const stepKm = (r: number, dr: number, dc: number) => STEP[r][dr + 1][dc + 1]
 
+/** Binary min-heap of (key, cell) in typed arrays: no per-push allocation, which dominates a whole-grid search. */
 class Heap {
-  private a: [number, number][] = []
-  get size() { return this.a.length }
-  push(item: [number, number]) {
-    const a = this.a
-    a.push(item)
-    let i = a.length - 1
+  private k = new Float64Array(1024)
+  private v = new Int32Array(1024)
+  size = 0
+  /** key of the entry the last pop() returned */
+  key = 0
+  push(key: number, val: number) {
+    if (this.size === this.k.length) {
+      const k = new Float64Array(this.size * 2)
+      const v = new Int32Array(this.size * 2)
+      k.set(this.k)
+      v.set(this.v)
+      this.k = k
+      this.v = v
+    }
+    const { k, v } = this
+    let i = this.size++
     while (i > 0) {
       const p = (i - 1) >> 1
-      if (a[p][0] <= a[i][0]) break
-      ;[a[p], a[i]] = [a[i], a[p]]
+      if (k[p] <= key) break
+      k[i] = k[p]
+      v[i] = v[p]
       i = p
     }
+    k[i] = key
+    v[i] = val
   }
-  pop(): [number, number] {
-    const a = this.a
-    const top = a[0]
-    const last = a.pop()!
-    if (a.length) {
-      a[0] = last
-      let i = 0
-      for (;;) {
-        const l = 2 * i + 1
-        const r = l + 1
-        let m = i
-        if (l < a.length && a[l][0] < a[m][0]) m = l
-        if (r < a.length && a[r][0] < a[m][0]) m = r
-        if (m === i) break
-        ;[a[m], a[i]] = [a[i], a[m]]
-        i = m
-      }
+  pop(): number {
+    const { k, v } = this
+    const top = v[0]
+    this.key = k[0]
+    const n = --this.size
+    const key = k[n]
+    const val = v[n]
+    let i = 0
+    for (;;) {
+      const l = 2 * i + 1
+      if (l >= n) break
+      const m = l + 1 < n && k[l + 1] < k[l] ? l + 1 : l
+      if (k[m] >= key) break
+      k[i] = k[m]
+      v[i] = v[m]
+      i = m
     }
+    k[i] = key
+    v[i] = val
     return top
   }
 }
@@ -76,32 +97,38 @@ export function landRoute(from: Pt, to: Pt): Pt[] {
   if (start === goal) return [from, to]
 
   const g = new Float64Array(ROWS * COLS).fill(Infinity)
+  const hc = new Float64Array(ROWS * COLS).fill(-1) // heuristic, computed once per cell
   const prev = new Int32Array(ROWS * COLS).fill(-1)
   const open = new Heap()
-  const h = (r: number, c: number) => haversineKm({ lat: centre(r, c)[0], lng: centre(r, c)[1] }, { lat: to[0], lng: to[1] })
+  const h = (n: number) => {
+    if (hc[n] < 0) {
+      const [la, ln] = centre(Math.floor(n / COLS), n % COLS)
+      hc[n] = haversineKm({ lat: la, lng: ln }, { lat: to[0], lng: to[1] })
+    }
+    return hc[n]
+  }
   g[start] = 0
-  open.push([h(sr, sc), start])
+  open.push(h(start), start)
 
   while (open.size) {
-    const [, n] = open.pop()
+    const n = open.pop()
     if (n === goal) break
+    if (open.key > g[n] + hc[n] + 1e-6) continue // stale entry: this cell was reached more cheaply since
     const r = Math.floor(n / COLS)
     const c = n % COLS
     const base = g[n]
     for (let dr = -1; dr <= 1; dr++) {
+      const nr = r + dr
+      if (nr < 0 || nr >= ROWS) continue
       for (let dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue
-        const nr = r + dr
-        if (nr < 0 || nr >= ROWS) continue
         const nc = (c + dc + COLS) % COLS
         const m = nr * COLS + nc
-        const [la, ln] = centre(r, c)
-        const [lb, lm] = centre(nr, nc)
-        const step = haversineKm({ lat: la, lng: ln }, { lat: lb, lng: lm }) * (isLand(nr, nc) || m === goal ? 1 : WATER_COST)
+        const step = stepKm(r, dr, dc) * (isLand(m) || m === goal ? 1 : WATER_COST)
         if (base + step < g[m]) {
           g[m] = base + step
           prev[m] = n
-          open.push([g[m] + h(nr, nc), m])
+          open.push(g[m] + h(m), m)
         }
       }
     }
