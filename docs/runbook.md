@@ -109,8 +109,7 @@ node scripts/empty-buckets.mjs && sam delete --stack-name pigeon-post --profile 
 ## Things that are easy to forget
 
 - **Bundle smoke test is a deploy blocker**: after `sam build`, `node scripts/smoke-bundles.mjs` imports every built handler. A handler that fails to import (e.g. `Dynamic require of "node:https" is not supported`) crashes at Lambda init, so never deploy past a failure. The ESM bundles need the `Banner` (`createRequire`) in each function's `BuildProperties`; keep it on new functions.
-- **Local `sam build` needs esbuild on PATH**: esbuild is an `api/` devDependency, so run `npm --prefix api ci` and put `api/node_modules/.bin` on PATH first (PowerShell: `$env:Path = (Resolve-Path api
-ode_modules.bin).Path + ';' + $env:Path`), then `sam build --config-env ci`.
+- **Local `sam build` needs esbuild on PATH**: esbuild is an `api/` devDependency, so run `npm --prefix api ci` and put `api/node_modules/.bin` on PATH first (PowerShell: `$env:Path = (Resolve-Path api/node_modules/.bin).Path + ';' + $env:Path`), then `sam build --config-env ci`.
 
 - **SES is optional**: leave `SES_SENDER_EMAIL` empty to disable email letter alerts (the in-app mailbox still delivers). **SES sandbox**: until AWS grants production access, "A letter arrived" emails go only to verified identities. Verify test recipients, or request production access in the SES console.
 - **Bedrock model id**: confirm `BedrockModelId` (default `us.anthropic.claude-haiku-4-5-20251001-v1:0`) matches the inference profile with access granted in the Bedrock console; a wrong id makes story polish fail.
