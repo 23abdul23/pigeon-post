@@ -56,48 +56,59 @@ export const handler = route(async (sub, event) => {
     return json(200, s.result)
   }
 
-  const seen = await replay()
-  if (seen) return seen
-  const tripRow = await get(tripSk(tripId)) // the caller's own partition, so someone else's trip is simply not there
-  if (!tripRow) return fail(404, 'trip not found')
-  const trip = clean<StoredTrip>(tripRow)
-  const stampRow = await get(stampSk(storyIn.cc))
+  // A cancelled transaction (lost lock to another tab/device, transaction conflict, throttling) is retried on fresh
+  // reads; session-id idempotency keeps that safe. Still failing: 503, which the client outbox retries later.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const seen = await replay()
+    if (seen) return seen
+    const tripRow = await get(tripSk(tripId)) // the caller's own partition, so someone else's trip is simply not there
+    if (!tripRow) return fail(404, 'trip not found')
+    const trip = clean<StoredTrip>(tripRow)
+    const stampRow = await get(stampSk(storyIn.cc))
 
-  const now = Date.now()
-  const progressKm = Math.min(trip.routeKm, trip.progressKm + clampKm(kmGained, startMs, endMs))
-  const arrived = progressKm >= trip.routeKm
-  // Same rules as the client's landSession (src/lib/flight.ts).
-  const status: Trip['status'] = !arrived ? trip.status : trip.status === 'RETURNING' || !trip.friendId ? 'DONE' : 'DELIVERED'
-  const nextTrip: StoredTrip = { ...trip, progressKm, legs: trip.legs + 1, status }
-  const stamp: Stamp = stampRow
-    ? { ...clean<Stamp>(stampRow), visits: Number(stampRow.visits) + 1 }
-    : { cc: storyIn.cc, country: storyIn.country, firstMs: now, visits: 1 }
-  const story: Story = { ...storyIn, km: progressKm, dateMs: now, saved: false }
-  const log: SessionLog = { id: sessionId, tripId, startMs, endMs, km: progressKm - trip.progressKm, reason: b.reason as SessionLog['reason'] }
-  // stored on the session row so a replay returns it unchanged
-  const result: SessionResult = { trip: tripOut(nextTrip), stamp, story, delivered: [], pickedUp: [] }
+    const now = Date.now()
+    const progressKm = Math.min(trip.routeKm, trip.progressKm + clampKm(kmGained, startMs, endMs))
+    const arrived = progressKm >= trip.routeKm
+    // Same rules as the client's landSession (src/lib/flight.ts).
+    const status: Trip['status'] = !arrived ? trip.status : trip.status === 'RETURNING' || !trip.friendId ? 'DONE' : 'DELIVERED'
+    const nextTrip: StoredTrip = { ...trip, progressKm, legs: trip.legs + 1, status }
+    const stamp: Stamp = stampRow
+      ? { ...clean<Stamp>(stampRow), visits: Number(stampRow.visits) + 1 }
+      : { cc: storyIn.cc, country: storyIn.country, firstMs: now, visits: 1 }
+    const story: Story = { ...storyIn, km: progressKm, dateMs: now, saved: false }
+    const log: SessionLog = { id: sessionId, tripId, startMs, endMs, km: progressKm - trip.progressKm, reason: b.reason as SessionLog['reason'] }
+    // stored on the session row so a replay returns it unchanged
+    const result: SessionResult = { trip: tripOut(nextTrip), stamp, story, delivered: [], pickedUp: [] }
 
-  const items: TransactItem[] = [
-    { Put: { TableName, Item: { PK, SK: sessionSk(sessionId), ...log, result }, ConditionExpression: 'attribute_not_exists(PK)' } },
-    // optimistic lock: a concurrent session on this trip makes one of the two retry instead of losing progress
-    { Put: { TableName, Item: { PK, SK: tripSk(tripId), ...nextTrip }, ConditionExpression: 'legs = :legs', ExpressionAttributeValues: { ':legs': trip.legs } } },
-    {
-      Put: {
-        TableName,
-        Item: { PK, SK: stampSk(stamp.cc), ...stamp },
-        ...(stampRow ? { ConditionExpression: 'visits = :visits', ExpressionAttributeValues: { ':visits': stampRow.visits } } : { ConditionExpression: 'attribute_not_exists(PK)' }),
+    const items: TransactItem[] = [
+      { Put: { TableName, Item: { PK, SK: sessionSk(sessionId), ...log, result }, ConditionExpression: 'attribute_not_exists(PK)' } },
+      // optimistic lock on what we read: a concurrent session or return makes this attempt retry instead of overwriting it
+      {
+        Put: {
+          TableName,
+          Item: { PK, SK: tripSk(tripId), ...nextTrip },
+          ConditionExpression: 'legs = :legs AND #s = :status AND progressKm = :progress',
+          ExpressionAttributeNames: { '#s': 'status' },
+          ExpressionAttributeValues: { ':legs': trip.legs, ':status': trip.status, ':progress': trip.progressKm },
+        },
       },
-    },
-    { Put: { TableName, Item: { PK, SK: storySk(story.id), ...story }, ConditionExpression: 'attribute_not_exists(PK)' } },
-  ]
-  // Task 6 adds the arrival step here: when `arrived`, append the letter writes to `items` and fill result.delivered / pickedUp.
+      {
+        Put: {
+          TableName,
+          Item: { PK, SK: stampSk(stamp.cc), ...stamp },
+          ...(stampRow ? { ConditionExpression: 'visits = :visits', ExpressionAttributeValues: { ':visits': stampRow.visits } } : { ConditionExpression: 'attribute_not_exists(PK)' }),
+        },
+      },
+      { Put: { TableName, Item: { PK, SK: storySk(story.id), ...story }, ConditionExpression: 'attribute_not_exists(PK)' } },
+    ]
+    // Task 6 adds the arrival step here: when `arrived`, append the letter writes to `items` and fill result.delivered / pickedUp.
 
-  try {
-    await ddb.send(new TransactWriteCommand({ TransactItems: items }))
-  } catch (e) {
-    if ((e as Error)?.name !== 'TransactionCanceledException') throw e
-    // a concurrent replay of this session won the race: return what it stored
-    return (await replay()) ?? fail(409, 'trip changed meanwhile; retry')
+    try {
+      await ddb.send(new TransactWriteCommand({ TransactItems: items }))
+      return json(200, result)
+    } catch (e) {
+      if ((e as Error)?.name !== 'TransactionCanceledException') throw e
+    }
   }
-  return json(200, result)
+  return fail(503, 'trip is busy; retry')
 })

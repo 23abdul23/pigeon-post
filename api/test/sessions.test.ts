@@ -137,6 +137,51 @@ describe('POST /trips/{id}/sessions', () => {
     expect(await call(postSession, ev({ id: 't1', body: session('s1') }))).toEqual(first)
     expect(row('USER#u1', 'TRIP#t1')!.progressKm).toBe(500)
   })
+
+  // Cancels (without writing) the first `n` transactions, after `before` mutates the table like another device would.
+  const cancelFirst = (n: number, before: () => void = () => {}) => {
+    let left = n
+    ddb.on(TransactWriteCommand).callsFake((input) => {
+      if (left-- > 0) {
+        before()
+        throw new TransactionCanceledException({ message: 'cancelled', $metadata: {}, CancellationReasons: [{ Code: 'None' }, { Code: 'ConditionalCheckFailed' }] })
+      }
+      for (const t of input.TransactItems) table.set(key(t.Put.Item), t.Put.Item)
+      return {}
+    })
+  }
+
+  it('session_retries_with_fresh_reads_when_the_transaction_is_cancelled', async () => {
+    seedTrip()
+    // another tab landed a session on this trip between our read and our write: the legs lock fails once
+    cancelFirst(1, () => seedTrip({ progressKm: 100, legs: 1 }))
+    const r = await call(postSession, ev({ id: 't1', body: session('s1') }))
+    expect(r.status).toBe(200)
+    expect(transacts()).toHaveLength(2)
+    expect(r.body.trip).toMatchObject({ progressKm: 600, legs: 2 }) // recomputed on the fresh trip, counted once
+    expect(row('USER#u1', 'TRIP#t1')).toMatchObject({ progressKm: 600, legs: 2 })
+    expect(row('USER#u1', 'STAMP#HR')!.visits).toBe(1)
+    expect(await call(postSession, ev({ id: 't1', body: session('s1') }))).toEqual(r) // and a replay is still a replay
+    expect(transacts()).toHaveLength(2)
+  })
+
+  it('session_returns_503_not_409_when_the_transaction_keeps_failing', async () => {
+    seedTrip()
+    cancelFirst(99)
+    const r = await call(postSession, ev({ id: 't1', body: session('s1') }))
+    expect(r.status).toBe(503) // retryable: the outbox keeps it
+    expect(transacts()).toHaveLength(3)
+    expect(row('USER#u1', 'SESSION#s1')).toBeUndefined()
+  })
+
+  it('session_trip_write_is_conditional_on_status_and_progress', async () => {
+    seedTrip({ status: 'DELIVERED', progressKm: 1000, friendId: 'f1', routeKm: 1000 })
+    await call(postSession, ev({ id: 't1', body: session('s1') }))
+    const tripPut = transacts()[0].args[0].input.TransactItems!.map((t) => t.Put!).find((p) => p.Item!.SK === 'TRIP#t1')!
+    // a stale session (read before a concurrent return) must not overwrite the RETURNING trip
+    expect(tripPut.ConditionExpression).toBe('legs = :legs AND #s = :status AND progressKm = :progress')
+    expect(tripPut.ExpressionAttributeValues).toEqual({ ':legs': 0, ':status': 'DELIVERED', ':progress': 1000 })
+  })
 })
 
 describe('POST /trips and /trips/{id}/return', () => {
