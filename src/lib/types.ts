@@ -43,8 +43,8 @@ export type Letter = {
   cc: string
   toId: string
   text: string
-  /** dataUrl is kept only for small images so the letter can show them */
-  attachments: { name: string; size: number; type?: string; dataUrl?: string }[]
+  /** `key` is the S3 object (downloaded via a presigned URL); dataUrl is kept only for small local images (offline demo) */
+  attachments: { name: string; size: number; type?: string; dataUrl?: string; key?: string }[]
   status: 'WAITING' | 'CARRIED' | 'DELIVERED' | 'OPENED'
   saved?: boolean
   dateMs: number

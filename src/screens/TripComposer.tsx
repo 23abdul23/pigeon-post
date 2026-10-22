@@ -7,13 +7,15 @@ import PlaceSearch from '../components/PlaceSearch'
 import { birdBySpecies } from '../lib/birds'
 import { startSession } from '../lib/flight'
 import { fmtKm, haversineKm } from '../lib/geo'
-import { avatarColor, initials, writeLetter } from '../lib/social'
+import { COGNITO_CONFIGURED } from '../lib/auth'
+import { avatarColor, initials, uploadAttachment, writeLetter } from '../lib/social'
 import { getState, useStore, type Letter, type Place } from '../lib/store'
 import { createTrip } from '../lib/trips'
 
 const MAX_CHARS = 600
 const MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED = ['image/png', 'image/jpeg', 'application/pdf']
+const MAX_FILES = 3 // the API's limit per letter
 
 type SR = { start: () => void; stop: () => void; continuous: boolean; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null }
 const speechCtor = (): (new () => SR) | null => {
@@ -49,6 +51,7 @@ export default function TripComposer() {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Letter['attachments']>([])
   const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
   const [listening, setListening] = useState(false)
   const rec = useRef<SR | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -99,7 +102,12 @@ export default function TripComposer() {
     if (!list) return
     setError('')
     const next = [...files]
+    setUploading(true)
     for (const f of Array.from(list)) {
+      if (next.length >= MAX_FILES) {
+        setError(`A letter can carry up to ${MAX_FILES} files.`)
+        break
+      }
       if (!ALLOWED.includes(f.type)) {
         setError(`${f.name} isn't allowed. Use a PNG, JPG or PDF.`)
         continue
@@ -108,8 +116,19 @@ export default function TripComposer() {
         setError(`${f.name} is over 5 MB. Choose a smaller file.`)
         continue
       }
-      next.push({ name: f.name, size: f.size, type: f.type, dataUrl: await readDataUrl(f) })
+      const dataUrl = await readDataUrl(f)
+      if (!COGNITO_CONFIGURED) {
+        next.push({ name: f.name, size: f.size, type: f.type, dataUrl })
+        continue
+      }
+      try {
+        // the file goes straight to private storage; the letter carries its key (and a small local preview)
+        next.push({ ...(await uploadAttachment(f)), dataUrl })
+      } catch {
+        setError(`${f.name} could not be uploaded. Check your connection and try again.`)
+      }
     }
+    setUploading(false)
     setFiles(next)
     if (fileInput.current) fileInput.current.value = ''
   }
@@ -320,9 +339,9 @@ export default function TripComposer() {
                     <img src="/assets/tc-paperclip.svg" alt="" className="h-[12.5px] w-[7.8px]" />
                     Attached Leaves &amp; Notes
                   </span>
-                  <button type="button" onClick={() => fileInput.current?.click()} className="flex items-center gap-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
+                  <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="flex items-center gap-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
                     <img src="/assets/tc-plus.svg" alt="" className="size-2" />
-                    Add file
+                    {uploading ? 'Uploading...' : 'Add file'}
                   </button>
                   <input ref={fileInput} type="file" accept=".png,.jpg,.jpeg,.pdf" multiple hidden onChange={(e) => void addFiles(e.target.files)} />
                 </div>
@@ -383,11 +402,11 @@ export default function TripComposer() {
               </button>
             )}
             {letterOnly ? (
-              <button type="button" onClick={saveLetterOnly} className="flex items-center gap-2 rounded-full bg-[#d58767] px-6 py-2.5 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <button type="button" onClick={saveLetterOnly} disabled={uploading} className="flex disabled:opacity-60 items-center gap-2 rounded-full bg-[#d58767] px-6 py-2.5 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
                 Send letter
               </button>
             ) : (
-              <button type="button" onClick={() => start(true)} className="flex items-center gap-2 rounded-full bg-[#d58767] px-6 py-2.5 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
+              <button type="button" onClick={() => start(true)} disabled={uploading} className="flex disabled:opacity-60 items-center gap-2 rounded-full bg-[#d58767] px-6 py-2.5 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
                 Start flight
                 <img src="/assets/tc-plane.svg" alt="" className="h-[13.6px] w-[15.5px]" />
               </button>

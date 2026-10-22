@@ -1,8 +1,10 @@
+import { COGNITO_CONFIGURED } from './auth'
+import { DEMO_MODE } from './demo'
 import { KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
 import { send } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
-import { getState, setState, type ActiveSession, type Landing, type SessionResult, type Trip } from './store'
+import { getState, setState, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
 
 export type Progress = { km: number; remainingMs: number; elapsedMs: number; done: boolean; arrived: boolean }
 
@@ -32,10 +34,17 @@ export function startReturn(durationMin = 25): Trip | null {
   return back
 }
 
+/** Replaces letters by id and adds new ones (picked up on arrival) at the top. */
+const upsert = (letters: Letter[], next: Letter[]) => {
+  const byId = new Map(next.map((l) => [l.id, l]))
+  return [...next.filter((l) => !letters.some((x) => x.id === l.id)), ...letters.map((l) => byId.get(l.id) ?? l)]
+}
+
 /** The server's word on a landed session (the local result stays if the call failed and was queued). */
 function adoptSession(r: SessionResult, sent: Trip) {
   const stamp = r.stamp
   setState((st) => ({
+    letters: upsert(st.letters, [...r.delivered, ...r.pickedUp]),
     // the server keeps no route, so keep ours; and leave the trip alone if it moved on meanwhile (e.g. already flying home)
     trip: st.trip === sent ? { ...sent, ...r.trip, route: sent.route } : st.trip,
     stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, saved: x.saved } : x)),
@@ -68,15 +77,17 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const arrived = p.arrived
     let status: Trip['status'] = trip.status
     let letters = cur.letters
+    const offlineDemo = DEMO_MODE && !COGNITO_CONFIGURED
     if (arrived && trip.status === 'RETURNING') {
-      // home again: the replies the bird carried are ready to open
-      letters = letters.map((l) => (l.toId === 'me' && l.status === 'CARRIED' ? { ...l, status: 'DELIVERED' as const } : l))
+      // home again: the replies the bird carried are ready to open (with the API, its reply says which ones this bird carried)
+      if (offlineDemo) letters = letters.map((l) => (l.toId === 'me' && l.status === 'CARRIED' ? { ...l, status: 'DELIVERED' as const } : l))
       status = 'DONE'
     } else if (arrived && trip.friendId) {
       // at the friend's city: hand over my letters and load their reply
       letters = letters.map((l) => (l.fromId === 'me' && l.toId === trip.friendId && l.status === 'CARRIED' ? { ...l, status: 'DELIVERED' as const } : l))
       const friend = cur.friends.find((f) => f.id === trip.friendId)
-      if (friend) letters = [replyFrom(friend), ...letters]
+      // a real friend's reply only exists if they wrote one; the API returns it in `pickedUp`
+      if (friend && offlineDemo) letters = [replyFrom(friend), ...letters]
       status = 'DELIVERED'
     } else if (arrived) {
       status = 'DONE'

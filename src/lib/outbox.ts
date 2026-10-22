@@ -32,7 +32,9 @@ export function enqueue(op: Op): void {
   save([...q().filter((o) => o.id !== op.id), { ...op, owner: currentSub() ?? undefined }])
 }
 
-export const pendingOps = () => q().length
+let sending = 0
+/** Queued writes plus any `send` the server has not answered yet: until then, `GET /state` may not reflect them. */
+export const pendingOps = () => q().length + sending
 
 /** On sign-out: queued ops belong to this user and must not be sent with the next user's token. */
 export const clearOutbox = () => save([])
@@ -81,11 +83,14 @@ export function send<T>(op: Op): Promise<T | null> {
   if (!COGNITO_CONFIGURED) return Promise.resolve(null)
   const p = chain.then(async () => {
     if (!q().length) {
+      sending++
       try {
         return await api<T>(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
       } catch (e) {
         console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
         if (permanent(e)) return null
+      } finally {
+        sending--
       }
     }
     enqueue(op)

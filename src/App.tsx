@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setState, useStore } from './lib/store'
-import { useServerSync } from './lib/sync'
+import { useMailPoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
 import ChooseBird from './screens/ChooseBird'
 import Dashboard from './screens/Dashboard'
@@ -32,6 +32,7 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   const auth = useAuth()
   // Signed-in users get their profile from the server (GET /state) before the onboarding checks below.
   const synced = useServerSync(COGNITO_CONFIGURED && auth.status === 'signedIn')
+  useMailPoll(COGNITO_CONFIGURED && auth.status === 'signedIn' && synced)
   // With Cognito the session is the source of truth; mirror it into the store for screens that read `user`.
   useEffect(() => {
     if (COGNITO_CONFIGURED && auth.status === 'signedIn' && !user) {

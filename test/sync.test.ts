@@ -25,11 +25,11 @@ describe('sync', () => {
   })
 
   it('hydrate_null_profile_sends_user_to_onboarding', () => {
-    setState({ homeCity: city, bird: { species: 'stork', name: 'Pip' }, letters: [{ id: 'keep' } as never] })
-    hydrate({ ...empty, profile: null })
+    setState({ homeCity: city, bird: { species: 'stork', name: 'Pip' }, letters: [{ id: 'local' } as never] })
+    hydrate({ ...empty, profile: null, letters: [{ id: 'srv' } as never] })
     expect(getState().homeCity).toBeNull()
     expect(getState().bird).toBeNull()
-    expect(getState().letters).toHaveLength(1) // not server-owned yet: left alone
+    expect(getState().letters.map((l) => l.id)).toEqual(['srv']) // server-owned now
   })
 
   it('hydrate_takes_trip_stories_stamps_sessions_from_server', () => {

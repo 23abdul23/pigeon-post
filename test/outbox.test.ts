@@ -7,7 +7,7 @@ vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../sr
 
 import { api, ApiError } from '../src/lib/api'
 import { currentSub, getUserSub } from '../src/lib/auth'
-import { enqueue, flush, send } from '../src/lib/outbox'
+import { enqueue, flush, pendingOps, send } from '../src/lib/outbox'
 
 const apiMock = vi.mocked(api)
 const sent = () => apiMock.mock.calls.map(([path]) => path)
@@ -107,5 +107,16 @@ describe('outbox', () => {
     apiMock.mockRejectedValueOnce(new ApiError(404))
     expect(await send({ id: 'story-save:x', method: 'PUT', path: '/stories/x' })).toBeNull()
     expect(queued()).toEqual([]) // the server will never accept it: not queued
+  })
+
+  it('pendingOps_counts_a_send_still_in_flight', async () => {
+    let reply!: (v: unknown) => void
+    apiMock.mockReturnValueOnce(new Promise((r) => (reply = r)))
+    const p = send({ id: 'letter:l1', method: 'POST', path: '/letters' })
+    await vi.waitFor(() => expect(apiMock).toHaveBeenCalled())
+    expect(pendingOps()).toBe(1) // GET /state must not overwrite a write the server has not seen yet
+    reply({ id: 'l1' })
+    await p
+    expect(pendingOps()).toBe(0)
   })
 })

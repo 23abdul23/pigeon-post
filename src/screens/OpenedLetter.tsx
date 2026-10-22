@@ -1,8 +1,30 @@
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
 import { playRustle } from '../lib/sound'
 import { countryName, haversineKm } from '../lib/geo'
-import { getState, setState, useStore } from '../lib/store'
+import { send } from '../lib/outbox'
+import { attachmentUrl } from '../lib/social'
+import { getState, setState, useStore, type Letter } from '../lib/store'
+
+type Attachment = Letter['attachments'][number]
+
+/** Image source for an attachment: its local preview, else a short-lived presigned URL (fetched once per mount). */
+function useAttachmentUrl(a: Attachment): string | undefined {
+  const [url, setUrl] = useState(a.dataUrl)
+  useEffect(() => {
+    let live = true
+    if (!a.dataUrl) attachmentUrl(a).then((u) => live && setUrl(u), () => {})
+    return () => {
+      live = false
+    }
+  }, [a.dataUrl, a.key]) // eslint-disable-line react-hooks/exhaustive-deps -- the 30 s poll hands us new objects for the same file
+  return url
+}
+
+function AttachedImage({ a }: { a: Attachment }) {
+  return <img src={useAttachmentUrl(a)} alt={a.name} className="h-48 w-full bg-card object-cover" />
+}
 
 export default function OpenedLetter() {
   const { letterId } = useParams()
@@ -17,14 +39,17 @@ export default function OpenedLetter() {
   const mine = letter.fromId === 'me'
   const other = friends.find((f) => f.id === (mine ? letter.toId : letter.fromId))
   const km = home && other ? Math.round(haversineKm(home, other)) : 0
-  const images = letter.attachments.filter((a) => a.dataUrl && a.type?.startsWith('image/'))
-  const files = letter.attachments.filter((a) => !a.type?.startsWith('image/') || !a.dataUrl)
+  const shown = (a: Attachment) => !!(a.dataUrl || a.key)
+  const images = letter.attachments.filter((a) => shown(a) && a.type?.startsWith('image/'))
+  const files = letter.attachments.filter((a) => !a.type?.startsWith('image/') || !shown(a))
   const d = new Date(letter.dateMs)
   const first = (user?.name ?? 'friend').split(' ')[0]
   const sender = letter.fromName.split(' ')[0]
 
   function toggleSave() {
-    setState({ letters: getState().letters.map((l) => (l.id === letter!.id ? { ...l, saved: !l.saved } : l)) })
+    const saved = !letter!.saved
+    setState({ letters: getState().letters.map((l) => (l.id === letter!.id ? { ...l, saved } : l)) })
+    void send({ id: `letter-save:${letter!.id}`, method: 'PUT', path: `/letters/${letter!.id}`, body: { saved } })
   }
 
   async function share() {
@@ -44,10 +69,13 @@ export default function OpenedLetter() {
     }
   }
 
-  function download(a: { name: string; dataUrl?: string }) {
-    if (!a.dataUrl) return
+  async function download(a: Attachment) {
+    const href = await attachmentUrl(a).catch(() => undefined)
+    if (!href) return
     const el = document.createElement('a')
-    el.href = a.dataUrl
+    el.href = href
+    el.target = '_blank' // a presigned URL is cross-origin, where browsers ignore `download`
+    el.rel = 'noopener'
     el.download = a.name
     el.click()
   }
@@ -149,7 +177,7 @@ export default function OpenedLetter() {
                 {images.map((a, i) => (
                   <div key={`${a.name}-${i}`} className="flex flex-col items-center">
                     <figure className={`relative w-[280px] max-w-full bg-white p-3 shadow-[0_6px_16px_-3px_rgba(62,58,54,0.12),0_1px_4px_rgba(62,58,54,0.06)] ${i % 2 ? '-rotate-1' : 'rotate-[1.5deg]'}`}>
-                      <img src={a.dataUrl} alt={a.name} className="h-48 w-full bg-card object-cover" />
+                      <AttachedImage a={a} />
                       <figcaption className="pt-2 text-center font-hand text-[22px] font-medium leading-7 text-ink-2">{a.name.replace(/\.[^.]+$/, '')}</figcaption>
                       <span className="absolute -top-4 left-1/2 h-6 w-28 -translate-x-1/2 -rotate-2 rounded-[1px] bg-[rgba(255,219,205,0.8)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]" aria-hidden />
                     </figure>
@@ -169,9 +197,9 @@ export default function OpenedLetter() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => download(a)}
-                      disabled={!a.dataUrl}
-                      title={a.dataUrl ? 'Download' : 'This file was too large to keep offline'}
+                      onClick={() => void download(a)}
+                      disabled={!shown(a)}
+                      title={shown(a) ? 'Download' : 'This file was too large to keep offline'}
                       className="ml-2 flex shrink-0 items-center gap-1 rounded-full bg-line px-2 py-1.5 text-[12px] font-semibold tracking-[0.36px] text-sage shadow-[0_1px_1px_rgba(0,0,0,0.05)] disabled:opacity-50"
                     >
                       <img src="/assets/ol-download.svg" alt="" className="size-[10.7px]" />

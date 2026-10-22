@@ -125,7 +125,35 @@ export function writeLetter(input: {
     dateMs: Date.now(),
   }
   setState({ letters: [letter, ...st.letters] })
+  // via the outbox so the letter is not lost offline; the server fills in the sender's name and city from the profile
+  const attachments = letter.attachments.filter((a) => a.key)
+  const body = {
+    id: letter.id,
+    toId: letter.toId,
+    text: letter.text,
+    status: letter.status,
+    attachmentKeys: attachments.map((a) => a.key),
+    attachments: attachments.map(({ name, size, type }) => ({ name, size, type })),
+  }
+  void send<Letter>({ id: `letter:${letter.id}`, method: 'POST', path: '/letters', body }).then(
+    (r) => r && setState((s) => ({ letters: s.letters.map((l) => (l.id === r.id ? { ...r, attachments: r.attachments.map((a, i) => ({ ...a, dataUrl: l.attachments[i]?.dataUrl })) } : l)) })),
+  )
   return letter
+}
+
+/** Uploads a file for a letter: presigned PUT to S3 (the API checks type and size). Throws if either step fails. */
+export async function uploadAttachment(file: File): Promise<Letter['attachments'][number]> {
+  const { url, key } = await api<{ url: string; key: string }>('/uploads/presign', { method: 'POST', body: JSON.stringify({ contentType: file.type, size: file.size }) })
+  const res = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file })
+  if (!res.ok) throw new Error(`upload failed (${res.status})`)
+  return { name: file.name, size: file.size, type: file.type, key }
+}
+
+/** Where to show or download an attachment: its local copy, else a short-lived presigned URL from the API. */
+export async function attachmentUrl(a: Letter['attachments'][number]): Promise<string | undefined> {
+  if (a.dataUrl) return a.dataUrl
+  if (!a.key) return undefined
+  return (await api<{ url: string }>(`/uploads/url?key=${encodeURIComponent(a.key)}`)).url
 }
 
 const REPLIES = [
@@ -137,7 +165,7 @@ const REPLIES = [
   '{bird} arrived right on time, and the tea was still warm. I am sending a little something back with the same wings.',
 ]
 
-/** The friend answers a delivered letter; the reply rides home on the returning bird. */
+/** Offline demo only (no Cognito): the friend answers a delivered letter. With real friends a reply exists only if they wrote one. */
 export function replyFrom(friend: Friend): Letter {
   return {
     id: crypto.randomUUID(),

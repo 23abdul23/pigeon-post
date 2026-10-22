@@ -107,7 +107,7 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l())
 }
 
-/** Applies `GET /state` (its trip with the route recomputed). Letters stay local until their task moves them. */
+/** Applies `GET /state` (its trip with the route recomputed). */
 export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): void {
   const p = s.profile
   setState((st) => ({
@@ -116,6 +116,7 @@ export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }): v
     stamps: s.stamps,
     sessions: s.sessions,
     friends: s.friends,
+    letters: s.letters,
     inviteCode: p?.inviteCode ?? null,
     homeCity: p?.homeCity ?? null,
     bird: p?.bird ?? null,

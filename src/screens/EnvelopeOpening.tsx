@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
 import { countryName, haversineKm } from '../lib/geo'
+import { send } from '../lib/outbox'
 import { playRustle } from '../lib/sound'
 import { getState, setState, useStore } from '../lib/store'
 
@@ -35,7 +36,8 @@ export default function EnvelopeOpening() {
   if (!letter) return <Navigate to="/mailbox" replace />
 
   function finish() {
-    setState({ letters: getState().letters.map((l) => (l.id === letterId ? { ...l, status: 'OPENED' as const } : l)) })
+    if (letter!.status === 'DELIVERED') void send({ id: `letter-open:${letterId}`, method: 'POST', path: `/letters/${letterId}/open` })
+    setState({ letters: getState().letters.map((l) => (l.id === letterId && l.status === 'DELIVERED' ? { ...l, status: 'OPENED' as const } : l)) })
     nav(`/mailbox/${letterId}`, { replace: true })
   }
 
