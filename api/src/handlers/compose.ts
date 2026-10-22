@@ -1,5 +1,6 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { createHash } from 'node:crypto'
 import { ddb, isConditionFail, tableName } from '../lib/db'
 import { bad, fail, id, json, parseBody, route, str } from '../lib/http'
 import { composeUsageSk, placePk, placeStorySk, userPk } from '../lib/keys'
@@ -22,8 +23,10 @@ export const handler = route(async (sub, event) => {
   if (!LENSES.includes(lens)) bad('invalid lens')
   const facts = str(b.facts, 4000, 'facts')
   const TableName = tableName()
+  // Hash of the facts in the key: identical facts share an entry, but a user's made-up facts cannot overwrite another's text.
+  const sk = placeStorySk(`${lens}#${createHash('sha256').update(facts.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex').slice(0, 16)}`)
 
-  const hit = await ddb.send(new GetCommand({ TableName, Key: { PK: placePk(placeId), SK: placeStorySk(lens) } }))
+  const hit = await ddb.send(new GetCommand({ TableName, Key: { PK: placePk(placeId), SK: sk } }))
   if (typeof hit.Item?.text === 'string') return json(200, { text: hit.Item.text })
 
   // Count the attempt before spending tokens; the condition makes the cap race-free.
@@ -55,18 +58,22 @@ export const handler = route(async (sub, event) => {
           max_tokens: 200,
           system: SYSTEM,
           // A forged closing tag in the facts cannot end the data block early.
-          messages: [{ role: 'user', content: `<facts>${facts.replace(/<\/?facts>/gi, '')}</facts>` }],
+          messages: [{ role: 'user', content: `<facts>${facts.replace(/<\s*\/?\s*facts[^>]*>/gi, '')}</facts>` }],
         }),
       }),
     )
     const out = JSON.parse(new TextDecoder().decode(res.body)) as { content?: { text?: string }[] }
     text = trim(out.content?.[0]?.text ?? '')
-    if (!text) throw new Error('empty completion')
+    if (!text || /https?:|[<>]/i.test(text)) throw new Error('unusable completion')
   } catch (e) {
     console.error('bedrock failed', (e as Error).name)
     return json(200, { text: trim(facts) }) // not cached: a later call may succeed
   }
 
-  await ddb.send(new PutCommand({ TableName, Item: { PK: placePk(placeId), SK: placeStorySk(lens), text, ttl: now + 30 * DAY } }))
+  try {
+    await ddb.send(new PutCommand({ TableName, Item: { PK: placePk(placeId), SK: sk, text, ttl: now + 30 * DAY } }))
+  } catch (e) {
+    console.error('cache put failed', (e as Error).name)
+  }
   return json(200, { text })
 })

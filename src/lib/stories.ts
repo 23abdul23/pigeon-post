@@ -44,12 +44,16 @@ type Inat = { results?: { taxon?: { preferred_common_name?: string; name?: strin
 /** Optional Bedrock polish of the facts via POST /stories/compose; any failure (429, offline, signed out, slow) keeps the plain text. */
 async function polish(placeId: string, lens: Lens, facts: string): Promise<string> {
   if (!COGNITO_CONFIGURED) return facts
+  let t = 0
+  let timer: Promise<never>
   try {
-    const slow = new Promise<never>((_, rej) => window.setTimeout(() => rej(new Error('timeout')), 5000))
-    const r = await Promise.race([api<{ text?: string }>('/stories/compose', { method: 'POST', body: JSON.stringify({ placeId, lens, facts }) }), slow])
+    timer = new Promise<never>((_, rej) => (t = window.setTimeout(() => rej(new Error('timeout')), 5000)))
+    const r = await Promise.race([api<{ text?: string }>('/stories/compose', { method: 'POST', body: JSON.stringify({ placeId, lens, facts }) }), timer])
     return r.text?.trim() || facts
   } catch {
     return facts
+  } finally {
+    window.clearTimeout(t)
   }
 }
 
