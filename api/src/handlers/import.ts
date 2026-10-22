@@ -1,5 +1,6 @@
-import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import type { City, SessionLog, Stamp, Story, Trip } from '../../../src/lib/types'
+import { clampKm } from '../lib/clamp'
 import { ddb, isConditionFail, tableName, type StoredTrip } from '../lib/db'
 import { bad, cc, fail, id, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { PROFILE_SK, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
@@ -25,23 +26,26 @@ function parseImportedStory(v: unknown): Story {
   const s = parseStory(v) // same validators as the session endpoint (coordinates rounded)
   const o = v as Record<string, unknown>
   if (typeof o.saved !== 'boolean') bad('invalid story.saved')
-  return { ...s, dateMs: num(o.dateMs, 0, 1e14, 'story.dateMs'), saved: o.saved as boolean, km: num(o.km, 0, 1e6, 'story.km') }
+  return { ...s, dateMs: num(o.dateMs, 0, 1e14, 'story.dateMs'), saved: o.saved as boolean, km: num(o.km, 0, 100_000, 'story.km') }
 }
 
 function parseStamp(v: unknown): Stamp {
   if (!isObj(v)) return bad('invalid stamp')
-  return { cc: cc(v.cc, 'stamp.cc'), country: str(v.country, 100, 'stamp.country'), firstMs: num(v.firstMs, 0, 1e14, 'stamp.firstMs'), visits: Math.round(num(v.visits, 1, 1e6, 'stamp.visits')) }
+  return { cc: cc(v.cc, 'stamp.cc'), country: str(v.country, 100, 'stamp.country'), firstMs: num(v.firstMs, 0, 1e14, 'stamp.firstMs'), visits: Math.round(num(v.visits, 1, 10_000, 'stamp.visits')) }
 }
 
 function parseSession(v: unknown): SessionLog {
   if (!isObj(v)) return bad('invalid session')
   if (!REASONS.includes(v.reason)) bad('invalid session.reason')
+  const startMs = num(v.startMs, 0, 1e14, 'session.startMs')
+  const endMs = num(v.endMs, 0, 1e14, 'session.endMs')
   return {
     id: id(v.id, 'session.id'),
     tripId: id(v.tripId, 'session.tripId'),
-    startMs: num(v.startMs, 0, 1e14, 'session.startMs'),
-    endMs: num(v.endMs, 0, 1e14, 'session.endMs'),
-    km: num(v.km, 0, 1e6, 'session.km'),
+    startMs,
+    endMs,
+    // clamped like POST /trips/{id}/sessions: the length of the session caps its distance (an end before the start gives 0)
+    km: clampKm(num(v.km, 0, 1e6, 'session.km'), startMs, endMs),
     reason: v.reason as SessionLog['reason'],
   }
 }
@@ -82,8 +86,9 @@ async function putNew(items: Record<string, unknown>[]): Promise<void> {
 
 /**
  * POST /import: uploads what this device stored locally before the account had any server data. Nothing on the server is
- * overwritten and every write is conditional, so it can be re-run after a crash; `importedAt` on the profile is set last and,
- * once set, later imports are refused with 409.
+ * overwritten and every write is conditional, so it can be re-run after a crash. The profile is written LAST, together with
+ * `importedAt`: until then GET /state keeps returning `profile: null`, which is what makes the client retry. Once it exists
+ * (importedAt set), later imports are refused with 409.
  */
 export const handler = route(async (sub, event) => {
   if ((event.body?.length ?? 0) > MAX_BODY) return fail(413, 'import too large')
@@ -103,7 +108,6 @@ export const handler = route(async (sub, event) => {
   const origin = (existing?.homeCity ?? fields.homeCity) as City | undefined
   if (trip && !origin) bad('a trip needs a home city')
 
-  await saveProfile(sub, event.requestContext.authorizer.jwt.claims.email, fields) // creates the profile (and its invite code) if needed
   // an existing server trip (of any id) means the imported one is dropped
   if (trip && !(await queryAll<{ SK: string }>(PK, 'TRIP#')).some((t) => t.SK !== tripSk(trip.id))) {
     await putNew([{ PK, SK: tripSk(trip.id), ...trip, origin, createdMs: Date.now() }])
@@ -115,15 +119,8 @@ export const handler = route(async (sub, event) => {
   ])
 
   try {
-    await ddb.send(
-      new UpdateCommand({
-        TableName: tableName(),
-        Key: { PK, SK: PROFILE_SK },
-        UpdateExpression: 'SET importedAt = :now',
-        ConditionExpression: 'attribute_not_exists(importedAt)',
-        ExpressionAttributeValues: { ':now': Date.now() },
-      }),
-    )
+    // creates the profile (and its invite code) if needed, same path as PUT /me
+    await saveProfile(sub, event.requestContext.authorizer.jwt.claims.email, fields, Date.now())
   } catch (e) {
     if (isConditionFail(e)) return fail(409, 'already imported') // a concurrent import finished first
     throw e

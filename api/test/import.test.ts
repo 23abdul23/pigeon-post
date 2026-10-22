@@ -89,7 +89,7 @@ describe('POST /import', () => {
   it('import_is_rerunnable_after_partial_failure', async () => {
     failOnce = (i) => i.SK === 'STORY#s2'
     await expect(call(ev(full()))).rejects.toThrow('boom')
-    expect(table.get('USER#u1|PROFILE')!.importedAt).toBeUndefined() // not marked done
+    expect(table.has('USER#u1|PROFILE')).toBe(false) // GET /state keeps saying "no profile", so the client retries
     expect(table.has('USER#u1|STORY#s1') || table.has('USER#u1|STORY#s2')).toBe(true)
     table.set('USER#u1|STORY#s1', { ...table.get('USER#u1|STORY#s1'), text: 'server edit' }) // a copy already there is kept
     const r = await call(ev(full()))
@@ -113,6 +113,29 @@ describe('POST /import', () => {
     expect((await call(ev({ ...full(), stories: [story(1, { id: 'a/b' })] }))).status).toBe(400)
     expect(ddb.commandCalls(PutCommand)).toHaveLength(0) // validation happens before any write
     expect(table.size).toBe(0)
+  })
+
+  it('partial_import_failure_leaves_profile_null_so_the_client_retries', async () => {
+    failOnce = (i) => i.SK === 'SESSION#x1'
+    await expect(call(ev(full()))).rejects.toThrow('boom')
+    expect(table.has('USER#u1|PROFILE')).toBe(false)
+    const { handler: state } = await import('../src/handlers/state')
+    const s = JSON.parse(((await state(ev())) as APIGatewayProxyStructuredResultV2).body!)
+    expect(s.profile).toBeNull()
+    expect((await call(ev(full()))).status).toBe(200)
+    expect(table.get('USER#u1|PROFILE')!.importedAt).toBeTypeOf('number')
+  })
+
+  it('import_clamps_session_km_to_the_session_length', async () => {
+    const long = { ...session(1), startMs: 0, endMs: 60_000, km: 5000 } // one minute: at most ~105 km
+    const back = { ...session(2), startMs: 9, endMs: 3, km: 50 } // ends before it starts
+    const r = await call(ev({ ...full(), sessions: [long, back] }))
+    expect(r.status).toBe(200)
+    const km = Object.fromEntries(r.body.sessions.map((x: { id: string; km: number }) => [x.id, x.km]))
+    expect(km.x1).toBeCloseTo(105)
+    expect(km.x2).toBe(0)
+    table.clear()
+    expect((await call(ev({ ...full(), stamps: [{ ...stamp, visits: 10001 }] }))).status).toBe(400)
   })
 
   it('import_caps_stories_at_200', async () => {

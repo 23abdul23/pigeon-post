@@ -61,9 +61,10 @@ export function parseProfileFields(v: Record<string, unknown>): Record<string, u
 
 /**
  * Creates or updates the caller's profile with already-validated `fields`, allocating the invite code on first write.
- * Shared by PUT /me and POST /import. Returns the stored item (ALL_NEW).
+ * Shared by PUT /me and POST /import. Returns the stored item (ALL_NEW). With `importedAt` the write is conditional on the
+ * profile not being imported yet (ConditionalCheckFailed propagates).
  */
-export async function saveProfile(sub: string, email: unknown, fields: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function saveProfile(sub: string, email: unknown, fields: Record<string, unknown>, importedAt?: number): Promise<Record<string, unknown>> {
 
   // Best-effort uniqueness: regenerate while another user already holds the code. Not atomic (GSIs cannot enforce
   // uniqueness), but 34^8 codes make a race negligible; POST /friends/request refuses an ambiguous code anyway.
@@ -83,6 +84,10 @@ export async function saveProfile(sub: string, email: unknown, fields: Record<st
     values[':email'] = email
     sets.push('email = :email')
   }
+  if (importedAt !== undefined) {
+    values[':importedAt'] = importedAt
+    sets.push('importedAt = :importedAt')
+  }
   for (const [k, v] of Object.entries(fields)) {
     names[`#${k}`] = k
     values[`:${k}`] = v
@@ -94,6 +99,7 @@ export async function saveProfile(sub: string, email: unknown, fields: Record<st
       TableName: tableName(),
       Key: { PK: userPk(sub), SK: PROFILE_SK },
       UpdateExpression: `SET ${sets.join(', ')}`,
+      ConditionExpression: importedAt === undefined ? undefined : 'attribute_not_exists(importedAt)',
       ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
       ExpressionAttributeValues: values,
       ReturnValues: 'ALL_NEW',

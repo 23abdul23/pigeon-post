@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
-import { COGNITO_CONFIGURED } from './auth'
+import { COGNITO_CONFIGURED, getUserSub } from './auth'
 import { clearOutbox, enqueue, flush, GROUPS, pendingOps, pendingTouches, setOnFlushed, touchedSince, writeSeq } from './outbox'
 import { deviceId } from './device'
 import { FLIGHT_STALE_MS } from './geo'
-import { hasLocalData, reconcileLocal } from './reconcile'
+import { claimLocalData, hasLocalData, importFailed, reconcileLocal } from './reconcile'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
@@ -33,14 +33,24 @@ async function pull(show: boolean): Promise<void> {
     if (prev !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
     throw e
   }
+  let importBad = false
   try {
+    // Local data belongs to one account: a different user signing in gets a clean device, and neither imports nor holds it.
+    let sub: string | null = null
+    try {
+      sub = (await getUserSub()) ?? null
+    } catch {
+      // signed out: nothing is claimed
+    }
+    const mine = sub ? claimLocalData(sub) : false
     const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
     // A new server account with local data: upload that first (it hydrates from the reply). When the upload fails the null
     // profile must not wipe the local data, so those groups are held until a later load imports successfully.
     const first = !firstStateSeen
     firstStateSeen = true
-    const unsynced = s.profile === null && hasLocalData()
+    const unsynced = mine && s.profile === null && hasLocalData()
     const imported = first && unsynced && (await reconcileLocal())
+    importBad = first && unsynced && !imported && importFailed()
     if (unsynced && !imported) LOCAL_ONLY.forEach((g) => held.add(g))
     if (!imported) hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
     adoptFlight(s, held)
@@ -49,7 +59,7 @@ async function pull(show: boolean): Promise<void> {
     throw e
   }
   const state = getSyncStatus().state
-  if (pendingOps() || state === 'error') setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
+  if (pendingOps() || state === 'error' || importBad) setSyncStatus({ pending: pendingOps() }) // a dropped write stays visible until the user retries
   else markSynced()
 }
 

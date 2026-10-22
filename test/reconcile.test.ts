@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
-vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: vi.fn().mockResolvedValue(null) }))
+const who = vi.hoisted(() => ({ sub: 'A' as string | null }))
+vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: () => Promise.resolve(who.sub) }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
 const city = { name: 'Zagreb', country: 'Croatia', cc: 'HR', lat: 45.81, lng: 15.98 }
@@ -26,7 +27,10 @@ async function load() {
 const respond = (api: ReturnType<typeof vi.mocked<typeof import('../src/lib/api').api>>, state: unknown, importResult: () => unknown) =>
   api.mockImplementation((async (path: string) => (path === '/state' ? state : importResult())) as never)
 
-beforeEach(() => store.clear())
+beforeEach(() => {
+  store.clear()
+  who.sub = 'A'
+})
 
 describe('reconcileLocal', () => {
   it('reconcile_posts_local_state_when_server_profile_is_null', async () => {
@@ -86,5 +90,98 @@ describe('reconcileLocal', () => {
     await t.refreshAll() // a later poll in the same load does not retry the import, but still must not wipe local data
     expect(t.api.mock.calls.filter((c) => c[0] === '/import')).toHaveLength(1)
     expect(t.getState()).toMatchObject({ homeCity: city, bird: local.bird, stories: [story], stamps: [stamp], trip })
+  })
+
+  it('other_user_signing_in_does_not_get_previous_users_local_data_uploaded', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: 'A', soundOn: false })
+    who.sub = 'B'
+    respond(t.api, empty, () => imported)
+    await t.refreshAll()
+    expect(t.api.mock.calls.some((c) => c[0] === '/import')).toBe(false)
+    expect(t.getState()).toMatchObject({ homeCity: null, bird: null, trip: null, stories: [], stamps: [], ownerSub: 'B', soundOn: false })
+  })
+
+  it('failed_import_hold_does_not_apply_to_a_different_user', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: 'A' })
+    who.sub = 'B'
+    respond(t.api, empty, () => {
+      throw new Error('down')
+    })
+    await t.refreshAll()
+    expect(t.getState()).toMatchObject({ homeCity: null, stories: [], ownerSub: 'B' }) // A's data is neither shown nor held
+  })
+
+  it('first_sign_in_claims_unowned_local_data_and_reconciles', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: null })
+    respond(t.api, empty, () => imported)
+    await t.refreshAll()
+    expect(t.api.mock.calls.some((c) => c[0] === '/import')).toBe(true)
+    expect(t.getState().ownerSub).toBe('A')
+  })
+
+  it('same_user_returning_keeps_local_data', async () => {
+    const t = await load()
+    t.setState({ ...local, ownerSub: 'A' })
+    respond(t.api, empty, () => {
+      throw new Error('down')
+    })
+    await t.refreshAll()
+    expect(t.getState()).toMatchObject({ homeCity: city, stories: [story], ownerSub: 'A' })
+  })
+
+  it('partial_server_state_does_not_replace_local_data', async () => {
+    const t = await load() // an earlier import died half way: items exist on the server but its profile is still null
+    t.setState(local)
+    respond(t.api, { ...empty, stories: [{ ...story, id: 'srv-only' }] }, () => {
+      throw new Error('down')
+    })
+    await t.refreshAll()
+    expect(t.getState().stories.map((x) => x.id)).toEqual(['s1'])
+    expect(t.getState().homeCity).toEqual(city)
+  })
+
+  it('items_beyond_the_caps_stay_on_the_device_after_a_successful_import', async () => {
+    const t = await load()
+    const many = Array.from({ length: 205 }, (_, i) => ({ ...story, id: `s${i}`, dateMs: 1000 - i }))
+    t.setState({ ...local, stories: many })
+    t.api.mockImplementation((async (path: string, init?: RequestInit) => {
+      if (path === '/state') return empty
+      const sent = JSON.parse(init!.body as string)
+      expect(sent.stories).toHaveLength(200)
+      return { ...imported, stories: sent.stories }
+    }) as never)
+    await t.refreshAll()
+    expect(t.getState().stories).toHaveLength(205)
+    expect(t.getState().stories.map((x) => x.id)).toEqual(many.map((x) => x.id)) // newest first, nothing lost
+  })
+
+  it('a_rejected_import_shows_an_error_once_and_is_not_retried', async () => {
+    const t = await load()
+    t.setState(local)
+    respond(t.api, empty, () => {
+      throw new t.ApiError(400)
+    })
+    await t.refreshAll()
+    const { getSyncStatus } = await import('../src/lib/syncStatus')
+    expect(getSyncStatus()).toMatchObject({ state: 'error', lastError: 'Some local data could not be uploaded' })
+    expect(t.getState().stories).toEqual([story])
+    const next = await load()
+    respond(next.api, empty, () => imported)
+    await next.refreshAll()
+    expect(next.api.mock.calls.some((c) => c[0] === '/import')).toBe(false)
+  })
+
+  it('a_network_failure_leaves_the_status_offline_not_synced', async () => {
+    const t = await load()
+    t.setState(local)
+    respond(t.api, empty, () => {
+      throw new Error('down')
+    })
+    await t.refreshAll()
+    const { getSyncStatus } = await import('../src/lib/syncStatus')
+    expect(getSyncStatus().state).toBe('offline')
   })
 })

@@ -65,6 +65,8 @@ export type State = {
   settings: Settings
   /** the caller's own invite code, from the server */
   inviteCode: string | null
+  /** the Cognito sub whose data this device holds; null until the first sign-in claims it (see `claimOwner`) */
+  ownerSub: string | null
 }
 
 const KEY = 'pigeon-post:v1'
@@ -86,6 +88,7 @@ const initial: State = {
   sessions: [],
   settings: defaultSettings,
   inviteCode: null,
+  ownerSub: null,
 }
 
 function load(): State {
@@ -140,6 +143,21 @@ export function hydrate(s: Omit<ServerState, 'trip'> & { trip: Trip | null }, he
           user: st.user && p?.name ? { ...st.user, name: p.name } : st.user,
         }),
   }))
+}
+
+/**
+ * Binds this device's local data to the signed-in user. The first account to sign in claims data made before any sign-in;
+ * a different account than the owner gets a clean device (device preferences stay) and must never see or upload the old data.
+ * Returns 'reset' when it wiped the previous owner's data, else 'own'.
+ */
+export function claimOwner(sub: string): 'own' | 'reset' {
+  if (state.ownerSub === sub) return 'own'
+  if (state.ownerSub === null) {
+    setState({ ownerSub: sub })
+    return 'own'
+  }
+  setState({ ...initial, soundOn: state.soundOn, ownerSub: sub })
+  return 'reset'
 }
 
 export function resetState() {
