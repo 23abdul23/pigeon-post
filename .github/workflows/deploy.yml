@@ -83,8 +83,11 @@ jobs:
           # parameter. It is masked in logs and never stored in GitHub. Tradeoff: it is briefly in this process's argv.
           secret="$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text)"
           echo "::add-mask::${secret}"
-          # SES is optional: SES_SENDER_EMAIL may be empty (email alerts off). Always passed, since sam deploy keeps old values for omitted params.
-          overrides=("GoogleClientId=${GOOGLE_CLIENT_ID}" "SesSenderEmail=${SES_SENDER_EMAIL}" "GoogleClientSecret=${secret}")
+          # SES is optional (template default '' = email alerts off). sam deploy rejects an empty override value ("SesSenderEmail=" is
+          # not a valid format), so it is only passed when set. Omitted parameters keep their previous value, so to switch SES OFF after
+          # it was on, run one local deploy with the stack parameter cleared (see docs/runbook.md).
+          overrides=("GoogleClientId=${GOOGLE_CLIENT_ID}" "GoogleClientSecret=${secret}")
+          [ -n "${SES_SENDER_EMAIL}" ] && overrides+=("SesSenderEmail=${SES_SENDER_EMAIL}")
           [ -n "${BEDROCK_MODEL_ID}" ] && overrides+=("BedrockModelId=${BEDROCK_MODEL_ID}")
           [ -n "${DOMAIN}" ] && overrides+=("Domain=${DOMAIN}")
           [ -n "${HOSTED_ZONE_ID}" ] && overrides+=("HostedZoneId=${HOSTED_ZONE_ID}")

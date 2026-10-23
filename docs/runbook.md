@@ -27,7 +27,7 @@ Deploy the application stack once yourself so the `aws-sam-cli-managed-default` 
 
 ```
 sam build
-sam deploy --profile pigeon --parameter-overrides GoogleClientId=<id> SesSenderEmail=<sender or ''> \
+sam deploy --profile pigeon --parameter-overrides GoogleClientId=<id> [SesSenderEmail=<sender> — omit entirely when SES is off; sam rejects an empty value, and omitted parameters keep their previous value] \
   GoogleClientSecret=$(aws ssm get-parameter --name /pigeon/google-client-secret --with-decryption --query Parameter.Value --output text --profile pigeon) \
   PermissionsBoundaryArn=<PermissionsBoundaryArn output>
 ```
