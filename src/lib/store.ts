@@ -67,6 +67,12 @@ export type State = {
   inviteCode: string | null
   /** the Cognito sub whose data this device holds; null until the first sign-in claims it (see `claimOwner`) */
   ownerSub: string | null
+  /** local data from before sign-in that has not reached the server yet (see reconcile.ts): its groups are not replaced by server state */
+  importPending: boolean
+  /** hash of the import body the server refused with 400; the same data is not resent */
+  importRejected: string | null
+  /** groups that held more items than the import caps: kept local, never replaced by the server's shorter lists */
+  importOverCap: string[]
 }
 
 const KEY = 'pigeon-post:v1'
@@ -89,6 +95,9 @@ const initial: State = {
   settings: defaultSettings,
   inviteCode: null,
   ownerSub: null,
+  importPending: false,
+  importRejected: null,
+  importOverCap: [],
 }
 
 function load(): State {

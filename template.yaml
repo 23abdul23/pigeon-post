@@ -45,7 +45,7 @@ Parameters:
     Type: String
     Default: ''
     AllowedPattern: '^[A-Za-z0-9 @.:/_+-]{0,100}$'
-    Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "PigeonPost/1.0")
+    Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "Fost/1.0")
 
   # Optional custom domain (Task 10). Leave Domain empty to serve from the CloudFront domain only.
   Domain:
@@ -408,7 +408,7 @@ Resources:
     Properties:
       CodeUri: api/
       Handler: import.handler
-      Timeout: 15 # up to ~1000 conditional puts, ten at a time
+      Timeout: 29 # up to ~7400 conditional puts, ten at a time; just under the HTTP API's 30 s integration limit
       LoggingConfig:
         LogGroup: !Ref ImportLogGroup
       Policies:

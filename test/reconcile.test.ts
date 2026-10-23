@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) })
 const who = vi.hoisted(() => ({ sub: 'A' as string | null }))
-vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: () => Promise.resolve(who.sub) }))
+vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: () => who.sub, getUserSub: () => Promise.resolve(who.sub) }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
 const city = { name: 'Zagreb', country: 'Croatia', cc: 'HR', lat: 45.81, lng: 15.98 }
@@ -146,17 +146,114 @@ describe('reconcileLocal', () => {
 
   it('items_beyond_the_caps_stay_on_the_device_after_a_successful_import', async () => {
     const t = await load()
-    const many = Array.from({ length: 205 }, (_, i) => ({ ...story, id: `s${i}`, dateMs: 1000 - i }))
+    const many = Array.from({ length: 2005 }, (_, i) => ({ ...story, id: `s${i}`, dateMs: 10_000 - i }))
     t.setState({ ...local, stories: many })
     t.api.mockImplementation((async (path: string, init?: RequestInit) => {
       if (path === '/state') return empty
       const sent = JSON.parse(init!.body as string)
-      expect(sent.stories).toHaveLength(200)
+      expect(sent.stories).toHaveLength(2000)
       return { ...imported, stories: sent.stories }
     }) as never)
     await t.refreshAll()
-    expect(t.getState().stories).toHaveLength(205)
+    expect(t.getState().stories).toHaveLength(2005)
     expect(t.getState().stories.map((x) => x.id)).toEqual(many.map((x) => x.id)) // newest first, nothing lost
+  })
+
+  it('items_beyond_caps_survive_subsequent_polls', async () => {
+    const t = await load()
+    const many = Array.from({ length: 2005 }, (_, i) => ({ ...story, id: `s${i}`, dateMs: 10_000 - i }))
+    t.setState({ ...local, stories: many })
+    let server = empty as unknown
+    t.api.mockImplementation((async (path: string, init?: RequestInit) => {
+      if (path === '/state') return server
+      server = { ...imported, stories: JSON.parse(init!.body as string).stories }
+      return server
+    }) as never)
+    await t.refreshAll()
+    await t.refreshAll() // the next poll: the server only has the first 2000
+    expect(t.getState().stories).toHaveLength(2005)
+    const next = await load() // and on a later page load
+    next.api.mockImplementation((async () => server) as never)
+    await next.refreshAll()
+    expect(next.getState().stories).toHaveLength(2005)
+    expect(next.getState().stamps).toEqual([stamp]) // groups within the caps still take server state
+  })
+
+  it('failed_import_then_profile_created_does_not_wipe_local_data', async () => {
+    const t = await load()
+    t.setState(local)
+    let server = empty as unknown
+    t.api.mockImplementation((async (path: string) => {
+      if (path === '/state') return server
+      if (path === '/me') return void (server = { ...empty, profile: { ...imported.profile, homeCity: null, bird: null } }) // PUT /me makes a bare profile
+      throw new t.ApiError(503)
+    }) as never)
+    await t.refreshAll() // import fails
+    t.saveProfile()
+    await vi.waitFor(() => expect(t.api.mock.calls.some((c) => c[0] === '/me')).toBe(true))
+    await t.refreshAll() // the server now has a profile without the import
+    expect(t.getState()).toMatchObject({ homeCity: city, bird: local.bird, stories: [story], stamps: [stamp], trip })
+    const next = await load() // a later load still knows the import is pending, and retries it
+    next.api.mockImplementation((async (path: string) => (path === '/state' ? server : imported)) as never)
+    await next.refreshAll()
+    expect(next.api.mock.calls.some((c) => c[0] === '/import')).toBe(true)
+    expect(next.getState().inviteCode).toBe('ABCDEFGH')
+  })
+
+  it('import_retries_on_later_polls_until_it_succeeds', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const t = await load()
+      t.setState(local)
+      let up = false
+      let done = false
+      t.api.mockImplementation((async (path: string) => {
+        if (path === '/state') return done ? imported : empty
+        if (!up) throw new t.ApiError(503)
+        done = true
+        return imported
+      }) as never)
+      await t.refreshAll()
+      await t.refreshAll() // too soon: not retried
+      expect(t.api.mock.calls.filter((c) => c[0] === '/import')).toHaveLength(1)
+      vi.setSystemTime(Date.now() + 31_000)
+      await t.refreshAll() // still down
+      expect(t.api.mock.calls.filter((c) => c[0] === '/import')).toHaveLength(2)
+      up = true
+      vi.setSystemTime(Date.now() + 31_000)
+      await t.refreshAll()
+      expect(t.api.mock.calls.filter((c) => c[0] === '/import')).toHaveLength(3)
+      expect(t.getState().inviteCode).toBe('ABCDEFGH')
+      vi.setSystemTime(Date.now() + 31_000)
+      await t.refreshAll() // done: never again
+      expect(t.api.mock.calls.filter((c) => c[0] === '/import')).toHaveLength(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('import_400_does_not_wipe_and_holds_groups', async () => {
+    const t = await load()
+    t.setState(local)
+    const withProfile = { ...empty, profile: { ...imported.profile, homeCity: null, bird: null } }
+    respond(t.api, empty, () => {
+      throw new t.ApiError(400)
+    })
+    await t.refreshAll()
+    const next = await load() // later: the server got a bare profile (PUT /me), the same data is not resent
+    respond(next.api, withProfile, () => {
+      throw new next.ApiError(400)
+    })
+    await next.refreshAll()
+    expect(next.api.mock.calls.some((c) => c[0] === '/import')).toBe(false)
+    expect(next.getState()).toMatchObject({ homeCity: city, bird: local.bird, stories: [story], stamps: [stamp], trip })
+    // the local data changed: the import is tried again
+    const third = await load()
+    third.setState((s) => ({ stories: [{ ...story, id: 's2' }, ...s.stories] }))
+    respond(third.api, withProfile, () => imported)
+    await third.refreshAll()
+    expect(third.api.mock.calls.some((c) => c[0] === '/import')).toBe(true)
+    expect(third.getState().inviteCode).toBe('ABCDEFGH')
   })
 
   it('a_rejected_import_shows_an_error_once_and_is_not_retried', async () => {

@@ -4,7 +4,7 @@ import { COGNITO_CONFIGURED, getUserSub } from './auth'
 import { clearOutbox, enqueue, flush, GROUPS, pendingOps, pendingTouches, setOnFlushed, touchedSince, writeSeq } from './outbox'
 import { deviceId } from './device'
 import { FLIGHT_STALE_MS } from './geo'
-import { claimLocalData, hasLocalData, importFailed, reconcileLocal } from './reconcile'
+import { claimLocalData, hasLocalData, reconcileLocal } from './reconcile'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
@@ -36,12 +36,7 @@ async function claimUser(): Promise<boolean> {
   return false
 }
 
-/** Local data that the failed/pending first import left off the server; keeps the chip honest on every later poll of this load. */
-let unuploaded = false
-
-/** True once a `GET /state` of this page load has succeeded; the import runs after the first one only. */
-let firstStateSeen = false
-/** Entity groups a null server profile must not clear while this device's local data has not reached the server. */
+/** Entity groups server state must not replace while this device's local data has not reached the server (`importPending`). */
 const LOCAL_ONLY = ['profile', 'trip', 'stories', 'stamps', 'sessions']
 
 /**
@@ -64,17 +59,16 @@ async function pull(show: boolean): Promise<void> {
     if (prev !== 'error') setSyncStatus({ state: 'offline', pending: pendingOps() })
     throw e
   }
+  let unuploaded = false
   try {
-    const held = new Set([...before, ...pendingTouches(), ...touchedSince(since)])
-    // A new server account with local data: upload that first (it hydrates from the reply). When the upload fails the null
-    // profile must not wipe the local data, so those groups are held until a later load imports successfully.
-    const first = !firstStateSeen
-    firstStateSeen = true
-    const unsynced = mine && s.profile === null && hasLocalData()
-    const imported = first && unsynced && (await reconcileLocal())
-    if (s.profile !== null) unuploaded = false
-    else if (first) unuploaded = unsynced && !imported && importFailed()
-    if (unsynced && !imported) LOCAL_ONLY.forEach((g) => held.add(g))
+    const held = new Set([...before, ...pendingTouches(), ...touchedSince(since), ...getState().importOverCap])
+    // A server account without a profile while this device has data: that data was never uploaded. It is uploaded (and
+    // hydrated from the reply) by reconcileLocal; until that succeeds the local groups are held, even once a profile exists
+    // (a PUT /me creates one without importing), and later polls and loads retry it.
+    if (mine && s.profile === null && hasLocalData() && !getState().importPending) setState({ importPending: true })
+    const imported = mine && (await reconcileLocal())
+    unuploaded = mine && getState().importPending
+    if (unuploaded) LOCAL_ONLY.forEach((g) => held.add(g))
     if (!imported) hydrate({ ...s, trip: s.trip && withRoute(s.trip, s.profile?.homeCity ?? (held.has('profile') ? getState().homeCity : null)) }, held)
     adoptFlight(s, held)
   } catch (e) {

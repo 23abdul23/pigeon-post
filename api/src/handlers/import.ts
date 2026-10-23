@@ -2,7 +2,8 @@ import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import type { City, SessionLog, Stamp, Story, Trip } from '../../../src/lib/types'
 import { clampKm } from '../lib/clamp'
 import { ddb, isConditionFail, tableName, type StoredTrip } from '../lib/db'
-import { bad, cc, fail, id, isObj, json, num, parseBody, route, str } from '../lib/http'
+import { IMPORT_MAX_BODY, IMPORT_MAX_SESSIONS, IMPORT_MAX_STAMPS, IMPORT_MAX_STORIES } from '../lib/constants'
+import { bad, cc, fail, HttpError, id, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { PROFILE_SK, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { queryAll } from '../lib/letters'
 import { parseProfileFields, saveProfile } from './me'
@@ -10,11 +11,8 @@ import { REASONS, parseStory } from './sessions'
 import { buildState } from './state'
 import { parsePlace } from './trips'
 
-const MAX_BODY = 256 * 1024
-const MAX_STORIES = 200
-const MAX_STAMPS = 300
-const MAX_SESSIONS = 500
 const CONCURRENCY = 10
+// PAUSED is client-only (the flight API knows OUTBOUND/RETURNING): an imported paused trip resumes outbound
 const STATUSES: readonly unknown[] = ['OUTBOUND', 'DELIVERED', 'RETURNING', 'PAUSED', 'DONE'] satisfies Trip['status'][]
 
 const list = (v: unknown, max: number, what: string): unknown[] => {
@@ -60,7 +58,7 @@ function parseTrip(v: unknown): Omit<StoredTrip, 'origin' | 'createdMs'> {
     dest: parsePlace(v.dest),
     routeKm,
     progressKm: num(v.progressKm, 0, routeKm, 'trip.progressKm'),
-    status: v.status as Trip['status'],
+    status: v.status === 'PAUSED' ? 'OUTBOUND' : (v.status as Trip['status']),
     legs: Math.round(num(v.legs, 0, 1e5, 'trip.legs')),
     letterIds: [],
   }
@@ -91,13 +89,25 @@ async function putNew(items: Record<string, unknown>[]): Promise<void> {
  * (importedAt set), later imports are refused with 409.
  */
 export const handler = route(async (sub, event) => {
-  if ((event.body?.length ?? 0) > MAX_BODY) return fail(413, 'import too large')
+  if ((event.body?.length ?? 0) > IMPORT_MAX_BODY) return fail(413, 'import too large')
   const b = parseBody(event.body)
   const fields = b.profile === undefined ? {} : isObj(b.profile) ? parseProfileFields(b.profile) : bad('invalid profile')
-  const stories = list(b.stories, MAX_STORIES, 'stories').map(parseImportedStory)
-  const stamps = list(b.stamps, MAX_STAMPS, 'stamps').map(parseStamp)
-  const sessions = list(b.sessions, MAX_SESSIONS, 'sessions').map(parseSession)
-  const trip = b.trip === undefined || b.trip === null ? undefined : parseTrip(b.trip)
+  // An invalid item is skipped (and logged), never the whole import: a 400 here would leave the device's data unsynced for good.
+  const skipped: string[] = []
+  const valid = <T>(what: string, items: unknown[], parse: (v: unknown) => T): T[] =>
+    items.flatMap((v) => {
+      try {
+        return [parse(v)]
+      } catch (e) {
+        if (!(e instanceof HttpError)) throw e
+        skipped.push(`${what}: ${e.message}`)
+        return []
+      }
+    })
+  const stories = valid('story', list(b.stories, IMPORT_MAX_STORIES, 'stories'), parseImportedStory)
+  const stamps = valid('stamp', list(b.stamps, IMPORT_MAX_STAMPS, 'stamps'), parseStamp)
+  const sessions = valid('session', list(b.sessions, IMPORT_MAX_SESSIONS, 'sessions'), parseSession)
+  let trip: ReturnType<typeof parseTrip> | undefined = b.trip === undefined || b.trip === null ? undefined : valid('trip', [b.trip], parseTrip)[0]
 
   const PK = userPk(sub)
   const existing = (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK, SK: PROFILE_SK }, ConsistentRead: true }))).Item
@@ -106,7 +116,11 @@ export const handler = route(async (sub, event) => {
   // the server's own profile fields win; the import only fills what is missing
   for (const k of Object.keys(fields)) if (existing?.[k] !== undefined) delete fields[k]
   const origin = (existing?.homeCity ?? fields.homeCity) as City | undefined
-  if (trip && !origin) bad('a trip needs a home city')
+  if (trip && !origin) {
+    skipped.push('trip: a trip needs a home city')
+    trip = undefined
+  }
+  if (skipped.length) console.warn('import skipped invalid items', skipped.length, skipped.slice(0, 20))
 
   // an existing server trip (of any id) means the imported one is dropped
   if (trip && !(await queryAll<{ SK: string }>(PK, 'TRIP#')).some((t) => t.SK !== tripSk(trip.id))) {

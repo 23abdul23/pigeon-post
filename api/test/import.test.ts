@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mockClient } from 'aws-sdk-client-mock'
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
+import { readFileSync } from 'node:fs'
 import { handler as importer } from '../src/handlers/import'
+import { IMPORT_MAX_BODY, IMPORT_MAX_SESSIONS, IMPORT_MAX_STAMPS, IMPORT_MAX_STORIES } from '../src/lib/constants'
 
 process.env.TABLE_NAME = 'PigeonPostTest'
 const ddb = mockClient(DynamoDBDocumentClient)
@@ -109,9 +111,7 @@ describe('POST /import', () => {
     ddb.resetHistory()
     expect((await call(ev({ ...full(), profile: { bird: { species: 'pigeon', name: 'Pip' } } }))).status).toBe(400)
     expect((await call(ev({ ...full(), profile: { settings: { isAdmin: true } } }))).status).toBe(400)
-    expect((await call(ev({ ...full(), stamps: [{ ...stamp, cc: 'hrv' }] }))).status).toBe(400)
-    expect((await call(ev({ ...full(), stories: [story(1, { id: 'a/b' })] }))).status).toBe(400)
-    expect(ddb.commandCalls(PutCommand)).toHaveLength(0) // validation happens before any write
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0) // profile validation happens before any write (invalid items are skipped instead)
     expect(table.size).toBe(0)
   })
 
@@ -135,17 +135,44 @@ describe('POST /import', () => {
     expect(km.x1).toBeCloseTo(105)
     expect(km.x2).toBe(0)
     table.clear()
-    expect((await call(ev({ ...full(), stamps: [{ ...stamp, visits: 10001 }] }))).status).toBe(400)
+    expect((await call(ev({ ...full(), stamps: [{ ...stamp, visits: 10001 }] }))).body.stamps).toEqual([]) // skipped
   })
 
-  it('import_caps_stories_at_200', async () => {
+  it('import_caps_stories_at_2000', async () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => story(i))
-    expect((await call(ev({ ...full(), stories: many(201) }))).status).toBe(400)
+    expect((await call(ev({ ...full(), stories: many(IMPORT_MAX_STORIES + 1) }))).status).toBe(400)
     expect(table.size).toBe(0)
-    const ok = await call(ev({ stories: many(200), stamps: [], sessions: [] }))
+    const ok = await call(ev({ stories: many(IMPORT_MAX_STORIES), stamps: [], sessions: [] }))
     expect(ok.status).toBe(200)
-    expect(ok.body.stories).toHaveLength(200)
-    expect((await call(ev(undefined, 'x'.repeat(256 * 1024 + 1)))).status).toBe(413)
+    expect(ok.body.stories).toHaveLength(IMPORT_MAX_STORIES)
+    expect((await call(ev(undefined, 'x'.repeat(IMPORT_MAX_BODY + 1)))).status).toBe(413)
+  })
+
+  it('import_caps_match_client', () => {
+    const src = readFileSync(new URL('../../src/lib/reconcile.ts', import.meta.url), 'utf8')
+    const client = (name: string) => Number(src.match(new RegExp(`${name}\\s*=\\s*([\\d_]+)`))![1].replace(/_/g, ''))
+    expect([client('MAX_STORIES'), client('MAX_STAMPS'), client('MAX_SESSIONS'), client('MAX_BODY')]).toEqual([IMPORT_MAX_STORIES, IMPORT_MAX_STAMPS, IMPORT_MAX_SESSIONS, IMPORT_MAX_BODY])
+  })
+
+  it('import_skips_invalid_items_and_imports_the_rest', async () => {
+    const r = await call(ev({ ...full(), stories: [story(1), story(2, { id: 'a/b' }), 'junk'], stamps: [{ ...stamp, cc: 'hrv' }, { ...stamp, cc: 'SI' }], sessions: [session(1), { ...session(2), reason: 'nope' }] }))
+    expect(r.status).toBe(200)
+    expect(r.body.stories.map((s: Story) => s.id)).toEqual(['s1'])
+    expect(r.body.stamps.map((s: { cc: string }) => s.cc)).toEqual(['SI'])
+    expect(r.body.sessions.map((s: { id: string }) => s.id)).toEqual(['x1'])
+    expect(r.body.trip.id).toBe('t1')
+    table.clear()
+    const badTrip = await call(ev({ ...full(), trip: { ...trip, routeKm: -1 } })) // an invalid trip is dropped, not the import
+    expect(badTrip.status).toBe(200)
+    expect(badTrip.body.trip).toBeNull()
+    expect(badTrip.body.stories).toHaveLength(2)
+  })
+
+  it('import_maps_paused_trip_to_outbound', async () => {
+    const r = await call(ev({ ...full(), trip: { ...trip, status: 'PAUSED' } }))
+    expect(r.status).toBe(200)
+    expect(r.body.trip.status).toBe('OUTBOUND')
+    expect(table.get('USER#u1|TRIP#t1')!.status).toBe('OUTBOUND')
   })
 
   it('import_does_not_overwrite_an_existing_server_trip', async () => {
