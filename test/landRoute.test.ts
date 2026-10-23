@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeLengthKm, type Pt } from '../src/lib/geo'
+import { routeLengthKm, wrapLng, type Pt } from '../src/lib/geo'
 import { planRoute } from '../src/lib/trips'
 
 const finite = (r: Pt[]) => r.length >= 2 && r.every(([la, ln]) => Number.isFinite(la) && Number.isFinite(ln))
@@ -61,5 +61,11 @@ describe('planRoute for any coordinate', () => {
       expect(maxStepKm(r), `${a} -> ${b}`).toBeLessThan(500)
       expect(Number.isFinite(routeLengthKm(r))).toBe(true)
     }
+  })
+})
+
+describe('wrapLng', () => {
+  it('wrapLng_brings_unwrapped_route_longitudes_into_range', () => {
+    for (const [inp, out] of [[0, 0], [179, 179], [181, -179], [-181, 179], [200, -160], [-200, 160], [540, -180], [-600, 120], [360, 0]]) expect(wrapLng(inp)).toBeCloseTo(out)
   })
 })

@@ -5,9 +5,10 @@ vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, se
 vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(), getUserSub: vi.fn() }))
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
-import { api, ApiError } from '../src/lib/api'
+import { api, ApiError, ApiTimeout } from '../src/lib/api'
 import { currentSub, getUserSub } from '../src/lib/auth'
 import { enqueue, flush, pendingOps, send } from '../src/lib/outbox'
+import { setState } from '../src/lib/store'
 
 const apiMock = vi.mocked(api)
 const sent = () => apiMock.mock.calls.map(([path]) => path)
@@ -118,5 +119,29 @@ describe('outbox', () => {
     reply({ id: 'l1' })
     await p
     expect(pendingOps()).toBe(0)
+  })
+
+  it('outbox_retries_after_api_timeout', async () => {
+    apiMock.mockRejectedValueOnce(new ApiTimeout('/a')).mockResolvedValue(undefined)
+    enqueue({ id: 'a', method: 'PUT', path: '/a', touches: ['profile'] })
+    await flush()
+    expect(queued()).toEqual(['a']) // a timeout is a network error: kept, not dropped like a 4xx
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(sent()).toEqual(['/a', '/a'])
+    expect(queued()).toEqual([])
+  })
+
+  it('direct_send_refused_when_owner_differs', async () => {
+    setState({ ownerSub: 'user-a' }) // a stale tab still holding A's data, B's token
+    vi.mocked(currentSub).mockReturnValue('user-b')
+    apiMock.mockResolvedValue({ ok: 1 })
+    try {
+      expect(await send({ id: 'trip:t', method: 'POST', path: '/trips', body: { a: 1 }, touches: ['trip'] })).toBeNull()
+      expect(apiMock).not.toHaveBeenCalled()
+      expect(queued()).toEqual([])
+      expect(pendingOps()).toBe(0)
+    } finally {
+      setState({ ownerSub: null })
+    }
   })
 })

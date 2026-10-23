@@ -6,7 +6,7 @@ import { Frame } from '../components/Layout'
 import { birdBySpecies } from '../lib/birds'
 import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, takeOver } from '../lib/flight'
-import { fmtKm, pointAtKm } from '../lib/geo'
+import { fmtKm, pointAtKm, wrapLng } from '../lib/geo'
 import { nearestCity } from '../lib/places'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
 import { windAt, windNote, type Wind } from '../lib/weather'
@@ -108,7 +108,7 @@ export default function Focus() {
       const p = computeProgress(s, trip, serverNow())
       const here = pointAtKm(trip.route, p.km).pt
       const front = pointAtKm(trip.route, Math.min(trip.routeKm, p.km + 250)).pt
-      const [a, b, w] = await Promise.all([nearestCity(here[0], here[1]), nearestCity(front[0], front[1]), windAt(here[0], here[1])])
+      const [a, b, w] = await Promise.all([nearestCity(here[0], here[1]), nearestCity(front[0], front[1]), windAt(here[0], wrapLng(here[1]))])
       if (!cancelled) {
         setNear(a.name)
         setAhead(b.name)

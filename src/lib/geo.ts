@@ -35,6 +35,9 @@ export function countryName(cc: string): string {
 
 export const fmtKm = (km: number) => `${Math.round(km).toLocaleString('en-US')} km`
 
+/** A longitude in [-180, 180): routes carry unwrapped longitudes (past ±180) so a line never jumps across the map. */
+export const wrapLng = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180
+
 const ptKm = (a: Pt, b: Pt) => haversineKm({ lat: a[0], lng: a[1] }, { lat: b[0], lng: b[1] })
 
 /** Initial compass bearing in degrees (0 = north) from a to b. */

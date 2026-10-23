@@ -87,6 +87,14 @@ describe('POST /trips/{id}/sessions', () => {
     expect(row('USER#u1', 'SESSION#s1')).toMatchObject({ id: 's1', tripId: 't1', reason: 'completed' })
   })
 
+  it('replay_of_imported_session_returns_409_not_empty_200', async () => {
+    seedTrip()
+    table.set('USER#u1|SESSION#s1', { PK: 'USER#u1', SK: 'SESSION#s1', id: 's1', tripId: 't1', startMs: 1, endMs: 2, km: 5, reason: 'completed' }) // POST /import: no result
+    const r = await call(postSession, ev({ id: 't1', body: session('s1') }))
+    expect(r).toEqual({ status: 409, body: { error: 'session already recorded' } })
+    expect(transacts()).toHaveLength(0)
+  })
+
   it('first_session_in_a_country_creates_stamp_second_increments_visits', async () => {
     seedTrip({ routeKm: 5000 })
     const a = await call(postSession, ev({ id: 't1', body: session('s1') }))

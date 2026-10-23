@@ -31,10 +31,14 @@ function save(next: Queued[]) {
 }
 
 /** Queues a write for the signed-in user; an op with the same id replaces the queued one (each op is a full PUT-style write). */
-export function enqueue(op: Op): void {
-  // Local data owned by another account (or by an unconfirmed one) is never queued for the current user's token.
+// Local data owned by another account (or by an unconfirmed one) is never queued or sent with the current user's token.
+const foreign = () => {
   const owner = getState().ownerSub
-  if (COGNITO_CONFIGURED && owner !== null && owner !== (currentSub() ?? null)) return void console.warn('outbox: write refused, local data belongs to another account')
+  return COGNITO_CONFIGURED && owner !== null && owner !== (currentSub() ?? null)
+}
+
+export function enqueue(op: Op): void {
+  if (foreign()) return void console.warn('outbox: write refused, local data belongs to another account')
   note(op.touches)
   save([...q().filter((o) => o.id !== op.id), { ...op, owner: currentSub() ?? undefined }])
   if (getSyncStatus().state !== 'synced') setSyncStatus({ pending: pendingOps() })
@@ -158,6 +162,10 @@ let chain: Promise<unknown> = Promise.resolve()
  */
 export function send<T>(op: Op, rejected?: (e: ApiError) => boolean): Promise<T | null> {
   if (!COGNITO_CONFIGURED) return Promise.resolve(null)
+  if (foreign()) {
+    console.warn('outbox: send refused, local data belongs to another account')
+    return Promise.resolve(null)
+  }
   note(op.touches)
   active.add(op)
   const p = chain.then(async () => {

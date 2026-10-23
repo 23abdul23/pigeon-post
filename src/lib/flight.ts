@@ -2,7 +2,7 @@ import { COGNITO_CONFIGURED } from './auth'
 import { DEMO_MODE } from './demo'
 import type { ApiError } from './api'
 import { deviceId, serverNow } from './device'
-import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm } from './geo'
+import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from './geo'
 import { send, setOnRejected } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
@@ -74,7 +74,11 @@ function flightRejected(body: { tripId: string; startMs: number }, e: ApiError):
   console.error('PUT /flight rejected', e, body) // 400: a client bug
   return false
 }
-setOnRejected((op, e) => op.method === 'PUT' && op.path === '/flight' && flightRejected(op.body as { tripId: string; startMs: number }, e))
+/** 409 "session already recorded": the server has this session (from POST /import) without a stored reply; nothing to redo or show. */
+const sessionRecorded = (e: ApiError) => e.status === 409 && (e.body as { error?: string } | undefined)?.error === 'session already recorded'
+setOnRejected((op, e) =>
+  op.method === 'PUT' && op.path === '/flight' ? flightRejected(op.body as { tripId: string; startMs: number }, e) : op.path.endsWith('/sessions') && sessionRecorded(e),
+)
 
 /**
  * `PUT /flight` for the local session, through `send` so it reaches the server after the trip it needs (POST /trips) and is
@@ -195,7 +199,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : now
     const p = computeProgress({ ...s, leftAtMs: s.leftAtMs ?? endMs }, trip, endMs)
     const spot = pointAtKm(trip.route, p.km).pt
-    const story = await buildStory(spot[0], ((spot[1] + 540) % 360) - 180, p.km) // routes carry unwrapped longitudes
+    const story = await buildStory(spot[0], wrapLng(spot[1]), p.km) // routes carry unwrapped longitudes
     const { storyId: id, sessionId } = flightIds(s)
     const cur = getState()
     const stampKnown = cur.stamps.some((x) => x.cc === story.cc)
@@ -242,7 +246,7 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
         : [...cur.stamps, { cc: story.cc, country: story.country, firstMs: now, visits: 1 }],
     })
     const body = { id: sessionId, startMs: s.startMs, endMs, reason, kmGained: p.km - s.baseKm, story: { ...story, id } }
-    void send<SessionResult>({ id: `session:${sessionId}`, method: 'POST', path: `/trips/${trip.id}/sessions`, body, touches: ['trip', 'stories', 'stamps', 'sessions', 'letters'] }).then((r) => r && adoptSession(r, nextTrip))
+    void send<SessionResult>({ id: `session:${sessionId}`, method: 'POST', path: `/trips/${trip.id}/sessions`, body, touches: ['trip', 'stories', 'stamps', 'sessions', 'letters'] }, sessionRecorded).then((r) => r && adoptSession(r, nextTrip))
     return result
   })().finally(() => {
     landing = null

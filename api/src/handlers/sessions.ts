@@ -93,6 +93,8 @@ export const handler = route(async (sub, event) => {
     } catch (e) {
       if (!isConditionFail(e)) throw e
     }
+    // written by POST /import, which stores no result: the client drops the op (it is already recorded)
+    if (!s.result) return fail(409, 'session already recorded')
     return json(200, s.result)
   }
 

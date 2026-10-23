@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
@@ -23,6 +23,24 @@ import ShareStamps from './screens/ShareStamps'
 import SignIn from './screens/SignIn'
 import TripComposer from './screens/TripComposer'
 
+/** Shown instead of a blank screen when the first server sync is slow (a hung network); reloading starts the sync afresh. */
+function StillConnecting() {
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setLate(true), 8000)
+    return () => window.clearTimeout(t)
+  }, [])
+  if (!late) return null
+  return (
+    <div role="status" className="flex flex-col items-center gap-3 p-6 text-center">
+      <p className="text-ink-2">Still connecting…</p>
+      <button type="button" onClick={() => window.location.reload()} className="rounded-full bg-card-soft px-5 py-2.5 text-[14px] font-bold text-ink-2">
+        Retry
+      </button>
+    </div>
+  )
+}
+
 /** Auth + onboarding guard from Flow.md section 2. */
 function Guard({ children, onboarding = false }: { children: ReactNode; onboarding?: boolean }) {
   const user = useStore((s) => s.user)
@@ -42,7 +60,9 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   if (COGNITO_CONFIGURED) {
     if (auth.status === 'loading') return null
     if (auth.status === 'signedOut') return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
-    if (!user || !synced) return null
+    if (!user) return null
+    if (!synced) return <StillConnecting />
+
   } else if (!user) return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />
   if (!onboarding) {
     if (!home) return <Navigate to="/onboarding/city" replace />
