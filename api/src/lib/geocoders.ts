@@ -4,7 +4,7 @@ import type { Place } from '../../../src/lib/types'
 type Kind = NonNullable<Place['kind']>
 export const round2 = (n: number) => Math.round(n * 100) / 100
 
-const userAgent = () => (process.env.GEOCODER_CONTACT ? `PigeonPost/1.0 (${process.env.GEOCODER_CONTACT})` : 'PigeonPost/1.0')
+const userAgent = () => (process.env.GEOCODER_CONTACT ? `Fost/1.0 (+${process.env.GEOCODER_CONTACT})` : 'Fost/1.0')
 const base = (v: string | undefined) => (v ?? '').replace(/\/+$/, '')
 
 /** Any non-2xx (429, 5xx, ...), network error or timeout throws, so the caller can fall through to the next provider. */

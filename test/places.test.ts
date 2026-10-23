@@ -10,7 +10,7 @@ vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../sr
 
 import { api, ApiError } from '../src/lib/api'
 import { attributionFor, createPlaceSearch, HOME_SEARCH_KIND } from '../src/lib/placeSearch'
-import { locate, placeLabel, reversePlace, searchBundledPlaces, searchPlaces, toCity } from '../src/lib/places'
+import { locate, placeLabel, reversePlace, searchBundledPlaces, searchPlaces, SERVER_TIMEOUT_MS, toCity, type PlaceSource } from '../src/lib/places'
 import { getState } from '../src/lib/store'
 import type { Place } from '../src/lib/types'
 
@@ -27,12 +27,17 @@ describe('searchPlaces', () => {
   it('search_uses_server_results_when_available', async () => {
     apiMock.mockResolvedValue({ places: [paris], source: 'photon' })
     const r = await searchPlaces('Par', { kind: 'city', bias: [45.81444, 15.97798] })
-    expect(r).toEqual({ places: [paris], source: 'server' })
+    expect(r).toEqual({ places: [paris], source: 'photon' })
     const [path, init] = apiMock.mock.calls[0]
     const u = new URL(path, 'http://x')
     expect(u.pathname).toBe('/places/search')
     expect(Object.fromEntries(u.searchParams)).toEqual({ q: 'Par', kind: 'city', lat: '45.81', lng: '15.98' })
     expect(init?.signal).toBeInstanceOf(AbortSignal)
+    // the server's provider passes through, also for its cache hits
+    apiMock.mockResolvedValue({ places: [paris], source: 'open-meteo', cached: true })
+    expect((await searchPlaces('Par', { kind: 'city' })).source).toBe('open-meteo')
+    apiMock.mockResolvedValue({ places: [paris], source: 'photon', cached: true })
+    expect((await searchPlaces('Par', { kind: 'city' })).source).toBe('photon')
   })
 
   it('search_falls_back_to_bundled_on_429_503_timeout_and_offline_with_source_bundled', async () => {
@@ -65,7 +70,12 @@ describe('searchPlaces', () => {
     apiMock.mockImplementation((_p, init) => ((seen = init!.signal!), new Promise((_, rej) => seen!.addEventListener('abort', () => rej(seen!.reason)))))
     const caller = new AbortController()
     const p = searchPlaces('Zagr', { kind: 'city', signal: caller.signal })
-    await vi.advanceTimersByTimeAsync(3500)
+    let done = false
+    void p.then(() => (done = true))
+    await vi.advanceTimersByTimeAsync(5000) // the server may still be trying Open-Meteo after Photon timed out
+    expect(done).toBe(false)
+    await vi.advanceTimersByTimeAsync(SERVER_TIMEOUT_MS - 5000)
+    expect(SERVER_TIMEOUT_MS).toBe(6000)
     const r = await p
     expect(r.source).toBe('bundled')
     expect(caller.signal.aborted).toBe(false)
@@ -99,8 +109,8 @@ describe('searchPlaces', () => {
 
 describe('createPlaceSearch', () => {
   const deferred = () => {
-    let resolve!: (v: { places: Place[]; source: 'server' | 'bundled' }) => void
-    const promise = new Promise<{ places: Place[]; source: 'server' | 'bundled' }>((r) => (resolve = r))
+    let resolve!: (v: { places: Place[]; source: PlaceSource }) => void
+    const promise = new Promise<{ places: Place[]; source: PlaceSource }>((r) => (resolve = r))
     return { promise, resolve }
   }
 
@@ -137,10 +147,10 @@ describe('createPlaceSearch', () => {
     await vi.advanceTimersByTimeAsync(250)
     s.query('Lond')
     await vi.advanceTimersByTimeAsync(250)
-    const newer = { places: [paris], source: 'server' as const }
+    const newer = { places: [paris], source: 'photon' as const }
     pending[1].resolve(newer)
     await vi.advanceTimersByTimeAsync(0)
-    pending[0].resolve({ places: [], source: 'server' }) // the older request resolves last
+    pending[0].resolve({ places: [], source: 'photon' }) // the older request resolves last
     await vi.advanceTimersByTimeAsync(0)
     expect(got).toEqual([newer])
   })
@@ -169,7 +179,7 @@ describe('createPlaceSearch', () => {
     s.query('Par')
     await vi.advanceTimersByTimeAsync(250) // in flight
     s.query('Pari') // debounce pending
-    pending[0].resolve({ places: [paris], source: 'server' }) // resolved but not yet delivered
+    pending[0].resolve({ places: [paris], source: 'photon' }) // resolved but not yet delivered
     s.cancel() // the user picked a row
     await vi.advanceTimersByTimeAsync(500)
     expect(search).toHaveBeenCalledTimes(1)
@@ -199,7 +209,8 @@ describe('createPlaceSearch', () => {
   })
 
   it('search_results_show_osm_attribution_when_source_is_photon', () => {
-    expect(attributionFor('server')).toBe('© OpenStreetMap contributors')
+    expect(attributionFor('photon')).toBe('© OpenStreetMap contributors')
+    expect(attributionFor('open-meteo')).toBe('Place data: GeoNames')
     expect(attributionFor('bundled')).toBeNull()
   })
 })
@@ -208,7 +219,7 @@ describe('reversePlace', () => {
   it('reverse_place_rounds_coordinates_before_calling_api', async () => {
     apiMock.mockResolvedValue({ place: paris, source: 'photon' })
     const r = await reversePlace(48.856613, 2.352222)
-    expect(r).toEqual({ place: paris, source: 'server' })
+    expect(r).toEqual({ place: paris, source: 'photon' })
     const [path, init] = apiMock.mock.calls[0]
     const u = new URL(path, 'http://x')
     expect(u.pathname).toBe('/places/reverse')
@@ -236,7 +247,7 @@ describe('reversePlace', () => {
 
   it('reverse_place_ocean_from_server_returns_null_place', async () => {
     apiMock.mockResolvedValue({ place: null, source: 'photon' })
-    expect(await reversePlace(-48.88, -123.39)).toEqual({ place: null, source: 'server' })
+    expect(await reversePlace(-48.88, -123.39)).toEqual({ place: null, source: 'photon' })
   })
 
   it('reverse_place_for_a_home_city_ignores_a_landmark', async () => {
@@ -252,11 +263,11 @@ describe('locate', () => {
   const geoWith = (impl: Geolocation['getCurrentPosition']) => ({ getCurrentPosition: impl })
 
   it('geolocation_result_is_rounded_and_not_stored_raw', async () => {
-    const reverse = vi.fn(async (_lat: number, _lng: number, _kind?: string) => ({ place: paris, source: 'server' as const }))
+    const reverse = vi.fn(async (_lat: number, _lng: number, _kind?: string) => ({ place: paris, source: 'photon' as const }))
     const geo = geoWith((ok) => ok({ coords: { latitude: 48.856613, longitude: 2.352222, accuracy: 12 } } as GeolocationPosition))
     const r = await locate(geo, reverse)
     expect(reverse).toHaveBeenCalledWith(48.86, 2.35, 'city')
-    expect(r).toEqual({ ok: true, place: paris, source: 'server' })
+    expect(r).toEqual({ ok: true, place: paris, source: 'photon' })
     expect(JSON.stringify(r)).not.toContain('48.8566')
     expect(JSON.stringify(getState())).not.toContain('48.8566')
   })

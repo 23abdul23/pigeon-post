@@ -34,10 +34,12 @@ export async function searchBundledPlaces(q: string, limit = 6): Promise<Place[]
 }
 
 export type PlaceKind = 'city' | 'any'
-export type PlaceSource = 'server' | 'bundled'
+/** Where results came from: decides the attribution (Photon is OpenStreetMap data, Open-Meteo is GeoNames). */
+export type PlaceSource = 'photon' | 'open-meteo' | 'bundled'
 export type PlaceResults = { places: Place[]; source: PlaceSource }
 
-const SERVER_TIMEOUT_MS = 3500
+/** above the server's worst case: Photon (2.5 s) timing out, then Open-Meteo (2.5 s) */
+export const SERVER_TIMEOUT_MS = 6000
 const BUNDLED_LIMIT = 8
 
 /**
@@ -61,8 +63,9 @@ export async function searchPlaces(q: string, opts: { kind: PlaceKind; signal?: 
     try {
       if (signal?.aborted) onAbort()
       signal?.addEventListener('abort', onAbort)
-      const r = await api<{ places: Place[] }>(`/places/search?${params}`, { signal: ctrl.signal })
-      return { places: r.places, source: 'server' }
+      // `source` is the original provider, also for a server cache hit
+      const r = await api<{ places: Place[]; source?: string }>(`/places/search?${params}`, { signal: ctrl.signal })
+      return { places: r.places, source: r.source === 'open-meteo' ? 'open-meteo' : 'photon' }
     } catch (e) {
       if (signal?.aborted) throw e
     } finally {
@@ -127,8 +130,8 @@ export async function reversePlace(lat: number, lng: number, kind: PlaceKind = '
     try {
       const params = new URLSearchParams({ lat: lat.toFixed(2), lng: lng.toFixed(2) })
       const { place } = await api<{ place: Place | null }>(`/places/reverse?${params}`, { signal: ctrl.signal })
-      if (!place) return { place: null, source: 'server' }
-      if (kind === 'any' || !place.kind || place.kind === 'locality') return { place, source: 'server' }
+      if (!place) return { place: null, source: 'photon' }
+      if (kind === 'any' || !place.kind || place.kind === 'locality') return { place, source: 'photon' }
     } catch {
       // 400, 429, 503, timeout, offline: the bundled cities below
     } finally {

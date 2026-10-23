@@ -33,13 +33,17 @@ async function spend(sub: string) {
       ExpressionAttributeValues: { ':one': 1, ':cap': cap, ':ttl': now + 2 * DAY },
     },
   })
-  try {
-    await ddb.send(new TransactWriteCommand({ TransactItems: [inc(GEO_GLOBAL_PK, geoGlobalUseSk(day), GLOBAL_DAILY_CAP), inc(userPk(sub), geoUserUseSk(day), USER_DAILY_CAP)] }))
-  } catch (e) {
-    if ((e as Error)?.name !== 'TransactionCanceledException') throw e
-    const [g, u] = ((e as { CancellationReasons?: { Code?: string }[] }).CancellationReasons ?? []).map((r) => r.Code === 'ConditionalCheckFailed')
-    if (u && !g) fail(429, 'daily place search limit reached')
-    fail(503, 'places unavailable') // global budget spent (or an unexplained cancel): the client falls back to bundled cities
+  for (let tries = 0; ; tries++) {
+    try {
+      return void (await ddb.send(new TransactWriteCommand({ TransactItems: [inc(GEO_GLOBAL_PK, geoGlobalUseSk(day), GLOBAL_DAILY_CAP), inc(userPk(sub), geoUserUseSk(day), USER_DAILY_CAP)] })))
+    } catch (e) {
+      if ((e as Error)?.name !== 'TransactionCanceledException') throw e
+      const codes = ((e as { CancellationReasons?: { Code?: string }[] }).CancellationReasons ?? []).map((r) => r.Code)
+      if (tries === 0 && codes.includes('TransactionConflict')) continue // the hot global counter: one retry
+      const [g, u] = codes.map((c) => c === 'ConditionalCheckFailed')
+      if (u && !g) fail(429, 'daily place search limit reached')
+      fail(503, 'places unavailable') // global budget spent (or an unexplained cancel): the client falls back to bundled cities
+    }
   }
 }
 
@@ -76,27 +80,36 @@ export const search = route(async (sub, event) => {
   const norm = q.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const PK = hashKey(`${kind}|${norm}|${bias ? `${Math.round(bias.lat)},${Math.round(bias.lng)}` : 'none'}`)
   const hit = await cached(PK, GEO_SEARCH_SK)
-  if (Array.isArray(hit?.places)) return json(200, { places: hit.places, source: 'cache' })
+  // the stored original source, so the client shows the right attribution (entries older than `source` were Photon's)
+  if (Array.isArray(hit?.places)) return json(200, { places: hit.places, source: hit.source === 'open-meteo' ? 'open-meteo' : 'photon', cached: true })
 
   await spend(sub)
+  const usable = (found: Place[] | undefined) => {
+    const seen = new Set<string>()
+    const places: Place[] = []
+    for (const p of found ?? []) {
+      const k = `${p.name}|${p.region ?? ''}|${p.cc}|${p.lat}|${p.lng}`
+      if ((kind === 'city' && p.kind !== 'locality') || seen.has(k)) continue
+      seen.add(k)
+      places.push(p)
+      if (places.length === MAX_RESULTS) break
+    }
+    return places
+  }
   let source: 'photon' | 'open-meteo' = 'photon'
-  let found = await attempt('photon', () => photonSearch(q, kind, bias, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)))
-  if (!found) {
-    source = 'open-meteo'
-    found = await attempt('open-meteo', () => openMeteoSearch(q, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)))
+  const photon = await attempt('photon', () => photonSearch(q, kind, bias, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)))
+  let places = usable(photon)
+  // nothing usable from Photon (failed, empty, malformed or all filtered out): ask Open-Meteo
+  if (!places.length) {
+    const om = await attempt('open-meteo', () => openMeteoSearch(q, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)))
+    if (!photon && !om) return fail(503, 'places unavailable')
+    if (om) {
+      source = 'open-meteo'
+      places = usable(om)
+    }
   }
-  if (!found) return fail(503, 'places unavailable')
-
-  const seen = new Set<string>()
-  const places: Place[] = []
-  for (const p of found) {
-    const k = `${p.name}|${p.region ?? ''}|${p.cc}|${p.lat}|${p.lng}`
-    if ((kind === 'city' && p.kind !== 'locality') || seen.has(k)) continue
-    seen.add(k)
-    places.push(p)
-    if (places.length === MAX_RESULTS) break
-  }
-  await cache({ PK, SK: GEO_SEARCH_SK, places, source })
+  // an empty answer is never cached: it may be a provider hiccup, and it would be served to every user for 30 days
+  if (places.length) await cache({ PK, SK: GEO_SEARCH_SK, places, source })
   return json(200, { places, source })
 })
 
@@ -107,7 +120,7 @@ export const reverse = route(async (sub, event) => {
   const lng = coord(qs.lng, 180, 'lng')
   const PK = hashKey(`${lat}|${lng}`)
   const hit = await cached(PK, GEO_REVERSE_SK)
-  if (hit && 'place' in hit) return json(200, { place: hit.place ?? null, source: 'cache' })
+  if (hit && 'place' in hit) return json(200, { place: hit.place ?? null, source: 'photon', cached: true })
 
   await spend(sub)
   const found = await attempt('photon reverse', () => photonReverse(lat, lng, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)))

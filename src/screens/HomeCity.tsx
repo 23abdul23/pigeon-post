@@ -25,7 +25,7 @@ export default function HomeCity() {
     existing ? { id: 'current', name: existing.name, region: existing.region, country: existing.country, cc: existing.cc, lat: existing.lat, lng: existing.lng } : null,
   )
   const [searched, setSearched] = useState(false)
-  const [source, setSource] = useState<PlaceSource>('server')
+  const [source, setSource] = useState<PlaceSource>('photon')
   const [mapOpen, setMapOpen] = useState(false)
   const [locating, setLocating] = useState(false)
   const [note, setNote] = useState('') // why "Use my location" did not pick, or how far the nearest city is

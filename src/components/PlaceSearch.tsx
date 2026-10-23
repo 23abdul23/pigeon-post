@@ -15,7 +15,7 @@ type Props = {
 
 export const placeDetail = (p: Place) => (p.region ? `${p.region}, ${p.country}` : p.country)
 
-/** "Offline results" when the server could not be used, OSM attribution when it was. */
+/** "Offline results" when the server could not be used, the provider's attribution when it was. */
 export function PlaceSourceNote({ source }: { source: PlaceSource }) {
   const attribution = attributionFor(source)
   return <p className="px-4 pb-1 pt-1.5 text-[11px] text-muted">{attribution ?? 'Offline results'}</p>
@@ -24,7 +24,7 @@ export function PlaceSourceNote({ source }: { source: PlaceSource }) {
 export default function PlaceSearch({ value, onChange, kind, placeholder = 'Where to?', large = false }: Props) {
   const [text, setText] = useState(value ? placeLabel(value) : '')
   const [results, setResults] = useState<Place[]>([])
-  const [source, setSource] = useState<PlaceSource>('server')
+  const [source, setSource] = useState<PlaceSource>('photon')
   const [open, setOpen] = useState(false)
   const [searched, setSearched] = useState(false)
   const [active, setActive] = useState(-1)
@@ -84,7 +84,10 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
         onChange={(e) => onType(e.target.value)}
         onKeyDown={onKey}
         onFocus={() => results.length && setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onBlur={() => {
+          searcher.current!.cancel() // a search still pending must not reopen the list after leaving the field
+          window.setTimeout(() => setOpen(false), 120)
+        }}
         placeholder={placeholder}
         aria-label={placeholder}
         role="combobox"

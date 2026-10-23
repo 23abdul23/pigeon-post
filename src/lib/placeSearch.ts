@@ -4,8 +4,8 @@ import { searchPlaces, type PlaceKind, type PlaceResults, type PlaceSource } fro
 /** Home stays city level for privacy: the home screen never asks for landmarks or streets. */
 export const HOME_SEARCH_KIND = 'city' satisfies PlaceKind
 
-/** OpenStreetMap-derived results must carry attribution; bundled GeoNames results get the "Offline results" note instead. */
-export const attributionFor = (source: PlaceSource) => (source === 'server' ? '© OpenStreetMap contributors' : null)
+/** Server results carry their provider's attribution (Photon: OpenStreetMap, ODbL; Open-Meteo: GeoNames, CC BY); bundled GeoNames results get the "Offline results" note instead. */
+export const attributionFor = (source: PlaceSource) => (source === 'photon' ? '© OpenStreetMap contributors' : source === 'open-meteo' ? 'Place data: GeoNames' : null)
 
 /**
  * Typeahead controller: debounces keystrokes, aborts the previous request on each one, and drops any response that is

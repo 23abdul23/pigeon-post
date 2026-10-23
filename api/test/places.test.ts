@@ -138,7 +138,9 @@ describe('places search', () => {
     store.set(put.PK as string, { ...put, places: cached })
     fetchMock.mockClear()
     const r = await search({ q: '  zurich ' })
-    expect(r).toEqual({ status: 200, body: { places: cached, source: 'cache' } })
+    expect(r).toEqual({ status: 200, body: { places: cached, source: 'photon', cached: true } }) // the stored original source
+    store.set(put.PK as string, { ...put, places: cached, source: 'open-meteo' })
+    expect((await search({ q: 'zurich' })).body).toEqual({ places: cached, source: 'open-meteo', cached: true })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(ddb.commandCalls(TransactWriteCommand)).toHaveLength(1)
     // A cache write failure never fails the request.
@@ -170,11 +172,42 @@ describe('places search', () => {
     const r = await search({ q: 'berlin' })
     expect(r).toEqual({ status: 503, body: { error: 'places unavailable' } })
     expect(ddb.commandCalls(PutCommand)).toHaveLength(0)
-    // An empty Photon result is an answer, not a failure.
+  })
+
+  it('photon_empty_result_falls_through_to_open_meteo', async () => {
     photon = { type: 'FeatureCollection', features: [] }
+    const r = await search({ q: 'berlin' })
+    expect(r.body.source).toBe('open-meteo')
+    expect(r.body.places[0].id).toBe('om:2950159')
+    // kind=city filtering that drops every Photon row counts as empty too
+    photon = { ...PHOTON_ANY, features: [PHOTON_ANY.features[1]] }
     fetchMock.mockClear()
-    expect((await search({ q: 'qqqzzz' })).body).toEqual({ places: [], source: 'photon' })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((await search({ q: 'berlin', kind: 'city' })).body.source).toBe('open-meteo')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('empty_results_are_not_cached', async () => {
+    photon = { type: 'FeatureCollection', features: [] }
+    openMeteo = { generationtime_ms: 0.1 } // no `results`: no match
+    expect((await search({ q: 'qqqzzz' }))).toEqual({ status: 200, body: { places: [], source: 'open-meteo' } })
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0)
+  })
+
+  it('malformed_200_is_not_cached', async () => {
+    photon = { features: 'nope' }
+    openMeteo = { results: 'nope' }
+    const r = await search({ q: 'berlin' })
+    expect(r.status).toBe(200)
+    expect(r.body.places).toEqual([])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(0)
+  })
+
+  it('spend_retries_once_on_a_transaction_conflict', async () => {
+    const conflict = new TransactionCanceledException({ message: 'c', $metadata: {}, CancellationReasons: [{ Code: 'TransactionConflict' }, { Code: 'None' }] })
+    ddb.on(TransactWriteCommand).rejectsOnce(conflict).resolves({})
+    expect((await search({ q: 'berlin' })).status).toBe(200)
+    expect(ddb.commandCalls(TransactWriteCommand)).toHaveLength(2)
   })
 
   it('search_over_200_uncached_per_user_is_429', async () => {
@@ -226,7 +259,7 @@ describe('places search', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
     for (const [input, init] of fetchMock.mock.calls) {
       const h = new Headers(init?.headers)
-      expect(h.get('user-agent')).toBe('PigeonPost/1.0 (ops@example.test)')
+      expect(h.get('user-agent')).toBe('Fost/1.0 (+ops@example.test)')
       expect([...h.keys()].sort()).toEqual(['accept', 'user-agent'])
       expect(init?.credentials ?? 'omit').toBe('omit')
       expect(init?.signal).toBeInstanceOf(AbortSignal)
@@ -263,7 +296,7 @@ describe('places reverse', () => {
     expect(ddb.commandCall(0, PutCommand).args[0].input.Item).toMatchObject({ SK: 'REVERSE', place: null })
     ddb.on(GetCommand).resolves({ Item: { place: null } })
     fetchMock.mockClear()
-    expect((await call('reverse', { lat: '30', lng: '-30' })).body).toEqual({ place: null, source: 'cache' })
+    expect((await call('reverse', { lat: '30', lng: '-30' })).body).toEqual({ place: null, source: 'photon', cached: true })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
