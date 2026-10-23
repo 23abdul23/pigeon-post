@@ -18,6 +18,14 @@ Parameters:
     Default: main
     AllowedPattern: '^[A-Za-z0-9_./-]+$'
     Description: Only workflows running on this exact branch may assume the role
+  # GitHub repos with "immutable subject claims" (Settings > Actions > OIDC, or `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`)
+  # emit `repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:...` instead of `repo:<owner>/<repo>:ref:...`. Put that
+  # `sub_claim_prefix` value here (it already starts with `repo:`); empty keeps the classic `repo:<GithubRepo>` form.
+  GithubSubjectPrefix:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^repo:[A-Za-z0-9_.@/-]+$'
+    Description: Exact OIDC subject prefix of the repo (empty = repo:<GithubRepo>)
   # The account can have only one provider for this URL. Set 'false' if it already exists.
   CreateGithubOidcProvider:
     Type: String
@@ -37,6 +45,7 @@ Parameters:
 Conditions:
   CreateProvider: !Equals [!Ref CreateGithubOidcProvider, 'true']
   HasZone: !Not [!Equals [!Ref HostedZoneId, '']]
+  HasSubjectPrefix: !Not [!Equals [!Ref GithubSubjectPrefix, '']]
 
 Resources:
   GithubOidcProvider:
@@ -100,7 +109,10 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 # Exact match, no wildcard: pull requests, forks, tags and other branches cannot assume the role.
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GithubRepo}:ref:refs/heads/${GithubBranch}'
+                token.actions.githubusercontent.com:sub: !If
+                  - HasSubjectPrefix
+                  - !Sub '${GithubSubjectPrefix}:ref:refs/heads/${GithubBranch}'
+                  - !Sub 'repo:${GithubRepo}:ref:refs/heads/${GithubBranch}'
       Policies:
         - PolicyName: deploy
           PolicyDocument:
