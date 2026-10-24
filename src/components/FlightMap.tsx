@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Map as MapLibreMap, GeoJSONSource, StyleSpecification } from 'maplibre-gl'
-import { pointAtKm, routeLengthKm, type Pt } from '../lib/geo'
+import { easeBearing, pointAtKm, routeLengthKm, shortestAngleDelta, type Pt } from '../lib/geo'
 import { MAP_STYLE } from './MiniMap'
 
 type Props = {
@@ -9,6 +9,8 @@ type Props = {
   stops: number[]
   /** Called every frame; must be cheap and return the km travelled along the route. */
   getKm: () => number
+  /** Written every frame: route bearing minus displayed map bearing, degrees (positive = route turns clockwise). */
+  turnRef?: { current: number }
   className?: string
 }
 
@@ -31,7 +33,7 @@ const line = (pts: Pt[]) => ({
 })
 
 /** Tilted map that follows the bird along the route. The bird itself is a separate overlay at screen centre. */
-export default function FlightMap({ route, stops, getKm, className = '' }: Props) {
+export default function FlightMap({ route, stops, getKm, turnRef, className = '' }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const kmRef = useRef(getKm)
   kmRef.current = getKm
@@ -111,11 +113,17 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
         })
 
       let lastSplit = 0
+      let shown = start.bearing
+      let lastNow = 0
       const tick = (now: number) => {
         raf = requestAnimationFrame(tick)
+        const dt = lastNow ? Math.min((now - lastNow) / 1000, 0.1) : 0
+        lastNow = now
         const km = kmRef.current()
         const { pt, bearing, index } = pointAtKm(route, km)
-        m.jumpTo({ center: [pt[1], pt[0]], bearing })
+        shown = easeBearing(shown, bearing, dt, 90)
+        if (turnRef) turnRef.current = shortestAngleDelta(shown, bearing)
+        m.jumpTo({ center: [pt[1], pt[0]], bearing: shown })
         if (now - lastSplit > 500 && m.getSource('done')) {
           lastSplit = now
           markReached(km)
@@ -131,7 +139,7 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
       cancelAnimationFrame(raf)
       map?.remove()
     }
-  }, [route, stopsKey])
+  }, [route, stopsKey, turnRef])
 
   return (
     <div className={`bg-[#efe7e1] ${className}`}>

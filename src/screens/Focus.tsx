@@ -44,6 +44,7 @@ export default function Focus() {
   const [watched, setWatched] = useState<ActiveFlight | null>(null)
   if (observing && flight !== watched) setWatched(flight) // remembered so its landing can be shown once it ends elsewhere
   const live = session ?? (observing ? flight : null)
+  const turnRef = useRef(0)
   const liveRef = useRef(live)
   liveRef.current = live
 
@@ -186,13 +187,14 @@ export default function Focus() {
             const s = liveRef.current
             return s ? computeProgress(s, trip, serverNow()).km : km
           }}
+          turnRef={turnRef}
           className="absolute inset-0"
         />
         <div className="pointer-events-none absolute inset-0 bg-[rgba(255,248,244,0.18)]" />
         <WindStreaks wind={wind} />
 
         <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
-          <BirdViewer bird={species} flight className="h-44 w-60" />
+          <BirdViewer bird={species} flight turnRef={turnRef} className="h-44 w-60" />
         </div>
 
         {!midStop && live && <CountryStamps entered={enteredBetween(hits, live.baseKm, km)} />}
