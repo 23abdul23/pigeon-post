@@ -209,6 +209,27 @@ describe('flight handoff', () => {
     expect(getState().session!.leftAtMs).toBe(left)
   })
 
+  it('mark_left_dates_the_leave_at_the_moment_the_person_left_not_when_it_was_decided', () => {
+    apiMock.mockImplementation((async (_p: string, init: RequestInit) => ({ ...JSON.parse(init.body as string), heartbeatMs: Date.now() })) as never)
+    const start = serverNow() - 60000
+    setState({ session: { tripId: 't1', startMs: start, durationMin: 25, baseKm: 300, legs: 2 } })
+    const hiddenAt = serverNow() - 2500 // the decision came 2.5 s after the page was hidden
+    markLeft(hiddenAt)
+    expect(getState().session!.leftAtMs).toBe(hiddenAt)
+  })
+
+  it('mark_left_never_dates_the_leave_before_the_flight_started_or_in_the_future', () => {
+    apiMock.mockImplementation((async (_p: string, init: RequestInit) => ({ ...JSON.parse(init.body as string), heartbeatMs: Date.now() })) as never)
+    const start = serverNow() - 60000
+    setState({ session: { tripId: 't1', startMs: start, durationMin: 25, baseKm: 300, legs: 2 } })
+    markLeft(start - 5000)
+    expect(getState().session!.leftAtMs).toBe(start)
+
+    setState({ session: { tripId: 't1', startMs: start, durationMin: 25, baseKm: 300, legs: 2 } })
+    markLeft(serverNow() + 60_000)
+    expect(getState().session!.leftAtMs!).toBeLessThanOrEqual(serverNow())
+  })
+
   // last in the file: the hanging refresh stays the shared in-flight pull
   it('returning_device_lands_after_refresh_timeout_when_network_hangs', async () => {
     vi.useFakeTimers()

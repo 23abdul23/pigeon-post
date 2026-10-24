@@ -13,6 +13,9 @@ import { coveredBetween, countryEntries, enteredBetween } from '../lib/countries
 import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
+import { startScreenWatch } from '../lib/idle'
+import { createPresence, isMobileDevice } from '../lib/presence'
+import { holdWakeLock } from '../lib/wakeLock'
 import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
@@ -78,19 +81,29 @@ export default function Focus() {
     }
   }, [])
 
-  // Leaving the tab freezes progress; coming back shows the resume prompt (it reads the store, so showing does nothing).
-  // A hidden tab whose keep-alive audio plays is treated as the screen being locked and the flight carries on: the web
-  // cannot tell a screen lock from an app switch, so an app switch with the audio playing does not count as leaving either.
+  // Leaving freezes progress (at the moment the person left); coming back shows the resume prompt. A locked screen is NOT leaving,
+  // switching tab / app / window is: see lib/presence.ts for the rule and its fallbacks when the lock cannot be read.
   useEffect(() => {
-    const onHide = markLeft
-    const onVis = () => document.visibilityState === 'hidden' && !isKeepAliveActive() && onHide()
-    document.addEventListener('visibilitychange', onVis)
-    window.addEventListener('pagehide', onHide)
+    if (!flying) return
+    const watch = startScreenWatch() // Chrome's lock signal, when the permission was given
+    const presence = createPresence({
+      doc: document,
+      win: window,
+      mobile: isMobileDevice(),
+      screen: watch.screen,
+      onScreen: watch.subscribe,
+      keepAliveActive: isKeepAliveActive,
+      onLeave: (at) => markLeft(at),
+      now: serverNow,
+    })
     return () => {
-      document.removeEventListener('visibilitychange', onVis)
-      window.removeEventListener('pagehide', onHide)
+      presence.stop()
+      watch.stop()
     }
-  }, [])
+  }, [flying])
+
+  // Stops the screen from locking by itself while the flight is on screen (a power-button lock is handled above).
+  useEffect(() => (flying ? holdWakeLock() : undefined), [flying])
 
   // Leaving only pauses the flight for a short grace period; a longer absence (another app, a locked screen) lands it where the tab was left.
   useEffect(() => {

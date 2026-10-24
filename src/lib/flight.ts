@@ -190,10 +190,12 @@ export function heartbeat(): void {
 }
 
 /** Leaving the tab: freezes the flight at this moment and tells the server (the 30 s heartbeat stops while hidden). */
-export function markLeft(): void {
+export function markLeft(atMs?: number): void {
   const s = getState().session
   if (!s || s.leftAtMs) return
-  setState({ session: { ...s, leftAtMs: serverNow() } })
+  // `atMs` (server clock) is when the user really left; the decision that they left can come a few seconds later.
+  const at = Math.min(serverNow(), Math.max(s.startMs, atMs ?? serverNow()))
+  setState({ session: { ...s, leftAtMs: at } })
   heartbeat()
 }
 

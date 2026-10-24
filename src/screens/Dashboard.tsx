@@ -10,6 +10,8 @@ import { useStore, type Place } from '../lib/store'
 import { flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip, tripProblem } from '../lib/trips'
 import { greeting } from '../lib/greeting'
+import { markIdleAsked, requestIdlePermission, shouldAskIdlePermission } from '../lib/idle'
+import ScreenLockPrompt from '../components/ScreenLockPrompt'
 
 const DURATIONS = [10, 15, 25, 30]
 
@@ -68,9 +70,11 @@ export default function Dashboard() {
       return
     }
     setError('')
-    const t = createTrip(dest)
-    startSession(t, minutes)
-    nav(`/fly/${t.id}`)
+    afterLockPrompt(() => {
+      const t = createTrip(dest)
+      startSession(t, minutes)
+      nav(`/fly/${t.id}`)
+    })
   }
 
   function continueTrip() {
@@ -80,12 +84,30 @@ export default function Dashboard() {
       return
     }
     if (active.status === 'DELIVERED') {
-      const back = startReturn(minutes)
-      if (back) nav(`/fly/${back.id}`)
+      afterLockPrompt(() => {
+        const back = startReturn(minutes)
+        if (back) nav(`/fly/${back.id}`)
+      })
       return
     }
-    startSession({ ...active, status: active.status === 'PAUSED' ? 'OUTBOUND' : active.status }, minutes)
-    nav(`/fly/${active.id}`)
+    afterLockPrompt(() => {
+      startSession({ ...active, status: active.status === 'PAUSED' ? 'OUTBOUND' : active.status }, minutes)
+      nav(`/fly/${active.id}`)
+    })
+  }
+
+  // Before the first flight on Chrome: explain, then show Chrome's own one-time prompt so a locked screen can be told from leaving the app.
+  const [askLock, setAskLock] = useState<(() => void) | null>(null)
+  function afterLockPrompt(go: () => void) {
+    void shouldAskIdlePermission().then((ask) => (ask ? setAskLock(() => go) : go()))
+  }
+  function answerLockPrompt(allow: boolean) {
+    const go = askLock
+    setAskLock(null)
+    markIdleAsked()
+    // requestPermission must start inside this click; the flight starts whatever the answer is
+    if (allow) void requestIdlePermission().finally(() => go?.())
+    else go?.()
   }
 
   const pct = active ? Math.min(100, Math.round((active.progressKm / active.routeKm) * 100)) : 0
@@ -279,6 +301,7 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+      {askLock && <ScreenLockPrompt onAllow={() => answerLockPrompt(true)} onSkip={() => answerLockPrompt(false)} />}
     </AppLayout>
   )
 }
