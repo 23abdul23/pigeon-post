@@ -13,7 +13,7 @@ import { coveredBetween, countryEntries, enteredBetween } from '../lib/countries
 import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
-import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, releaseKeepAlive, startKeepAlive } from '../lib/keepAlive'
+import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
@@ -112,7 +112,7 @@ export default function Focus() {
     if (!flying) return
     const start = () => {
       const i = keepAliveInfo()
-      if (i && !isKeepAliveActive()) void startKeepAlive(i.meta).then((ok) => ok && setKeepAlivePosition(i.duration, i.elapsed))
+      if (i) void ensureKeepAlive(i.meta).then((ok) => ok && setKeepAlivePosition(i.duration, i.elapsed))
     }
     start() // also while hidden: a chained slot restarts it with the screen off
     const onVis = () => document.visibilityState === 'visible' && start() // retry when autoplay was blocked earlier

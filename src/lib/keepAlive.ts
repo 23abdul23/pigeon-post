@@ -95,6 +95,12 @@ export async function startKeepAlive(meta: KeepAliveMeta): Promise<boolean> {
   }
 }
 
+/** Cancels a pending release, then starts only if the audio is not already playing. Resolves true when it plays. */
+export async function ensureKeepAlive(meta: KeepAliveMeta): Promise<boolean> {
+  clearTimeout(releaseTimer)
+  return active ? true : startKeepAlive(meta)
+}
+
 /** Stops after `graceMs` unless a start comes first: a chained slot briefly has no session and must not kill the audio. */
 export function releaseKeepAlive(graceMs = 2000): void {
   clearTimeout(releaseTimer)

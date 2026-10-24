@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isKeepAliveActive, makeQuietWav, releaseKeepAlive, startKeepAlive, stopKeepAlive } from '../src/lib/keepAlive'
+import { ensureKeepAlive, isKeepAliveActive, makeQuietWav, releaseKeepAlive, startKeepAlive, stopKeepAlive } from '../src/lib/keepAlive'
 
 describe('makeQuietWav', () => {
   it('writes a mono 16-bit PCM WAV with quiet, non-silent samples', () => {
@@ -61,6 +61,22 @@ describe('keep-alive element', () => {
     releaseKeepAlive(2000)
     vi.advanceTimersByTime(2000)
     expect(pause).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('ensureKeepAlive after a release (handoff) keeps playing; a release alone stops it', async () => {
+    setup()
+    vi.useFakeTimers()
+    await ensureKeepAlive({ title: 'T' })
+    releaseKeepAlive(2000) // effect cleanup
+    await ensureKeepAlive({ title: 'T' }) // effect re-runs while still active: must cancel the release
+    vi.advanceTimersByTime(2500)
+    expect(pause).not.toHaveBeenCalled()
+    expect(isKeepAliveActive()).toBe(true)
+    releaseKeepAlive(2000)
+    vi.advanceTimersByTime(2000)
+    expect(pause).toHaveBeenCalledTimes(1)
+    expect(isKeepAliveActive()).toBe(false)
     vi.useRealTimers()
   })
 
