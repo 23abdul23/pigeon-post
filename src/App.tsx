@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setState, useStore } from './lib/store'
@@ -10,7 +10,6 @@ import Dashboard from './screens/Dashboard'
 import AddFriend from './screens/AddFriend'
 import Focus from './screens/Focus'
 import Friends from './screens/Friends'
-import EnvelopeOpening from './screens/EnvelopeOpening'
 import HomeCity from './screens/HomeCity'
 import JournalDetail from './screens/JournalDetail'
 import Journal from './screens/Journal'
@@ -71,6 +70,12 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   return <>{children}</>
 }
 
+/** The separate "opening" page is gone (the envelope animation plays on the letter itself); old links land on the letter. */
+function OpeningMoved() {
+  const { letterId } = useParams()
+  return <Navigate to={`/mailbox/${letterId}`} replace />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -85,7 +90,7 @@ export default function App() {
       <Route path="/friends/add" element={<Guard><AddFriend /></Guard>} />
       <Route path="/friends" element={<Guard><Friends /></Guard>} />
       <Route path="/mailbox" element={<Guard><Mailbox /></Guard>} />
-      <Route path="/mailbox/:letterId/opening" element={<Guard><EnvelopeOpening /></Guard>} />
+      <Route path="/mailbox/:letterId/opening" element={<OpeningMoved />} />
       <Route path="/mailbox/:letterId" element={<Guard><OpenedLetter /></Guard>} />
       <Route path="/journal" element={<Guard><Journal /></Guard>} />
       <Route path="/journal/:storyId" element={<Guard><JournalDetail /></Guard>} />

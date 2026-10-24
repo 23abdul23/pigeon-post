@@ -50,7 +50,7 @@ export default function Mailbox() {
   const friendName = (id: string) => friends.find((f) => f.id === id)
 
   function open(l: Letter) {
-    nav(l.status === 'DELIVERED' ? `/mailbox/${l.id}/opening` : `/mailbox/${l.id}`)
+    nav(`/mailbox/${l.id}`) // an unread letter plays the envelope opening on the letter screen itself
   }
 
   return (

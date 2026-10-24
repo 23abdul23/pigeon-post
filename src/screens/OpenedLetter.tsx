@@ -1,6 +1,7 @@
 import Avatar from '../components/Avatar'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import EnvelopeOpener from '../components/EnvelopeOpener'
 import { Frame } from '../components/Layout'
 import { playRustle } from '../lib/sound'
 import { countryName, haversineKm } from '../lib/geo'
@@ -36,6 +37,14 @@ export default function OpenedLetter() {
   const bird = useStore((s) => s.bird)
   const user = useStore((s) => s.user)
   if (!letter) return <Navigate to="/mailbox" replace />
+
+  // An unread letter sent to me opens with the envelope animation first; my own sent letters never do.
+  const unread = letter.toId === 'me' && letter.status === 'DELIVERED'
+  function markOpened() {
+    const id = letter!.id
+    void send({ id: `letter-open:${id}`, method: 'POST', path: `/letters/${id}/open`, touches: [`letter:${id}`] })
+    setState({ letters: getState().letters.map((l) => (l.id === id && l.status === 'DELIVERED' ? { ...l, status: 'OPENED' as const } : l)) })
+  }
 
   const mine = letter.fromId === 'me'
   const other = friends.find((f) => f.id === (mine ? letter.toId : letter.fromId))
@@ -83,6 +92,7 @@ export default function OpenedLetter() {
 
   return (
     <Frame nav>
+      {unread && <EnvelopeOpener fromName={letter.fromName} fromCity={letter.fromCity} cc={letter.cc} dateMs={letter.dateMs} onDone={markOpened} />}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav('/mailbox')} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">

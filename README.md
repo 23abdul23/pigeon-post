@@ -32,7 +32,7 @@ Vite + React 19 + TypeScript + Tailwind 4, React Router, MapLibre GL (OpenFreeMa
 
 ## Screens (routes)
 
-`/signin`, `/onboarding/city`, `/onboarding/bird`, `/home`, `/fly/:tripId` (Focus, and Welcome Back after leaving the tab), `/landing/:storyId`, `/trip/new`, `/friends`, `/friends/add`, `/mailbox`, `/mailbox/:id/opening`, `/mailbox/:id`, `/passport`, `/passport/share`, `/journal`, `/journal/:id`, `/settings/:section`.
+`/signin`, `/onboarding/city`, `/onboarding/bird`, `/home`, `/fly/:tripId` (Focus, and Welcome Back after leaving the tab), `/landing/:storyId`, `/trip/new`, `/friends`, `/friends/add`, `/mailbox`, `/mailbox/:id`, `/passport`, `/passport/share`, `/journal`, `/journal/:id`, `/settings/:section`.
 
 ## Known gaps
 
