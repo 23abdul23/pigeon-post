@@ -74,11 +74,11 @@ export async function getIdToken(): Promise<string | null> {
   return (await liveUser())?.id_token ?? null
 }
 
-type AuthState = { status: 'loading' | 'signedOut' | 'signedIn'; email?: string }
+type AuthState = { status: 'loading' | 'signedOut' | 'signedIn'; email?: string; picture?: string }
 
 export async function resolveAuth(): Promise<AuthState> {
   const u = await liveUser().catch(() => null)
-  return u ? { status: 'signedIn', email: u.profile.email } : { status: 'signedOut' }
+  return u ? { status: 'signedIn', email: u.profile.email, picture: u.profile.picture } : { status: 'signedOut' }
 }
 
 export function useAuth(): AuthState {

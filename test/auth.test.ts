@@ -88,6 +88,13 @@ describe('auth client', () => {
     mgr.getUser.mockResolvedValue(fresh)
     expect(await resolveAuth()).toEqual({ status: 'signedIn', email: 'a@b.c' })
   })
+  it('resolveAuth_includes_google_picture_claim', async () => {
+    const pic = 'https://lh3.googleusercontent.com/a/x'
+    mgr.getUser.mockResolvedValue({ ...fresh, profile: { email: 'a@b.c', picture: pic } })
+    expect(await resolveAuth()).toEqual({ status: 'signedIn', email: 'a@b.c', picture: pic })
+    mgr.getUser.mockResolvedValue(fresh)
+    expect((await resolveAuth()).picture).toBeUndefined()
+  })
   it('resolveAuth_refreshes_expired_session_instead_of_signing_out', async () => {
     mgr.getUser.mockResolvedValue(stale('r'))
     mgr.signinSilent.mockResolvedValue(fresh)

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COGNITO_CONFIGURED, signOut as cognitoSignOut } from '../lib/auth'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import Avatar from '../components/Avatar'
 import BirdViewer from '../components/BirdViewer'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
@@ -128,7 +129,7 @@ export default function Settings() {
       <main className="flex flex-1 flex-col gap-4 px-4 pb-32 pt-2">
         <Card id="profile" title="Profile" refs={refs}>
           <div className="flex items-center gap-4">
-            <img src="/assets/profile.jpg" alt="" className="size-16 rounded-full shadow-[0_0_0_2px_rgba(127,163,138,0.4)]" />
+            <Avatar className="size-16 shadow-[0_0_0_2px_rgba(127,163,138,0.4)]" />
             <div className="min-w-0 flex-1">
               <label htmlFor="display-name" className="text-[12px] font-bold tracking-[0.36px] text-ink-2">
                 Display name

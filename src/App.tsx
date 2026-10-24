@@ -53,10 +53,10 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   useStatePoll(COGNITO_CONFIGURED && auth.status === 'signedIn' && synced)
   // With Cognito the session is the source of truth; mirror it into the store for screens that read `user`.
   useEffect(() => {
-    if (COGNITO_CONFIGURED && auth.status === 'signedIn' && !user) {
-      setState({ user: { name: auth.email?.split('@')[0] ?? 'Traveler', email: auth.email ?? '' } })
+    if (COGNITO_CONFIGURED && auth.status === 'signedIn' && (!user || auth.picture !== user.picture)) {
+      setState({ user: { name: user?.name ?? auth.email?.split('@')[0] ?? 'Traveler', email: auth.email ?? '', picture: auth.picture } })
     }
-  }, [auth.status, auth.email, user])
+  }, [auth.status, auth.email, auth.picture, user])
   if (COGNITO_CONFIGURED) {
     if (auth.status === 'loading') return null
     if (auth.status === 'signedOut') return <Navigate to="/signin" replace state={{ returnTo: loc.pathname + loc.search }} />

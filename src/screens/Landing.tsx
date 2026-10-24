@@ -1,4 +1,5 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import Avatar from '../components/Avatar'
 import Flag from '../components/Flag'
 import Stamp from '../components/Stamp'
 import { Frame } from '../components/Layout'
@@ -81,8 +82,8 @@ export default function Landing() {
           <img src="/assets/ic-close.svg" alt="" className="size-3.5" />
         </button>
         <h1 className="font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink">Flight Mission Summary</h1>
-        <Link to="/settings/profile" aria-label="Profile" className="flex size-8 items-center justify-center rounded-full bg-sage">
-          <img src="/assets/ic-person.svg" alt="" className="size-3" />
+        <Link to="/settings/profile" aria-label="Profile" className="flex size-8 items-center justify-center rounded-full">
+          <Avatar className="size-8" />
         </Link>
       </header>
 

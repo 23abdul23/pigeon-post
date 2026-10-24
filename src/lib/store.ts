@@ -45,7 +45,7 @@ export const defaultSettings: Settings = {
 }
 
 export type State = {
-  user: { name: string; email: string } | null
+  user: { name: string; email: string; picture?: string } | null
   homeCity: City | null
   bird: Bird | null
   soundOn: boolean
