@@ -18,8 +18,6 @@ export default function Passport() {
   const home = useStore((s) => s.homeCity)
   const user = useStore((s) => s.user)
   const [period, setPeriod] = useState<Period>('all')
-  const [sort, setSort] = useState<'new' | 'az'>('new')
-  const [locks, setLocks] = useState(true)
   const [open, setOpen] = useState<string | null>(null)
 
   const all = useMemo(() => {
@@ -33,16 +31,15 @@ export default function Passport() {
     const span = period === 'month' ? 30 : period === 'year' ? 365 : 36500
     return all
       .filter((s) => s.cc === home?.cc || now - s.firstMs < span * 86400000)
-      .sort((a, b) => (sort === 'az' ? a.country.localeCompare(b.country) : b.firstMs - a.firstMs))
-  }, [all, period, sort, home])
+      .sort((a, b) => b.firstMs - a.firstMs)
+  }, [all, period, home])
 
   const km = Math.round(sessions.reduce((a, s) => a + s.km, 0))
   const places = stories.length
   const visited = new Set(all.map((s) => s.cc))
-  const locked = nextCountries(visited, home ?? { lat: 0, lng: 0 }, 4).map((c) => [c.cc, `${c.region} skies`] as const)
+  const locked = nextCountries(visited, home ?? { lat: 0, lng: 0 }, 2).map((c) => [c.cc, `${c.region} skies`] as const)
   const picked = shown.find((s) => s.cc === open)
   const pickedStories = picked ? stories.filter((s) => s.cc === picked.cc) : []
-  const recordNo = `PP-${(((user?.email ?? 'guest').length * 7919) % 9000) + 1000}`
 
   return (
     <AppLayout>
@@ -56,16 +53,8 @@ export default function Passport() {
                 <img src="/assets/pp-emblem.svg" alt="" className="size-[22.8px]" />
               </span>
             </span>
-            <p className="px-8 text-center text-[12px] font-bold uppercase leading-4 tracking-[1.2px] text-card-soft">
-              Republic of wings • traveler
-              <br />
-              passport
-            </p>
+            <p className="px-8 text-center text-[12px] font-bold uppercase leading-4 tracking-[1.2px] text-card-soft">Passport</p>
             <h1 className="pt-0.5 font-serif text-[24px] leading-8 tracking-[-0.6px] text-cream">{user?.name ?? 'Wanderer'}'s Roost</h1>
-            <span className="mt-1 flex items-center gap-1 rounded-full bg-[rgba(68,102,80,0.4)] px-4 py-1 text-[12px] font-bold tracking-[0.6px] text-cream shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <img src="/assets/pp-record.svg" alt="" className="h-3.5 w-[14.7px]" />
-              OFFICIAL AVIARY RECORD #{recordNo}
-            </span>
           </div>
         </section>
 
@@ -87,7 +76,7 @@ export default function Passport() {
         </section>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center">
             <div className="flex items-center gap-1" role="tablist" aria-label="Period">
               {(
                 [
@@ -101,23 +90,6 @@ export default function Passport() {
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-1 rounded-full bg-card py-1.5 pl-2.5 pr-2 text-[12px] font-bold tracking-[0.36px] text-ink-2">
-              <img src="/assets/pp-sort.svg" alt="" className="h-2 w-3" />
-              <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort stamps" className="appearance-none bg-transparent outline-none">
-                <option value="new">Newest</option>
-                <option value="az">A to Z</option>
-              </select>
-              <img src="/assets/pp-chev.svg" alt="" className="h-[4.9px] w-2" />
-            </label>
-          </div>
-          <div className="flex items-center justify-between px-1">
-            <span className="flex items-center gap-1 text-[12px] font-bold tracking-[0.36px] text-ink-2">
-              <img src="/assets/pp-eye.svg" alt="" className="h-2.5 w-[14.7px]" />
-              Show unvisited locks
-            </span>
-            <button type="button" role="switch" aria-checked={locks} aria-label="Show unvisited locks" onClick={() => setLocks(!locks)} className={`flex h-6 w-10 items-center rounded-full p-0.5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] transition-colors ${locks ? 'justify-end bg-sage' : 'justify-start bg-outline'}`}>
-              <span className="size-5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]" />
-            </button>
           </div>
         </div>
 
@@ -155,9 +127,8 @@ export default function Passport() {
         )}
 
         <section className="relative rounded-xl bg-card-soft p-4 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
-          <div className="flex h-7 items-center justify-between">
+          <div className="flex h-7 items-center">
             <span className="text-[12px] font-bold uppercase tracking-[0.6px] text-ink-2">Archival stamps</span>
-            <span className="-rotate-2 font-serif text-[22px] leading-7 text-[#8e4d31]">Treasured miles</span>
           </div>
           {shown.length === 0 ? (
             <div className="py-10 text-center">
@@ -183,8 +154,7 @@ export default function Passport() {
                   </button>
                 )
               })}
-              {locks &&
-                locked.map(([cc, hint]) => (
+              {locked.map(([cc, hint]) => (
                   <div key={cc} className="flex flex-col rounded-lg bg-card p-2 opacity-70" aria-label={`${countryName(cc)} stamp, locked`}>
                     <div className="flex flex-col items-center p-1">
                       <div className="flex w-full items-center justify-between pb-1 text-[10px] font-bold tracking-[0.5px] text-ink-2">
@@ -213,7 +183,6 @@ export default function Passport() {
             Share stamps
             <img src="/assets/af-share.svg" alt="" className="h-[15px] w-[13.5px] brightness-0 invert" />
           </button>
-          <p className="px-3 pt-3 text-center font-serif text-[22px] leading-7 text-ink-2">“Every stamp is a quiet hour spent in the clouds.”</p>
         </div>
       </div>
     </AppLayout>

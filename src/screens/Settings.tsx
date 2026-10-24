@@ -176,7 +176,7 @@ export default function Settings() {
         </Card>
 
         <Card id="sound" title="Sound" refs={refs}>
-          <Row label="Master sound" hint="Mutes every sound in the app">
+          <Row label="Master sound">
             <Switch on={soundOn} onChange={(v) => setState({ soundOn: v })} label="Master sound" />
           </Row>
           <div className="py-2">
@@ -322,12 +322,11 @@ function Card({ id, title, children, refs }: { id: string; title: string; childr
   )
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
       <span>
         <span className="block text-[14px] font-bold text-ink">{label}</span>
-        {hint && <span className="block text-[12px] text-ink-2">{hint}</span>}
       </span>
       {children}
     </div>
