@@ -47,7 +47,7 @@ export default function EnvelopeOpening() {
   const stamp = `${letter.fromCity.slice(0, 5).toUpperCase()} ${new Date(letter.dateMs).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }).replace('/', '.')}`
 
   return (
-    <Frame>
+    <Frame nav>
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav('/mailbox')} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
