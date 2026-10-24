@@ -1,5 +1,6 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Flag from '../components/Flag'
+import Stamp from '../components/Stamp'
 import { Frame } from '../components/Layout'
 import { startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
@@ -190,21 +191,9 @@ export default function Landing() {
           )}
 
           {isNew && (
-            <div className="relative flex items-center overflow-hidden rounded-2xl bg-line p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <div className="relative flex h-20 w-16 shrink-0 flex-col items-center justify-between rounded-sm bg-white p-1.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <div className="flex w-full justify-between text-[8px] font-bold tracking-[-0.4px] text-[#8e4d31]">
-                  <span className="max-w-[40px] truncate uppercase">{story.country}</span>
-                  <Flag cc={story.cc} className="w-3" />
-                </div>
-                <span className="flex size-10 items-center justify-center rounded-full bg-[rgba(213,135,103,0.3)]">
-                  <img src="/assets/ic-stamp-art.svg" alt="" className="size-5" />
-                </span>
-                <span className="font-mono text-[7px] uppercase tracking-[0.7px] text-ink-2">Correio</span>
-                <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-[#8e4d31]">
-                  <img src="/assets/ic-wax.svg" alt="" className="h-[9.6px] w-[10px]" />
-                </span>
-              </div>
-              <div className="min-w-0 flex-1 pl-3.5 pt-0.5">
+            <div className="relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl bg-line p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] min-[420px]:flex-row">
+              <Stamp size="lg" cc={story.cc} country={story.country} place={story.place} dateMs={story.dateMs} visits={stamps.find((x) => x.cc === story.cc)?.visits} />
+              <div className="min-w-0 flex-1 pt-0.5 min-[420px]:pl-3.5">
                 <span className="flex w-fit items-center rounded bg-[#ffdbcd] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.5px] text-[#71361c]">
                   <img src="/assets/ic-ribbon.svg" alt="" className="h-[10.5px] w-2" />
                   <span className="pl-1">New stamp collected</span>

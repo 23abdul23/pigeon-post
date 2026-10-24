@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Flag from '../components/Flag'
+import Stamp from '../components/Stamp'
 import { AppLayout } from '../components/Layout'
 import { COUNTRIES, nextCountries } from '../lib/countries'
 import { countryName } from '../lib/geo'
@@ -8,15 +9,6 @@ import { useStore } from '../lib/store'
 
 type Period = 'all' | 'month' | 'year'
 
-const TINTS = [
-  { bg: 'bg-[rgba(255,219,205,0.3)]', ink: 'text-[#8e4d31]', ring: 'bg-[rgba(213,135,103,0.3)]' },
-  { bg: 'bg-[rgba(233,225,219,0.6)]', ink: 'text-ink-2', ring: 'bg-[rgba(244,236,230,0.8)]' },
-  { bg: 'bg-[rgba(202,231,248,0.5)]', ink: 'text-[#2f4a58]', ring: 'bg-[rgba(202,231,248,0.6)]' },
-  { bg: 'bg-[rgba(255,181,151,0.4)]', ink: 'text-[#360f00]', ring: 'bg-[rgba(213,135,103,0.3)]' },
-  { bg: 'bg-[rgba(174,203,219,0.4)]', ink: 'text-sky-ink', ring: 'bg-[rgba(202,231,248,0.4)]' },
-  { bg: 'bg-[rgba(198,236,208,0.5)]', ink: 'text-[#183926]', ring: 'bg-[rgba(127,163,138,0.4)]' },
-  { bg: 'bg-[rgba(255,219,205,0.4)]', ink: 'text-[#8e4d31]', ring: 'bg-[rgba(213,135,103,0.3)]' },
-]
 const ROT = ['-rotate-2', 'rotate-1', '-rotate-1', 'rotate-2']
 export default function Passport() {
   const nav = useNavigate()
@@ -177,7 +169,6 @@ export default function Passport() {
           ) : (
             <div className="grid grid-cols-2 gap-4 pt-4">
               {shown.map((s, i) => {
-                const t = TINTS[i % TINTS.length]
                 const last = stories.find((x) => x.cc === s.cc)
                 const isHome = s.cc === home?.cc
                 return (
@@ -186,23 +177,9 @@ export default function Passport() {
                     type="button"
                     onClick={() => setOpen(s.cc)}
                     aria-label={`${s.country} stamp`}
-                    className={`flex flex-col rounded-lg bg-white p-2 text-left drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)] ${ROT[i % 4]} ${open === s.cc ? 'ring-2 ring-[#d58767]/50' : ''}`}
+                    className={`flex flex-col text-left drop-shadow-[0_1px_2px_rgba(0,0,0,0.12)] ${ROT[i % 4]} ${open === s.cc ? 'ring-2 ring-[#d58767]/50' : ''}`}
                   >
-                    <span className={`relative flex h-[164px] w-full flex-col items-center overflow-hidden rounded ${t.bg}`}>
-                      <span className={`flex w-full items-center justify-between px-1 pt-1 text-[10px] font-bold tracking-[0.5px] ${t.ink}`}>
-                        <span className="flex items-center gap-1">
-                          <Flag cc={s.cc} className="w-3" />
-                          {s.cc}
-                        </span>
-                        {isHome ? <span className="rounded bg-sage px-1 text-white">ROOST</span> : <span>#{String(shown.length - i).padStart(2, '0')}</span>}
-                      </span>
-                      <span className={`mt-5 flex size-14 items-center justify-center rounded-full ${t.ring}`}>
-                        <img src={`/assets/pp-s${(i % 7) + 1}.svg`} alt="" className="h-6 w-6" />
-                      </span>
-                      <span className="mt-2 max-w-full truncate px-1 font-serif text-[20px] font-bold leading-7 text-ink">{last?.region ?? last?.place ?? s.country}</span>
-                      <span className="max-w-full truncate px-1 text-[12px] font-bold tracking-[0.36px] text-ink-2">{last && last.place !== (last.region ?? last.place) ? last.place : s.country}</span>
-                      <span className={`pt-1 text-[12px] font-bold tracking-[0.36px] ${t.ink}`}>{isHome && !s.firstMs ? 'HOME SEAL' : new Date(s.firstMs).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}</span>
-                    </span>
+                    <Stamp cc={s.cc} country={last?.region ?? last?.place ?? s.country} place={isHome && !s.firstMs ? undefined : last?.place} dateMs={s.firstMs || undefined} visits={s.visits} tone={i} className="mx-auto" />
                   </button>
                 )
               })}
