@@ -31,7 +31,7 @@ export type Landing = {
 }
 
 /** An unread stop card: the slot that ended mid-journey while the bird flew on. Local only, never synced. */
-export type StopCardEntry = { storyId: string; km: number; gainedKm: number; newStampCc?: string }
+export type StopCardEntry = { tripId: string; storyId: string; km: number; gainedKm: number; newStampCc?: string }
 
 export const defaultSettings: Settings = {
   bio: '',

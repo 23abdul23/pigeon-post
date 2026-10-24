@@ -8,7 +8,7 @@ vi.mock('../src/lib/stories', () => ({
 }))
 
 import { send } from '../src/lib/outbox'
-import { computeProgress, continueRun, settleElapsedSlots } from '../src/lib/flight'
+import { computeProgress, continueRun, landSession, recoverStranded, settleElapsedSlots, startSession, unreadCards } from '../src/lib/flight'
 import { getState, setState, type Landing, type Trip } from '../src/lib/store'
 
 const dest = { id: 'p', name: 'Tokyo', country: 'Japan', cc: 'JP', lat: 35.7, lng: 139.7 }
@@ -65,5 +65,39 @@ describe('chained slots', () => {
     setState({ trip: { ...trip, progressKm: 900 }, landing: { storyId: 's', tripId: 't1', reason: 'ended', km: 900, gainedKm: 900, focusedMs: 1, durationMin: 25, atMs: 1 } })
     expect(continueRun(5)).toBeNull()
     expect(getState().session).toBeNull()
+  })
+
+  it('an end request during catch-up stops the chain and lands with the requested reason', async () => {
+    const now = Date.now()
+    setState({ session: { tripId: 't1', startMs: now - 80 * MIN, durationMin: 25, baseKm: 0, heartbeatMs: now } })
+    const run = settleElapsedSlots()
+    void landSession('ended') // the user taps Land here while the first slot is being landed
+    expect(await run).toBe(0)
+    expect(getState().session).toBeNull()
+    expect(getState().landing).toMatchObject({ reason: 'ended' })
+    expect(getState().stopCards).toEqual([])
+    startSession(trip, 25) // a new flight clears the request
+    expect(await settleElapsedSlots()).toBe(0)
+    expect(getState().session).not.toBeNull()
+  })
+
+  it('recovers a stranded mid-journey landing from its scheduled end', () => {
+    const atMs = Date.now() - 7 * MIN
+    setState({ stories: [{ id: 's' } as never], trip: { ...trip, progressKm: 2500 }, landing: { storyId: 's', tripId: 't1', reason: 'completed', km: 2500, gainedKm: 2500, focusedMs: 25 * MIN, durationMin: 25, atMs } })
+    expect(recoverStranded()).toBe(true)
+    expect(getState().session!.startMs).toBe(atMs)
+    expect(getState().stopCards).toMatchObject([{ tripId: 't1', storyId: 's' }])
+  })
+
+  it('shows only this trip cards with a story, and a new trip drops the others', () => {
+    const cards = [
+      { tripId: 't1', storyId: 'a', km: 1, gainedKm: 1 },
+      { tripId: 't1', storyId: 'gone', km: 1, gainedKm: 1 },
+      { tripId: 'other', storyId: 'a', km: 1, gainedKm: 1 },
+    ]
+    expect(unreadCards(cards, 't1', [{ id: 'a' }])).toEqual([cards[0]])
+    setState({ stopCards: cards, stories: [{ id: 'a' } as never] })
+    startSession({ ...trip, id: 't2' }, 25)
+    expect(getState().stopCards).toEqual([])
   })
 })

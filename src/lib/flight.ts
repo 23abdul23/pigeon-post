@@ -6,7 +6,7 @@ import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from './geo'
 import { send, setOnRejected } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
-import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
+import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type StopCardEntry, type Trip } from './store'
 
 export type Progress = { km: number; remainingMs: number; elapsedMs: number; done: boolean; arrived: boolean }
 
@@ -101,11 +101,22 @@ function putFlight(s: ActiveSession, takeover = false): Promise<void> {
   })
 }
 
+/** The cards of `tripId` whose story exists: what Focus shows and counts. */
+export const unreadCards = (cards: StopCardEntry[], tripId: string, stories: { id: string }[]) => cards.filter((c) => c.tripId === tripId && stories.some((x) => x.id === c.storyId))
+
+/** Drops a trip's unread cards (its landing page was opened). */
+export const clearStopCards = (tripId: string) => setState((st) => ({ stopCards: st.stopCards.filter((c) => c.tripId !== tripId) }))
+
 export function startSession(trip: Trip, durationMin: number, startMs = serverNow()) {
   const session: ActiveSession = { tripId: trip.id, startMs, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: serverNow() }
-  setState({ session, landing: null })
+  endRequested = null // a new flight is a new decision
+  // cards of other trips (and orphans) never carry into this flight
+  setState((st) => ({ session, landing: null, stopCards: unreadCards(st.stopCards, trip.id, st.stories) }))
   void putFlight(session)
 }
+
+/** The user's end request made while a completed slot was being landed (see `landSession`); stops chaining. */
+let endRequested: Landing['reason'] | null = null
 
 /** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress, starting at `atMs` (default now). */
 export function continueRun(atMs?: number): Trip | null {
@@ -119,8 +130,14 @@ export function continueRun(atMs?: number): Trip | null {
 export function chainFrom(l: Landing, atMs?: number): boolean {
   const { trip, session } = getState()
   if (session || l.reason !== 'completed' || !trip || trip.id !== l.tripId || l.km >= trip.routeKm) return false
-  setState((st) => ({ stopCards: st.stopCards.some((c) => c.storyId === l.storyId) ? st.stopCards : [...st.stopCards, { storyId: l.storyId, km: l.km, gainedKm: l.gainedKm, newStampCc: l.newStampCc }] }))
+  setState((st) => ({ stopCards: st.stopCards.some((c) => c.storyId === l.storyId) ? st.stopCards : [...st.stopCards, { tripId: l.tripId, storyId: l.storyId, km: l.km, gainedKm: l.gainedKm, newStampCc: l.newStampCc }] }))
   return !!continueRun(atMs)
+}
+
+/** A mid-journey landing found with no session (reload between landing and continuing): flies on from its scheduled end. */
+export function recoverStranded(): boolean {
+  const { landing: l, session } = getState()
+  return !!l && !session && !settling && chainFrom(l, l.atMs)
 }
 
 let settling: Promise<number> | null = null
@@ -140,12 +157,17 @@ export function settleElapsedSlots(cap = 50): Promise<number> {
       const p = computeProgress(s, trip, serverNow())
       if (!p.done && !p.arrived) break
       const l = await landSession('completed')
+      if (l && endRequested) {
+        setState({ landing: { ...l, reason: endRequested } }) // the user ended the flight meanwhile: land with their reason
+        break
+      }
       if (!l || !chainFrom(l, s.startMs + s.durationMin * 60000)) break
       stops++
     }
     return stops
   })().finally(() => {
     settling = null
+    endRequested = null
   })
   return settling
 }
@@ -214,6 +236,7 @@ export function startReturn(durationMin = 25): Trip | null {
   setState({ trip: back })
   void send({ id: `return:${t.id}`, method: 'POST', path: `/trips/${t.id}/return`, touches: ['trip'] })
   startSession(back, durationMin)
+  clearStopCards(t.id) // the way back is a new leg
   return back
 }
 
@@ -242,7 +265,10 @@ let landing: Promise<Landing | null> | null = null
  * Safe to call twice (second tab, double click): the second call returns the first result.
  */
 export function landSession(reason: Landing['reason']): Promise<Landing | null> {
-  if (landing) return landing
+  if (landing) {
+    if (settling && reason !== 'completed') endRequested = reason // the caller shares a settle's landing: tell the settle to stop
+    return landing
+  }
   landing = (async () => {
     const st = getState()
     const s = st.session

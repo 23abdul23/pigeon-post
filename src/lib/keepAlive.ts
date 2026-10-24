@@ -33,6 +33,7 @@ export function makeQuietWav(seconds: number, sampleRate: number, peak: number):
 
 let el: HTMLAudioElement | null = null
 let active = false
+let releaseTimer: ReturnType<typeof setTimeout> | undefined
 
 const session = () => (typeof navigator !== 'undefined' && 'mediaSession' in navigator ? navigator.mediaSession : null)
 
@@ -66,6 +67,7 @@ export function setKeepAlivePosition(durationSec: number, positionSec: number): 
 }
 
 export async function startKeepAlive(meta: KeepAliveMeta): Promise<boolean> {
+  clearTimeout(releaseTimer)
   try {
     if (typeof Audio === 'undefined') return false
     if (!el) {
@@ -93,7 +95,14 @@ export async function startKeepAlive(meta: KeepAliveMeta): Promise<boolean> {
   }
 }
 
+/** Stops after `graceMs` unless a start comes first: a chained slot briefly has no session and must not kill the audio. */
+export function releaseKeepAlive(graceMs = 2000): void {
+  clearTimeout(releaseTimer)
+  releaseTimer = setTimeout(stopKeepAlive, graceMs)
+}
+
 export function stopKeepAlive(): void {
+  clearTimeout(releaseTimer)
   active = false
   try {
     el?.pause()

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isKeepAliveActive, makeQuietWav, startKeepAlive, stopKeepAlive } from '../src/lib/keepAlive'
+import { isKeepAliveActive, makeQuietWav, releaseKeepAlive, startKeepAlive, stopKeepAlive } from '../src/lib/keepAlive'
 
 describe('makeQuietWav', () => {
   it('writes a mono 16-bit PCM WAV with quiet, non-silent samples', () => {
@@ -47,6 +47,21 @@ describe('keep-alive element', () => {
     expect(handlers.play).toBeNull()
     expect(handlers.pause).toBeNull()
     expect(isKeepAliveActive()).toBe(false)
+  })
+
+  it('a delayed release is cancelled by a start in between (chained slot handoff)', async () => {
+    setup()
+    vi.useFakeTimers()
+    await startKeepAlive({ title: 'T' })
+    releaseKeepAlive(2000)
+    vi.advanceTimersByTime(500)
+    await startKeepAlive({ title: 'T2' })
+    vi.advanceTimersByTime(5000)
+    expect(pause).not.toHaveBeenCalled()
+    releaseKeepAlive(2000)
+    vi.advanceTimersByTime(2000)
+    expect(pause).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
   })
 
   it('resolves false when autoplay is blocked', async () => {

@@ -12,8 +12,8 @@ import { birdBySpecies } from '../lib/birds'
 import { coveredBetween, countryEntries, enteredBetween } from '../lib/countriesAlong'
 import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
-import { chainFrom, computeProgress, flightIds, flightRole, heartbeat, isSettling, landIfStillOwner, landSession, markLeft, resumeFlight, settleElapsedSlots, takeOver } from '../lib/flight'
-import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, startKeepAlive, stopKeepAlive } from '../lib/keepAlive'
+import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
+import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, releaseKeepAlive, startKeepAlive } from '../lib/keepAlive'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
@@ -28,8 +28,9 @@ const mmss = (ms: number) => {
 
 /** Lock-screen text and slot progress for the running flight; a waiting stop card takes over the text. */
 function keepAliveInfo() {
-  const { session: s, trip: t, bird: b, stopCards, stories } = getState()
+  const { session: s, trip: t, bird: b, stopCards: all, stories } = getState()
   if (!s || !t || s.leftAtMs) return null
+  const stopCards = unreadCards(all, t.id, stories)
   const p = computeProgress(s, t, serverNow())
   const card = stories.find((x) => x.id === stopCards[0]?.storyId)
   const meta = card
@@ -64,6 +65,7 @@ export default function Focus() {
 
   const flying = !!session && !session.leftAtMs
   const away = !!session?.leftAtMs
+  const cards = useMemo(() => unreadCards(allCards, tripId ?? '', stories), [allCards, tripId, stories]) // this trip's cards whose story exists
 
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
@@ -112,12 +114,12 @@ export default function Focus() {
       const i = keepAliveInfo()
       if (i && !isKeepAliveActive()) void startKeepAlive(i.meta).then((ok) => ok && setKeepAlivePosition(i.duration, i.elapsed))
     }
-    if (document.visibilityState === 'visible') start()
+    start() // also while hidden: a chained slot restarts it with the screen off
     const onVis = () => document.visibilityState === 'visible' && start() // retry when autoplay was blocked earlier
     document.addEventListener('visibilitychange', onVis)
     return () => {
       document.removeEventListener('visibilitychange', onVis)
-      stopKeepAlive()
+      releaseKeepAlive() // delayed: the handoff to the next chained slot must not cut the audio
     }
   }, [flying])
 
@@ -134,7 +136,7 @@ export default function Focus() {
     sync()
     const id = window.setInterval(sync, 30_000)
     return () => window.clearInterval(id)
-  }, [flying, session?.startMs, allCards.length])
+  }, [flying, session?.startMs, cards.length])
 
   const [countryAt, setCountryAt] = useState<((lat: number, lng: number) => string | null) | null>(null)
   useEffect(() => {
@@ -142,7 +144,6 @@ export default function Focus() {
   }, [])
   const hits = useMemo(() => (trip && countryAt ? countryEntries(trip.route, trip.routeKm, countryAt) : []), [trip?.id, trip?.route, trip?.routeKm, countryAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cards = useMemo(() => allCards.filter((c) => stories.some((x) => x.id === c.storyId)), [allCards, stories]) // an entry whose story vanished cannot be shown
   const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
   // a completed slot short of the destination only exists for a moment: the next slot follows at once and its card is queued
@@ -166,8 +167,8 @@ export default function Focus() {
 
   // a mid-journey landing found on load (a reload between landing and continuing) flies on and queues its card
   useEffect(() => {
-    if (midStop && landing && !isSettling()) chainFrom(landing)
-  }, [midStop, landing])
+    if (midStop) recoverStranded()
+  }, [midStop, landing?.storyId])
 
   // unread stop cards are shown before leaving for the landing page
   useEffect(() => {
