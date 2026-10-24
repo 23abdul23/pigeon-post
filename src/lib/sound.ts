@@ -4,7 +4,14 @@ let ctx: AudioContext | null = null
 
 function audio(): AudioContext | null {
   try {
-    ctx ??= new AudioContext()
+    if (!ctx) {
+      ctx = new AudioContext()
+      // suspended while hidden so no audio session (lock-screen player, background playback) outlives the tab
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) void ctx?.suspend()
+        else void ctx?.resume()
+      })
+    }
     return ctx
   } catch {
     return null

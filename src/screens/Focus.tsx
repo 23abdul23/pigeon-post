@@ -17,6 +17,9 @@ import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
 import { releaseAudio, startAmbience } from '../lib/sound'
 import { windAt, type Wind } from '../lib/weather'
 
+/** How long the tab may be hidden before the flight ends instead of offering to continue. */
+const AWAY_GRACE_MS = 15_000
+
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000))
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -65,6 +68,17 @@ export default function Focus() {
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('pagehide', onHide)
     }
+  }, [])
+
+  // Leaving only pauses the flight for a short grace period; a longer absence (another app, a locked screen) lands it where the tab was left.
+  useEffect(() => {
+    const check = () => {
+      const left = getState().session?.leftAtMs
+      if (document.visibilityState === 'visible' && left && serverNow() - left > AWAY_GRACE_MS) void landIfStillOwner('left')
+    }
+    check()
+    document.addEventListener('visibilitychange', check)
+    return () => document.removeEventListener('visibilitychange', check)
   }, [])
 
   // Clock tick + local heartbeat while flying (or watching); the server heartbeat every 30 s, owner only.

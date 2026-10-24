@@ -63,7 +63,7 @@ export default function Landing() {
   const toggleSave = () => toggleStorySaved(story.id)
 
   return (
-    <Frame>
+    <Frame nav>
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/80 px-4 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
         <button type="button" onClick={leave} aria-label="Close" className="flex size-11 items-center justify-center rounded-full">
           <img src="/assets/ic-close.svg" alt="" className="size-3.5" />
