@@ -7,8 +7,9 @@ import { PrimaryButton, Pill } from './ui'
 export default function StopCard({ story, newStampCc, covered, queued, onDone }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; queued: number; onDone: () => void }) {
   return (
     <div role="dialog" aria-label={`Stop: ${story.place}`} className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex p-4">
-      <div className="pointer-events-auto relative max-h-[52dvh] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
-        <div className="relative h-28 shrink-0 overflow-hidden rounded-xl bg-card-soft">
+      <div className="pointer-events-auto relative flex max-h-[46dvh] w-full flex-col rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative h-24 shrink-0 overflow-hidden rounded-xl bg-card-soft">
           <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={story.photo ? story.place : ''} className="absolute inset-0 size-full object-cover" />
           {newStampCc && (
             <span className="absolute -bottom-6 right-1 origin-bottom-right scale-[0.55]">
@@ -23,7 +24,7 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
           </div>
           <Pill tone="sky">{story.lens}</Pill>
         </div>
-        <p className="line-clamp-5 pt-2 text-[14px] leading-5 text-ink-2">{story.text}</p>
+        <p className="line-clamp-3 pt-2 text-[14px] leading-5 text-ink-2">{story.text}</p>
         {story.birds.length > 0 && <p className="pt-2 text-[12px] font-medium text-sage">Birds here: {story.birds.join(', ')}</p>}
         {covered && covered.length > 0 && (
           <div className="pt-3">
@@ -38,7 +39,8 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
             </ul>
           </div>
         )}
-        <PrimaryButton onClick={onDone} className="mt-4 py-2.5">
+        </div>
+        <PrimaryButton onClick={onDone} className="mt-3 shrink-0 py-2.5">
           {queued > 1 ? 'Next card' : 'Got it'}
         </PrimaryButton>
         {queued > 1 && <p className="pt-2 text-center text-[12px] font-medium text-muted">1 of {queued}</p>}
