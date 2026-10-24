@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Map as MapLibreMap, GeoJSONSource, StyleSpecification } from 'maplibre-gl'
 import { easeBearing, pointAtKm, routeLengthKm, shortestAngleDelta, type Pt } from '../lib/geo'
 import { MAP_STYLE } from './MiniMap'
@@ -26,6 +26,12 @@ const FALLBACK_STYLE: StyleSpecification = {
   ],
 }
 
+const MIN_ZOOM = 3
+const MAX_ZOOM = 11
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
+/** Survives map rebuilds (route/stops change). */
+let chosenZoom = 6
+
 const line = (pts: Pt[]) => ({
   type: 'Feature' as const,
   properties: {},
@@ -38,12 +44,15 @@ export default function FlightMap({ route, stops, getKm, turnRef, className = ''
   const kmRef = useRef(getKm)
   kmRef.current = getKm
   const stopsKey = stops.join(',')
+  const nudge = useRef<(d: number) => void>(() => {})
+  const [limit, setLimit] = useState(0) // -1 at min zoom, 1 at max
 
   useEffect(() => {
     let raf = 0
     let map: MapLibreMap | null = null
     let cancelled = false
     let stopTimer = () => {}
+    let removeZoomListeners = () => {}
     const markers: { remove: () => void }[] = []
     ;(async () => {
       const [maplibregl] = await Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')])
@@ -54,16 +63,45 @@ export default function FlightMap({ route, stops, getKm, turnRef, className = ''
           container: el.current,
           style: MAP_STYLE,
           center: [start.pt[1], start.pt[0]],
-          zoom: 6,
+          zoom: clampZoom(chosenZoom),
+          minZoom: MIN_ZOOM,
+          maxZoom: MAX_ZOOM,
           pitch: 55,
           bearing: start.bearing,
-          interactive: false,
+          interactive: true,
           attributionControl: { compact: true },
         })
       } catch {
         return // WebGL unavailable: the paper-coloured background stays
       }
       const m = map
+      // Only zoom stays on: the bird must stay centred, so no pan/rotate/pitch/keys.
+      m.dragPan.disable()
+      m.dragRotate.disable()
+      m.keyboard.disable()
+      m.touchPitch.disable()
+      m.doubleClickZoom.disable()
+      m.scrollZoom.disable() // jumpTo below cancels maplibre's own eased zoom, so wheel/buttons feed `target` instead
+      m.touchZoomRotate.enable({ around: 'center' })
+      m.touchZoomRotate.disableRotation()
+      let target = clampZoom(chosenZoom)
+      let cur = target
+      nudge.current = (d) => (target = clampZoom(Math.round(target) + d))
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault()
+        target = clampZoom(target - e.deltaY * (e.deltaMode ? 0.05 : 0.004))
+      }
+      const box = el.current
+      box.addEventListener('wheel', onWheel, { passive: false })
+      const onZoomEnd = () => {
+        chosenZoom = clampZoom(m.getZoom())
+        setLimit(chosenZoom <= MIN_ZOOM + 0.01 ? -1 : chosenZoom >= MAX_ZOOM - 0.01 ? 1 : 0)
+      }
+      m.on('zoomend', onZoomEnd)
+      removeZoomListeners = () => {
+        box.removeEventListener('wheel', onWheel)
+        nudge.current = () => {}
+      }
       const addJourney = () => {
         if (m.getSource('route')) return // guards repeat style.load events
         m.addSource('route', { type: 'geojson', data: line(route) as never })
@@ -123,7 +161,10 @@ export default function FlightMap({ route, stops, getKm, turnRef, className = ''
         const { pt, bearing, index } = pointAtKm(route, km)
         shown = easeBearing(shown, bearing, dt, 90)
         if (turnRef) turnRef.current = shortestAngleDelta(shown, bearing)
-        m.jumpTo({ center: [pt[1], pt[0]], bearing: shown })
+        if (Math.abs(m.getZoom() - cur) > 0.001) cur = target = m.getZoom() // pinch moved it
+        else cur += (target - cur) * Math.min(1, dt * 12) || 0
+        if (Math.abs(target - cur) < 0.005) cur = target
+        m.jumpTo({ center: [pt[1], pt[0]], bearing: shown, ...(cur !== m.getZoom() && { zoom: cur }) })
         if (now - lastSplit > 500 && m.getSource('done')) {
           lastSplit = now
           markReached(km)
@@ -135,6 +176,7 @@ export default function FlightMap({ route, stops, getKm, turnRef, className = ''
     return () => {
       cancelled = true
       stopTimer()
+      removeZoomListeners()
       markers.forEach((k) => k.remove())
       cancelAnimationFrame(raf)
       map?.remove()
@@ -144,6 +186,23 @@ export default function FlightMap({ route, stops, getKm, turnRef, className = ''
   return (
     <div className={`bg-[#efe7e1] ${className}`}>
       <div ref={el} style={{ width: '100%', height: '100%' }} />
+      <div className="absolute right-4 top-[62%] z-10 flex -translate-y-1/2 flex-col gap-2">
+        {[
+          { label: 'Zoom in', sign: '+', d: 1, off: limit === 1 },
+          { label: 'Zoom out', sign: '−', d: -1, off: limit === -1 },
+        ].map((b) => (
+          <button
+            key={b.label}
+            type="button"
+            aria-label={b.label}
+            disabled={b.off}
+            onClick={() => nudge.current(b.d)}
+            className="flex size-11 items-center justify-center rounded-full bg-white/90 text-[22px] font-semibold leading-none text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px] disabled:opacity-40"
+          >
+            {b.sign}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
