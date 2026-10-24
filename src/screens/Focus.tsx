@@ -8,6 +8,7 @@ import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, takeOver } from '../lib/flight'
 import { fmtKm, pointAtKm, wrapLng } from '../lib/geo'
 import { nearestCity } from '../lib/places'
+import { stopsAhead } from '../lib/stops'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
 import { windAt, windNote, type Wind } from '../lib/weather'
 import WelcomeBack from './WelcomeBack'
@@ -90,6 +91,11 @@ export default function Focus() {
 
   const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
+  const stops = useMemo(
+    () => (live && trip ? stopsAhead(trip.routeKm, live.baseKm, live.durationMin) : []),
+    [live?.baseKm, live?.durationMin, trip?.routeKm], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   useEffect(() => {
     if (flying && progress && (progress.done || progress.arrived)) void landSession('completed')
   }, [flying, progress])
@@ -143,6 +149,7 @@ export default function Focus() {
       <div className="relative h-dvh min-h-[520px] overflow-hidden bg-cream">
         <FlightMap
           route={trip.route}
+          stops={stops}
           getKm={() => {
             const s = liveRef.current
             return s ? computeProgress(s, trip, serverNow()).km : km
