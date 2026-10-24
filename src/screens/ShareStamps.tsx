@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
@@ -133,7 +134,7 @@ export default function ShareStamps() {
           <h1 className="font-serif text-[20px] font-semibold leading-7 text-ink">Share Stamps</h1>
         </div>
         <Link to="/settings/profile" aria-label="Profile" className="flex size-11 items-center justify-center">
-          <img src="/assets/profile.jpg" alt="" className="size-8 rounded-full" />
+          <Avatar className="size-8" />
         </Link>
       </header>
 

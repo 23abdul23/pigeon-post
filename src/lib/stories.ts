@@ -57,8 +57,36 @@ async function polish(placeId: string, lens: Lens, facts: string): Promise<strin
   }
 }
 
-/** Nearby places first, then the closest bundled city, then a plain fallback. Never throws. */
-export async function buildStory(lat: number, lng: number, km: number): Promise<Omit<Story, 'id' | 'dateMs' | 'saved'>> {
+type Built = Omit<Story, 'id' | 'dateMs' | 'saved'>
+
+const cache = new Map<string, Promise<Built>>() // oldest first
+const MAX_CACHED = 8
+
+function cached(lat: number, lng: number, km: number): Promise<Built> {
+  const key = `${lat.toFixed(2)},${lng.toFixed(2)}`
+  let p = cache.get(key)
+  if (!p) {
+    const mine = (p = compute(lat, lng, km))
+    cache.set(key, mine)
+    if (cache.size > MAX_CACHED) cache.delete(cache.keys().next().value!)
+    // only a story from the network is worth keeping; the plain fallback is retried next time
+    const drop = () => cache.get(key) === mine && cache.delete(key)
+    mine.then((s) => (s.photo || s.sourceUrl ? undefined : drop()), drop)
+  }
+  return p
+}
+
+/** Starts building the story for a place ahead so `buildStory` there finds it ready. */
+export function prefetchStory(lat: number, lng: number, km: number): void {
+  void cached(lat, lng, km)
+}
+
+/** Nearby places first, then the closest bundled city, then a plain fallback. Cached per place (see `prefetchStory`). Never throws. */
+export async function buildStory(lat: number, lng: number, km: number): Promise<Built> {
+  return { ...(await cached(lat, lng, km)), km }
+}
+
+async function compute(lat: number, lng: number, km: number): Promise<Built> {
   const city = await nearestCity(lat, lng)
 
   // One call: the 12 nearest articles with intro text, thumbnail and categories (the categories pick the lens).

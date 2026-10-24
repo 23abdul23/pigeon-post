@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import Avatar from './Avatar'
 import { setState, useStore } from '../lib/store'
 import { retrySync, useSyncStatus } from '../lib/sync'
 
@@ -59,7 +60,7 @@ export default function Header({ title, back, hand }: { title?: string; back?: s
             <img src="/assets/ic-sound.svg" alt="" className={`h-4 w-[16.5px] ${soundOn ? '' : 'opacity-35'}`} />
           </button>
           <Link to="/settings/profile" aria-label="Profile and settings" className="flex size-11 items-center justify-center rounded-full">
-            <img src="/assets/profile.jpg" alt="" className="size-8 rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.08)]" />
+            <Avatar className="size-8 shadow-[0_1px_4px_rgba(0,0,0,0.08)]" />
           </Link>
         </div>
       </div>

@@ -108,6 +108,25 @@ export function startSession(trip: Trip, durationMin: number) {
   void putFlight(session)
 }
 
+/** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress. */
+export function continueRun(): Trip | null {
+  const { landing, trip } = getState()
+  if (!trip || landing?.reason !== 'completed' || landing.tripId !== trip.id || trip.progressKm >= trip.routeKm) return null
+  startSession(trip, landing.durationMin)
+  return trip
+}
+
+/** Back on the tab: unfreezes the flight where `markLeft` stopped it, as if the time away had not passed. */
+export function resumeFlight(): void {
+  const s = getState().session
+  if (!s || s.leftAtMs === undefined) return
+  const { leftAtMs, ...rest } = s
+  const now = serverNow()
+  const next: ActiveSession = { ...rest, startMs: s.startMs + (now - leftAtMs), heartbeatMs: now }
+  setState({ session: next })
+  void putFlight(next)
+}
+
 /** Tells the server this device still flies (every 30 s from the Focus screen, and once on leaving the tab with `leftAtMs`). */
 export function heartbeat(): void {
   const s = getState().session

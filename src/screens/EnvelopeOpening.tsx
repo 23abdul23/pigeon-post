@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
@@ -55,7 +56,7 @@ export default function EnvelopeOpening() {
           <h1 className="font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink">Envelope Opening</h1>
         </div>
         <Link to="/settings/profile" aria-label="Profile" className="flex size-11 items-center justify-center">
-          <img src="/assets/profile.jpg" alt="" className="size-8 rounded-full shadow-[0_0_0_2px_rgba(127,163,138,0.4)]" />
+          <Avatar className="size-8 shadow-[0_0_0_2px_rgba(127,163,138,0.4)]" />
         </Link>
       </header>
 

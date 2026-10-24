@@ -10,7 +10,7 @@ import { useStore, type Place } from '../lib/store'
 import { flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip, tripProblem } from '../lib/trips'
 
-const DURATIONS = [15, 25, 45, 60]
+const DURATIONS = [10, 15, 25, 30]
 const RANGES = ['This week', 'Month', 'All time'] as const
 
 function greeting(d = new Date()) {
@@ -38,7 +38,7 @@ export default function Dashboard() {
     return () => window.clearInterval(id)
   }, [foreign])
   const elsewhere = flight && flightRole() === 'observer' ? flight : null // flying on another device
-  const [minutes, setMinutes] = useState(25)
+  const [minutes, setMinutes] = useState(15)
   const [dest, setDest] = useState<Place | null>(null)
   const [range, setRange] = useState<(typeof RANGES)[number]>('This week')
   const [error, setError] = useState('')
@@ -116,26 +116,6 @@ export default function Dashboard() {
           </span>
         </div>
 
-        <div className="relative h-44 overflow-hidden rounded-2xl bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-          <img src="/assets/map-terrain.svg" alt="" className="absolute inset-0 size-full" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[rgba(233,225,219,0.8)] via-[rgba(233,225,219,0)] to-[rgba(255,248,244,0.4)]" />
-          <div className="absolute left-[37px] top-[46px] flex flex-col items-center">
-            <div className="relative flex items-center justify-center">
-              <span className="absolute size-8 rounded-full bg-[rgba(127,163,138,0.4)]" />
-              <span className="relative flex size-9 items-center justify-center rounded-full bg-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <img src="/assets/ic-bird-marker.svg" alt="" className="h-[18px] w-[15px]" />
-              </span>
-            </div>
-            <span className="mt-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold tracking-[-0.275px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
-              <span className="size-1.5 rounded-full bg-sage" />
-              {bird?.name ?? 'Your bird'} resting in {home?.name ?? 'home'}
-            </span>
-          </div>
-          <span className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-white/80 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[2px]">
-            <img src="/assets/ic-compass.svg" alt="" className="size-[15px]" />
-          </span>
-          {/* <Hand className="absolute bottom-1 right-3 -rotate-2 text-ink-2">tailwind 12 knots west ∿</Hand> */}
-        </div>
 
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex h-7 items-center justify-between">
@@ -243,7 +223,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        <Card className="flex items-center gap-3.5 p-4">
+        {/* <Card className="flex items-center gap-3.5 p-4">
           <span className="relative flex size-12 items-center justify-center rounded-2xl bg-[#ffdbcd]">
             <img src="/assets/ic-mail-box.svg" alt="" className="size-[21.7px]" />
             {unopened.length > 0 && (
@@ -263,7 +243,7 @@ export default function Dashboard() {
           <Link to="/mailbox" className="rounded-full bg-white px-3.5 py-1.5 text-[12px] font-semibold tracking-[0.36px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
             Open
           </Link>
-        </Card>
+        </Card> */}
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between px-1">

@@ -47,10 +47,6 @@ export default function Journal() {
     <AppLayout>
       <div className="flex flex-col pb-8">
         <div className="flex flex-col gap-1 pb-2 pt-4">
-          <p className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-[0.6px] text-sky-ink">
-            <img src="/assets/jn-title.svg" alt="" className="h-[14.6px] w-[16.5px]" />
-            Traveler's chronicles
-          </p>
           <h1 className="font-serif text-[32px] leading-10 text-ink">Journal</h1>
           <p className="text-[16px] leading-6 text-ink-2">Every place your bird has shown you.</p>
         </div>
@@ -194,7 +190,6 @@ export default function Journal() {
             <span className="mb-2 flex size-10 items-center justify-center rounded-full bg-[rgba(127,163,138,0.2)]">
               <img src="/assets/jn-epi.svg" alt="" className="size-[18.3px]" />
             </span>
-            <p className="px-1 text-center font-serif text-[22px] leading-7 text-[#8e4d31]">"Letters and places gathered at the speed of care."</p>
             <span className="flex items-center gap-2 pt-2">
               <span className="h-px w-8 bg-outline" />
               <img src="/assets/jn-leaf.svg" alt="" className="size-[9.3px]" />

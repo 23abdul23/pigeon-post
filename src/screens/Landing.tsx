@@ -1,22 +1,12 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import Avatar from '../components/Avatar'
 import Flag from '../components/Flag'
+import Stamp from '../components/Stamp'
 import { Frame } from '../components/Layout'
 import { startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
 import { setState, useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
-
-const ROMAN: [number, string][] = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]
-export const roman = (n: number) => {
-  let out = ''
-  for (const [v, s] of ROMAN) while (n >= v) { out += s; n -= v }
-  return out || 'I'
-}
-
-const dayPart = (d: Date) => {
-  const h = d.getHours()
-  return h < 5 ? 'night' : h < 10 ? 'dawn' : h < 16 ? 'midday' : h < 20 ? 'dusk' : 'night'
-}
 
 export const dms = (v: number, pos: string, neg: string) => {
   const a = Math.abs(v)
@@ -45,7 +35,6 @@ export default function Landing() {
   const story = stories[idx]
   if (!story) return <Navigate to="/home" replace />
 
-  const log = stories.length - idx
   const when = new Date(story.dateMs)
   const isNew = landing?.storyId === story.id && !!landing.newStampCc
   const here = landing?.storyId === story.id
@@ -79,26 +68,14 @@ export default function Landing() {
         <button type="button" onClick={leave} aria-label="Close" className="flex size-11 items-center justify-center rounded-full">
           <img src="/assets/ic-close.svg" alt="" className="size-3.5" />
         </button>
-        <h1 className="font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink">Flight Mission Summary</h1>
-        <Link to="/settings/profile" aria-label="Profile" className="flex size-8 items-center justify-center rounded-full bg-sage">
-          <img src="/assets/ic-person.svg" alt="" className="size-3" />
+        <h1 className="truncate px-2 font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink">{story.place}</h1>
+        <Link to="/settings/profile" aria-label="Profile" className="flex size-8 items-center justify-center rounded-full">
+          <Avatar className="size-8" />
         </Link>
       </header>
 
       <main className="flex-1 px-4 pb-28">
-        <div className="flex h-[60px] items-center justify-between pt-0.5">
-          <div className="flex items-center">
-            <span className="flex h-7 w-[26px] items-center justify-center rounded-full bg-[#c6ecd0]">
-              <img src="/assets/ic-dispatch-log.svg" alt="" className="h-[13.5px] w-3" />
-            </span>
-            <span className="pl-2 text-[12px] font-semibold uppercase leading-4 tracking-[0.6px] text-sky-ink">
-              Homing dispatch • log #{400 + log}
-            </span>
-          </div>
-          <span className="-rotate-3 whitespace-nowrap font-hand text-[22px] font-medium leading-7 text-[#8e4d31]">Arrived safe at {dayPart(when)}</span>
-        </div>
-
-        <div className="pt-6">
+        <div className="pt-4">
           <div className="relative overflow-hidden rounded-3xl bg-line shadow-[0_4px_20px_-4px_rgba(62,58,54,0.08)]">
             <div className="relative h-[268px]">
               <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={story.photo ? `${story.place}` : ''} className="absolute inset-0 size-full object-cover" />
@@ -140,8 +117,7 @@ export default function Landing() {
             </div>
           )}
           <div className="relative flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-[#8e4d31]">Chapter {roman(log)} • Postal memoir</span>
+            <div className="flex items-center justify-end gap-2">
               <span className="whitespace-nowrap text-[12px] font-semibold tracking-[0.36px] text-sky-ink">
                 {when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -155,16 +131,6 @@ export default function Landing() {
           </div>
 
           <p className="text-[16px] leading-[26px] text-ink-2">{story.text}</p>
-
-          <div className="flex items-start rounded-xl bg-card px-3.5 pb-3.5 pt-5">
-            <img src="/assets/ic-quill.svg" alt="" className="h-5 w-2.5" />
-            <div className="min-w-0 flex-1 pl-3">
-              <p className="text-[12px] font-bold tracking-[0.36px] text-ink">Field note from {bird?.name ?? 'your bird'}</p>
-              <p className="font-hand text-[22px] font-medium leading-[27.5px] text-ink-2">
-                "Rested near {story.region ?? story.place}. The whole sky is still ahead of us..."
-              </p>
-            </div>
-          </div>
 
           {story.birds.length > 0 && (
             <div className="flex flex-col gap-2 pb-3 pt-2">
@@ -190,21 +156,9 @@ export default function Landing() {
           )}
 
           {isNew && (
-            <div className="relative flex items-center overflow-hidden rounded-2xl bg-line p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <div className="relative flex h-20 w-16 shrink-0 flex-col items-center justify-between rounded-sm bg-white p-1.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
-                <div className="flex w-full justify-between text-[8px] font-bold tracking-[-0.4px] text-[#8e4d31]">
-                  <span className="max-w-[40px] truncate uppercase">{story.country}</span>
-                  <Flag cc={story.cc} className="w-3" />
-                </div>
-                <span className="flex size-10 items-center justify-center rounded-full bg-[rgba(213,135,103,0.3)]">
-                  <img src="/assets/ic-stamp-art.svg" alt="" className="size-5" />
-                </span>
-                <span className="font-mono text-[7px] uppercase tracking-[0.7px] text-ink-2">Correio</span>
-                <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-[#8e4d31]">
-                  <img src="/assets/ic-wax.svg" alt="" className="h-[9.6px] w-[10px]" />
-                </span>
-              </div>
-              <div className="min-w-0 flex-1 pl-3.5 pt-0.5">
+            <div className="relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl bg-line p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)] min-[420px]:flex-row">
+              <Stamp size="lg" cc={story.cc} country={story.country} place={story.place} dateMs={story.dateMs} visits={stamps.find((x) => x.cc === story.cc)?.visits} />
+              <div className="min-w-0 flex-1 pt-0.5 min-[420px]:pl-3.5">
                 <span className="flex w-fit items-center rounded bg-[#ffdbcd] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.5px] text-[#71361c]">
                   <img src="/assets/ic-ribbon.svg" alt="" className="h-[10.5px] w-2" />
                   <span className="pl-1">New stamp collected</span>
