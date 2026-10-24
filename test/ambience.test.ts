@@ -33,6 +33,7 @@ describe('startAmbience', () => {
     vi.useFakeTimers()
     n.ctx = n.osc = n.src = 0
     vi.stubGlobal('AudioContext', FakeAudioContext)
+    vi.stubGlobal('document', { addEventListener: vi.fn(), hidden: false })
   })
   afterEach(() => vi.useRealTimers())
 
