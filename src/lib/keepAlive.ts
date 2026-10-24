@@ -4,7 +4,7 @@
 export type KeepAliveMeta = { title: string; artist?: string; artworkUrl?: string }
 
 /** RIFF/WAVE, mono 16-bit PCM of white noise whose samples never exceed `peak` (a 0..1 fraction of full scale). */
-export function makeQuietWav(seconds: number, sampleRate: number, peak: number): Uint8Array {
+export function makeQuietWav(seconds: number, sampleRate: number, peak: number): Uint8Array<ArrayBuffer> {
   const n = Math.round(seconds * sampleRate)
   const out = new Uint8Array(44 + 2 * n)
   const v = new DataView(out.buffer)
@@ -71,7 +71,7 @@ export async function startKeepAlive(meta: KeepAliveMeta): Promise<boolean> {
     if (!el) {
       const a = new Audio(URL.createObjectURL(new Blob([makeQuietWav(8, 8000, 0.00126)], { type: 'audio/wav' }))) // about -58 dBFS
       a.loop = true
-      a.playsInline = true
+      ;(a as HTMLVideoElement).playsInline = true
       a.addEventListener?.('play', () => (active = true))
       a.addEventListener?.('pause', () => (active = false))
       a.addEventListener?.('ended', () => (active = false))

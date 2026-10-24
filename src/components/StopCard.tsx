@@ -3,12 +3,12 @@ import Flag from './Flag'
 import Stamp from './Stamp'
 import { PrimaryButton, Pill } from './ui'
 
-/** The reward for a finished slot, shown over the map instead of navigating away. */
-export default function StopCard({ story, newStampCc, covered, stopsLeft, onContinue, onFinish }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; stopsLeft: number; onContinue: () => void; onFinish: () => void }) {
+/** The reward for a finished slot (`queued` cards wait, this one first): a bottom sheet over the live map. It never starts or pauses the flight; "Got it" just dismisses. */
+export default function StopCard({ story, newStampCc, covered, queued, onDone }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; queued: number; onDone: () => void }) {
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Stop: ${story.place}`} className="absolute inset-0 z-20 flex items-end bg-ink/30 p-4">
-      <div className="relative max-h-full w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
-        <div className="relative h-36 overflow-hidden rounded-xl bg-card-soft">
+    <div role="dialog" aria-label={`Stop: ${story.place}`} className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex p-4">
+      <div className="pointer-events-auto relative max-h-[52dvh] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
+        <div className="relative h-28 shrink-0 overflow-hidden rounded-xl bg-card-soft">
           <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={story.photo ? story.place : ''} className="absolute inset-0 size-full object-cover" />
           {newStampCc && (
             <span className="absolute -bottom-6 right-1 origin-bottom-right scale-[0.55]">
@@ -38,15 +38,10 @@ export default function StopCard({ story, newStampCc, covered, stopsLeft, onCont
             </ul>
           </div>
         )}
-        <PrimaryButton onClick={onContinue} className="mt-4 flex-col gap-0 py-2.5">
-          <span>Continue journey</span>
-          <span className="text-[11px] font-medium normal-case tracking-normal opacity-90">
-            {stopsLeft} stop{stopsLeft === 1 ? '' : 's'} to go
-          </span>
+        <PrimaryButton onClick={onDone} className="mt-4 py-2.5">
+          {queued > 1 ? 'Next card' : 'Got it'}
         </PrimaryButton>
-        <button type="button" onClick={onFinish} className="mt-2 w-full py-2 text-[13px] font-semibold text-muted">
-          Land here
-        </button>
+        {queued > 1 && <p className="pt-2 text-center text-[12px] font-medium text-muted">1 of {queued}</p>}
       </div>
     </div>
   )
