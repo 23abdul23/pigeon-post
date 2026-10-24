@@ -1,4 +1,4 @@
-# Fost: two-device demo
+# Pigeon Post: two-device demo
 
 About 10 minutes. You need the deployed site (`SiteUrl`), a laptop and a phone (or two browsers, one in a private window), and two Google accounts (A and B). Keep a terminal open for the optional data check (runbook, "Confirm data is saved").
 

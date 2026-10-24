@@ -1,4 +1,4 @@
-// An in-memory stand-in for the Fost API, faithful to the handlers in api/src/handlers for the routes the client's sync and
+// An in-memory stand-in for the Pigeon Post API, faithful to the handlers in api/src/handlers for the routes the client's sync and
 // flight code use: GET /state, PUT /me, POST /trips, PUT|DELETE /flight, POST /trips/{id}/sessions, POST /import.
 // ponytail: no validation, letters, friends or arrivals; add them here if a two-device test needs them.
 import type { ActiveFlight, ServerProfile, ServerState, SessionLog, SessionResult, Stamp, Story, Trip } from '../../src/lib/types'

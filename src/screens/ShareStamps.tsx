@@ -142,11 +142,10 @@ export default function ShareStamps() {
         <div className="flex items-center justify-between pb-3 pt-1">
           <p className="flex items-center gap-1 font-serif text-[22px] leading-7 text-[#8e4d31]">
             <img src="/assets/ss-ready.svg" alt="" className="h-[15px] w-[17.5px]" />
-            Ready for parchment dispatch
+            Ready for Post
           </p>
           <span className="shrink-0 rounded-full bg-card px-2 py-1 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">
-            HQ
-            <br />
+            
             {FORMATS[format].w}×{FORMATS[format].h}
           </span>
         </div>
@@ -162,9 +161,7 @@ export default function ShareStamps() {
                   </span>
                   <div>
                     <p className="font-serif text-[15px] leading-[18.75px] tracking-[-0.375px] text-ink">
-                      My Epistolary
-                      <br />
-                      Journeys · {title}
+                      My Journeys
                     </p>
                     <p className="text-[10px] leading-6 text-ink-2">
                       {season}
@@ -173,8 +170,6 @@ export default function ShareStamps() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="rotate-2 font-serif text-[16px] leading-4 text-[#8e4d31]">Expédition No.</p>
-                  <p className="pt-3 text-[9px] uppercase leading-6 tracking-[0.45px] text-muted">Postmark valid</p>
                 </div>
               </div>
 

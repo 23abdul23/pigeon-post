@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Fost - static site (S3 + CloudFront) and serverless API
+Description: Pigeon Post - static site (S3 + CloudFront) and serverless API
 
 Parameters:
   GoogleClientId:
@@ -45,7 +45,7 @@ Parameters:
     Type: String
     Default: ''
     AllowedPattern: '^[A-Za-z0-9 @.:/_+-]{0,100}$'
-    Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "Fost/1.0")
+    Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "Pigeon Post/1.0")
 
   # Optional custom domain (Task 10). Leave Domain empty to serve from the CloudFront domain only.
   Domain:

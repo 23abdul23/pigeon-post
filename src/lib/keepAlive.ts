@@ -48,7 +48,7 @@ export function setKeepAliveMeta(meta: KeepAliveMeta): void {
     ms.metadata = new MediaMetadata({
       title: meta.title,
       artist: meta.artist ?? '',
-      album: 'Fost',
+      album: 'Pigeon Post',
       artwork: [{ src: meta.artworkUrl ?? '/assets/logo.jpg', sizes: '512x512', type: 'image/jpeg' }],
     })
   } catch {

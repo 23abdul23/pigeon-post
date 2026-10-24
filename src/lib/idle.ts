@@ -33,7 +33,7 @@ export async function requestIdlePermission(): Promise<boolean> {
   }
 }
 
-const ASKED_KEY = 'fost:idle-asked'
+const ASKED_KEY = 'Pigeon Post:idle-asked'
 const REASK_AFTER_MS = 7 * 24 * 3600 * 1000
 
 /** Ask only when Chrome would show its prompt and the person has not already said "not now" this week. */

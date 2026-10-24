@@ -57,7 +57,7 @@ export default function WindStreaks({ wind }: Props) {
             continue
           }
           g.globalAlpha = Math.min(1, p.life * 2)
-          g.strokeStyle = 'rgba(255,255,255,0.55)'
+          g.strokeStyle = 'rgba(79, 148, 245, 0.55)'
           g.lineWidth = 1.5
           g.beginPath()
           g.moveTo(p.x, p.y)

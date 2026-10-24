@@ -271,7 +271,7 @@ describe('two devices, one account', { timeout: 30_000 }, () => {
   })
 
   it('first_sign_in_on_new_device_restores_everything', async () => {
-    // the laptop used Fost before saving worked: everything is local only, owned by nobody yet
+    // the laptop used Pigeon Post before saving worked: everything is local only, owned by nobody yet
     const laptopStorage = new Map<string, string>()
     const old = await device('laptop', { storage: laptopStorage })
     const story = { id: 'story-1', place: 'Plitvice', country: 'Croatia', cc: 'HR', lens: 'Nature' as const, text: 'Lakes.', dateMs: server.now() - 86_400_000, saved: true, birds: [], km: 300, lat: 44.88, lng: 15.62 }

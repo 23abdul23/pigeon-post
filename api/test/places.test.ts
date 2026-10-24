@@ -259,7 +259,7 @@ describe('places search', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
     for (const [input, init] of fetchMock.mock.calls) {
       const h = new Headers(init?.headers)
-      expect(h.get('user-agent')).toBe('Fost/1.0 (+ops@example.test)')
+      expect(h.get('user-agent')).toBe('Pigeon Post/1.0 (+ops@example.test)')
       expect([...h.keys()].sort()).toEqual(['accept', 'user-agent'])
       expect(init?.credentials ?? 'omit').toBe('omit')
       expect(init?.signal).toBeInstanceOf(AbortSignal)

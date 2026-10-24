@@ -27,7 +27,7 @@ export const isAbortError = (e: unknown) => (e as Error | null)?.name === 'Abort
 export const API_TIMEOUT_MS = 15_000
 
 /**
- * Calls the Fost API with the Cognito ID token. Throws ApiError on an HTTP error or when signed out, ApiTimeout after
+ * Calls the Pigeon Post API with the Cognito ID token. Throws ApiError on an HTTP error or when signed out, ApiTimeout after
  * `timeoutMs` without a full answer; network errors and the caller's aborts (`init.signal`) propagate as-is.
  */
 export async function api<T>(path: string, init: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<T> {
