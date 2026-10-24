@@ -59,14 +59,7 @@ export default function Mailbox() {
         <div className="relative flex items-start justify-between pt-1">
           <div>
             <h1 className="font-serif text-[24px] leading-8 tracking-[-0.6px] text-ink">Mailbox</h1>
-            <p className="font-hand text-[22px] font-medium leading-7 text-[#8e4d31]">Slow correspondence carried on bird wings</p>
           </div>
-          <span className="flex items-center gap-1 rounded-full bg-[rgba(198,236,208,0.4)] px-2 py-1 text-[12px] font-semibold leading-4 tracking-[0.36px] text-sage">
-            <img src="/assets/mb-roost.svg" alt="" className="h-[14.7px] w-2" />
-            Roost
-            <br />
-            Open
-          </span>
         </div>
 
         <section className="relative flex gap-4 overflow-hidden rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
@@ -93,7 +86,6 @@ export default function Mailbox() {
                 'Your mailbox is quiet. Fly to a friend and your bird will bring back their reply.'
               )}
             </p>
-            <p className="pt-1 font-hand text-[22px] font-medium leading-7 text-ink-2">“Wind from the East is gentle today...”</p>
           </div>
         </section>
 

@@ -11,6 +11,8 @@ type Props = {
   kind: PlaceKind
   placeholder?: string
   large?: boolean
+  /** 'parent' lets the results list span the nearest positioned ancestor (e.g. a full-width row) instead of only this field. */
+  listAnchor?: 'field' | 'parent'
 }
 
 export const placeDetail = (p: Place) => (p.region ? `${p.region}, ${p.country}` : p.country)
@@ -21,7 +23,7 @@ export function PlaceSourceNote({ source }: { source: PlaceSource }) {
   return <p className="px-4 pb-1 pt-1.5 text-[11px] text-muted">{attribution ?? 'Offline results'}</p>
 }
 
-export default function PlaceSearch({ value, onChange, kind, placeholder = 'Where to?', large = false }: Props) {
+export default function PlaceSearch({ value, onChange, kind, placeholder = 'Where to?', large = false, listAnchor = 'field' }: Props) {
   const [text, setText] = useState(value ? placeLabel(value) : '')
   const [results, setResults] = useState<Place[]>([])
   const [source, setSource] = useState<PlaceSource>('photon')
@@ -77,7 +79,8 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
   }
 
   return (
-    <div className="relative w-full">
+    <div className={`${listAnchor === 'field' ? 'relative ' : ''}w-full`}>
+      <div className="relative">
       <img src="/assets/ic-search.svg" alt="" className="pointer-events-none absolute left-4 top-1/2 h-[17px] w-[17px] -translate-y-1/2" />
       <input
         value={text}
@@ -97,8 +100,13 @@ export default function PlaceSearch({ value, onChange, kind, placeholder = 'Wher
         aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined}
         className={`w-full rounded-xl bg-white pl-10 pr-4 text-[16px] text-ink shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] outline-none placeholder:text-muted focus:ring-2 focus:ring-sage/40 ${large ? 'py-4' : 'py-2.5'}`}
       />
+      </div>
       {expanded && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl bg-white py-1 shadow-[0_8px_24px_rgba(62,58,54,0.12)]">
+        <div
+          className={`absolute z-20 mt-1 overflow-hidden rounded-xl bg-white py-1 shadow-[0_8px_24px_rgba(62,58,54,0.12)] ${
+            listAnchor === 'parent' ? 'left-0 right-0 top-full' : 'w-full'
+          }`}
+        >
           {results.length === 0 && <p className="px-4 py-3 text-[14px] text-muted">We couldn't find that place. Check the spelling.</p>}
           <ul id={listId} role="listbox" aria-label="Places" className="max-h-64 overflow-auto">
             {results.map((p, i) => (

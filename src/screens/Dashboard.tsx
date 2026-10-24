@@ -9,16 +9,28 @@ import { fmtKm, haversineKm } from '../lib/geo'
 import { useStore, type Place } from '../lib/store'
 import { flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip, tripProblem } from '../lib/trips'
+import { greeting } from '../lib/greeting'
 
 const DURATIONS = [10, 15, 25, 30]
 
-function greeting(d = new Date()) {
-  const h = d.getHours()
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+/** The greeting for this device's clock, re-checked every minute and when the tab becomes visible again so it never goes stale. */
+function useGreeting(): string {
+  const [text, setText] = useState(() => greeting())
+  useEffect(() => {
+    const refresh = () => setText(greeting())
+    const id = window.setInterval(refresh, 60_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [])
+  return text
 }
 
 export default function Dashboard() {
   const nav = useNavigate()
+  const hello = useGreeting()
   const user = useStore((s) => s.user)
   const home = useStore((s) => s.homeCity)
   const trip = useStore((s) => s.trip)
@@ -90,13 +102,9 @@ export default function Dashboard() {
               Home: {home?.name ?? '—'}
             </span>
             <h1 className="font-serif text-[24px] leading-8 tracking-[-0.6px] text-ink">
-              {greeting()}, {user?.name ?? 'friend'}
+              {hello}, {user?.name ?? 'friend'}
             </h1>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full bg-[#efe7e1] px-3 py-1.5 text-[12px] font-medium tracking-[0.36px] text-ink-2 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-            <span className="size-2 rounded-full bg-sage" />
-            Clear Skies
-          </span>
         </div>
 
 
@@ -106,7 +114,6 @@ export default function Dashboard() {
               <img src="/assets/ic-timer.svg" alt="" className="h-[17.5px] w-[15px]" />
               <h2 className="font-serif text-[20px] font-semibold leading-7 text-ink">Flight Desk</h2>
             </div>
-            <Hand className="rotate-1 text-[#8e4d31]">Ready for departure</Hand>
           </div>
           <div className="flex flex-col items-center py-2">
             <span className="font-serif text-[38px] font-bold leading-[44px] tracking-[-0.95px] text-ink">{String(minutes).padStart(2, '0')}:00</span>
@@ -129,14 +136,30 @@ export default function Dashboard() {
             ))}
           </div>
           <div className="flex flex-col gap-2 pt-1">
-            <PlaceSearch
-              kind="any"
-              value={dest}
-              onChange={(p) => {
-                setDest(p)
-                setError('')
-              }}
-            />
+            {/* One row, 65 / 35: where to, and go. `relative` anchors the full-width results list. */}
+            <div className="relative flex items-stretch gap-2">
+              <div className="min-w-0 basis-[65%]">
+                <PlaceSearch
+                  kind="any"
+                  large
+                  listAnchor="parent"
+                  value={dest}
+                  onChange={(p) => {
+                    setDest(p)
+                    setError('')
+                  }}
+                />
+              </div>
+              <div className="flex basis-[35%]">
+                <PrimaryButton
+                  onClick={start}
+                  aria-label={elsewhere ? 'Watch your flight in progress' : 'Start flight'}
+                  className="h-14 px-2 py-0 text-[12px] leading-4"
+                >
+                  {elsewhere ? 'Watch flight' : 'Start flight'}
+                </PrimaryButton>
+              </div>
+            </div>
             {dest && (
               <div className="flex items-center gap-1.5 overflow-auto py-0.5 pl-1">
                 <span className="text-[12px] font-semibold tracking-[0.36px] text-ink-2">Route:</span>
@@ -152,17 +175,19 @@ export default function Dashboard() {
               </p>
             )}
           </div>
-          <PrimaryButton onClick={start}>
-            <img src="/assets/ic-send.svg" alt="" className="size-[15px]" />
-            {elsewhere ? 'Watch your flight in progress' : 'Start flight'}
-          </PrimaryButton>
+          <div role="separator" aria-label="or" className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-ink/10" />
+            <span className="text-[12px] font-semibold uppercase tracking-[0.6px] text-ink-2">or</span>
+            <span className="h-px flex-1 bg-ink/10" />
+          </div>
+          <SoftButton onClick={() => nav('/trip/new')} className="py-3.5">
+            <img src="/assets/fr-envelope.svg" alt="" className="h-[15px] w-[16.7px]" />
+            Send mail to a friend
+          </SoftButton>
           <p className="flex items-center justify-center gap-1.5 text-[14px] text-ink-2">
             <img src="/assets/ic-info.svg" alt="" className="size-[13px]" />
             1 minute of focus = 100 km traveled
           </p>
-          <Link to="/trip/new" className="-mt-2 text-center text-[13px] font-bold text-sage">
-            Fly to a friend or send a letter
-          </Link>
         </Card>
 
         {active ? (
