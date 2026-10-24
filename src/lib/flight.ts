@@ -101,19 +101,53 @@ function putFlight(s: ActiveSession, takeover = false): Promise<void> {
   })
 }
 
-export function startSession(trip: Trip, durationMin: number) {
-  const now = serverNow()
-  const session: ActiveSession = { tripId: trip.id, startMs: now, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: now }
+export function startSession(trip: Trip, durationMin: number, startMs = serverNow()) {
+  const session: ActiveSession = { tripId: trip.id, startMs, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: serverNow() }
   setState({ session, landing: null })
   void putFlight(session)
 }
 
-/** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress. */
-export function continueRun(): Trip | null {
+/** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress, starting at `atMs` (default now). */
+export function continueRun(atMs?: number): Trip | null {
   const { landing, trip } = getState()
   if (!trip || landing?.reason !== 'completed' || landing.tripId !== trip.id || trip.progressKm >= trip.routeKm) return null
-  startSession(trip, landing.durationMin)
+  startSession(trip, landing.durationMin, atMs)
   return trip
+}
+
+/** Queues the stop card of a mid-journey completed landing and flies on from `atMs`. Returns false when there was no such stop. */
+export function chainFrom(l: Landing, atMs?: number): boolean {
+  const { trip, session } = getState()
+  if (session || l.reason !== 'completed' || !trip || trip.id !== l.tripId || l.km >= trip.routeKm) return false
+  setState((st) => ({ stopCards: st.stopCards.some((c) => c.storyId === l.storyId) ? st.stopCards : [...st.stopCards, { storyId: l.storyId, km: l.km, gainedKm: l.gainedKm, newStampCc: l.newStampCc }] }))
+  return !!continueRun(atMs)
+}
+
+let settling: Promise<number> | null = null
+export const isSettling = () => !!settling
+
+/**
+ * Lands every slot whose time is up and flies on from its scheduled end, so a tab that noticed late (screen off, frozen)
+ * loses no time. Records one stop card per mid-journey slot; stops at the clock, the arrival, or `cap` slots.
+ * Returns the number of stops recorded. Concurrent calls share one run.
+ */
+export function settleElapsedSlots(cap = 50): Promise<number> {
+  settling ??= (async () => {
+    let stops = 0
+    for (let i = 0; i < cap; i++) {
+      const { session: s, trip } = getState()
+      if (!s || s.leftAtMs || !trip || trip.id !== s.tripId) break
+      const p = computeProgress(s, trip, serverNow())
+      if (!p.done && !p.arrived) break
+      const l = await landSession('completed')
+      if (!l || !chainFrom(l, s.startMs + s.durationMin * 60000)) break
+      stops++
+    }
+    return stops
+  })().finally(() => {
+    settling = null
+  })
+  return settling
 }
 
 /** Back on the tab: unfreezes the flight where `markLeft` stopped it, as if the time away had not passed. */
@@ -215,7 +249,8 @@ export function landSession(reason: Landing['reason']): Promise<Landing | null> 
     const trip = st.trip
     if (!s || !trip || trip.id !== s.tripId) return st.landing
     const now = serverNow()
-    const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : now
+    // a completed slot ends at its schedule even when noticed late, so chained slots never overlap in the log
+    const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : reason === 'completed' ? Math.min(now, s.startMs + s.durationMin * 60000) : now
     const p = computeProgress({ ...s, leftAtMs: s.leftAtMs ?? endMs }, trip, endMs)
     const spot = pointAtKm(trip.route, p.km).pt
     const story = await buildStory(spot[0], wrapLng(spot[1]), p.km) // routes carry unwrapped longitudes
