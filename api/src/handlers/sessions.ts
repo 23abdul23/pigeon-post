@@ -1,5 +1,5 @@
 import { DeleteCommand, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
-import type { Letter, SessionLog, SessionResult, Stamp, Story, Trip } from '../../../src/lib/types'
+import type { Letter, SessionLog, SessionResult, Stamp, Story, StoryExtras, Trip } from '../../../src/lib/types'
 import { clampKm } from '../lib/clamp'
 import { roundCoord } from '../lib/constants'
 import { clean, ddb, isConditionFail, tableName, tripOut, type StoredTrip } from '../lib/db'
@@ -44,6 +44,40 @@ async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Lett
 export const REASONS: readonly unknown[] = ['completed', 'left', 'ended'] satisfies SessionLog['reason'][]
 const LENSES: readonly unknown[] = ['Legend', 'Food', 'Hidden spot', 'Nature', 'History'] satisfies Story['lens'][]
 
+const KINDS = ['Bird', 'Plant', 'Mammal', 'Reptile', 'Amphibian', 'Insect', 'Fungus', 'Other']
+
+/** Lenient: extras are decoration, so anything invalid is dropped instead of rejecting the session. */
+export function sanitizeExtras(v: unknown): StoryExtras | undefined {
+  if (!isObj(v)) return undefined
+  const s = (x: unknown, max: number) => (typeof x === 'string' && x.trim() && Array.from(x.trim()).length <= max ? x.trim() : undefined)
+  const url = (x: unknown) => (typeof x === 'string' && x.length <= 500 && x.startsWith('https://') ? x : undefined)
+  const list = <T>(x: unknown, max: number, f: (i: Record<string, unknown>) => T | undefined): T[] | undefined => {
+    const out = (Array.isArray(x) ? x : []).flatMap((i) => (isObj(i) ? [f(i)] : [])).filter((i): i is NonNullable<T> => i != null).slice(0, max)
+    return out.length ? out : undefined
+  }
+  const nearby = list(v.nearby, 5, (i) => {
+    const title = s(i.title, 120)
+    return title ? { title, blurb: s(i.blurb, 300), photo: url(i.photo), url: url(i.url) } : undefined
+  })
+  const wildlife = list(v.wildlife, 8, (i) => {
+    const name = s(i.name, 120)
+    return name ? { name, kind: (KINDS.includes(i.kind as string) ? i.kind : 'Other') as NonNullable<StoryExtras['wildlife']>[number]['kind'], photo: url(i.photo) } : undefined
+  })
+  const p = isObj(v.people) ? v.people : {}
+  const langs = (Array.isArray(p.languages) ? p.languages : []).map((l) => s(l, 120)).filter((l): l is string => !!l).slice(0, 6)
+  const people = {
+    capital: s(p.capital, 120),
+    population: typeof p.population === 'number' && Number.isFinite(p.population) && p.population >= 0 ? p.population : undefined,
+    languages: langs.length ? langs : undefined,
+    currency: s(p.currency, 120),
+    demonym: s(p.demonym, 120),
+  }
+  const out: StoryExtras = { nearby, wildlife, people: Object.values(people).some((x) => x !== undefined) ? people : undefined, culture: s(v.culture, 600) }
+  // JSON-style: undefined keys are dropped so stored items and responses stay clean
+  const clean = JSON.parse(JSON.stringify(out)) as StoryExtras
+  return Object.keys(clean).length ? clean : undefined
+}
+
 export function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
   if (!isObj(v)) return bad('invalid story')
   const birds = v.birds ?? []
@@ -60,6 +94,7 @@ export function parseStory(v: unknown): Omit<Story, 'dateMs' | 'saved' | 'km'> {
     photo: optStr(v.photo, 1000, 'story.photo'),
     sourceUrl: optStr(v.sourceUrl, 1000, 'story.sourceUrl'),
     birds: (birds as unknown[]).map((b) => str(b, 100, 'story.birds')),
+    extras: sanitizeExtras(v.extras),
     lat: roundCoord(num(v.lat, -90, 90, 'story.lat')),
     lng: roundCoord(num(v.lng, -180, 180, 'story.lng')),
   }

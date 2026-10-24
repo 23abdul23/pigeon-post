@@ -242,3 +242,47 @@ describe('PUT /stories/{id}', () => {
     expect((await call(putStory, ev({ id: 'st1', body: { saved: 'yes' } }))).status).toBe(400)
   })
 })
+
+describe('sanitizeExtras', () => {
+  const big = 'x'.repeat(700)
+  it('passes valid extras through and caps lists', async () => {
+    const { sanitizeExtras } = await import('../src/handlers/sessions')
+    const nearby = Array.from({ length: 9 }, (_, i) => ({ title: `T${i}`, blurb: 'b', photo: 'https://a/p.jpg', url: 'https://a/u' }))
+    const wildlife = Array.from({ length: 12 }, (_, i) => ({ name: `W${i}`, kind: i ? 'Plant' : 'Bird', photo: 'https://a/w.jpg' }))
+    const e = sanitizeExtras({ nearby, wildlife, people: { capital: 'Lisbon', population: 10, languages: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], currency: 'Euro', demonym: 'Portuguese' }, culture: 'Fado.' })!
+    expect(e.nearby).toHaveLength(5)
+    expect(e.wildlife).toHaveLength(8)
+    expect(e.people!.languages).toHaveLength(6)
+    expect(e.nearby![0]).toEqual(nearby[0])
+    expect(e.culture).toBe('Fado.')
+  })
+  it('drops garbage, oversize and non-https urls; unknown kind becomes Other', async () => {
+    const { sanitizeExtras } = await import('../src/handlers/sessions')
+    const e = sanitizeExtras({
+      nearby: [{ title: '' }, 'junk', { title: 'x'.repeat(121) }, { title: 'Ok', blurb: big, photo: 'http://insecure', url: 'https://u' }],
+      wildlife: [{ name: 'Fox', kind: 'Dragon', photo: 'javascript:1' }, { kind: 'Bird' }],
+      people: { population: -5, capital: 3 },
+      culture: big,
+    })!
+    expect(e.nearby).toEqual([{ title: 'Ok', url: 'https://u' }])
+    expect(e.wildlife).toEqual([{ name: 'Fox', kind: 'Other' }])
+    expect(e.people).toBeUndefined()
+    expect(e.culture).toBeUndefined()
+  })
+  it('is undefined when missing or junk', async () => {
+    const { sanitizeExtras } = await import('../src/handlers/sessions')
+    expect(sanitizeExtras(undefined)).toBeUndefined()
+    expect(sanitizeExtras('x')).toBeUndefined()
+    expect(sanitizeExtras({ nearby: 5 })).toBeUndefined()
+  })
+  it('session keeps extras in the result and the stored story; garbage extras never 400', async () => {
+    seedTrip()
+    const ok = await call(postSession, ev({ id: 't1', body: session('s1', { story: story({ id: 'sx', extras: { culture: 'Fado.' } }) }) }))
+    expect(ok.status).toBe(200)
+    expect(ok.body.story.extras).toEqual({ culture: 'Fado.' })
+    expect(table.get('USER#u1|STORY#sx')?.extras).toEqual({ culture: 'Fado.' })
+    const junk = await call(postSession, ev({ id: 't1', body: session('s2', { story: story({ id: 'sy', extras: 42 }) }) }))
+    expect(junk.status).toBe(200)
+    expect(junk.body.story.extras).toBeUndefined()
+  })
+})

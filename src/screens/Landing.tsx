@@ -2,6 +2,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import Flag from '../components/Flag'
 import Stamp from '../components/Stamp'
+import StoryDetails from '../components/StoryDetails'
 import { Frame } from '../components/Layout'
 import { clearStopCards, startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
@@ -133,6 +134,8 @@ export default function Landing() {
           </div>
 
           <p className="text-[16px] leading-[26px] text-ink-2">{story.text}</p>
+
+          <StoryDetails extras={story.extras} />
 
           {story.birds.length > 0 && (
             <div className="flex flex-col gap-2 pb-3 pt-2">

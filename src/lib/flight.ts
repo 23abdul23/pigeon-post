@@ -253,7 +253,8 @@ function adoptSession(r: SessionResult, sent: Trip) {
     letters: upsert(st.letters, [...r.delivered, ...r.pickedUp]),
     // the server keeps no route, so keep ours; and leave the trip alone if it moved on meanwhile (e.g. already flying home)
     trip: st.trip === sent ? { ...sent, ...r.trip, route: sent.route } : st.trip,
-    stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, saved: x.saved } : x)),
+    // an older API drops extras: keep the ones built locally
+    stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, extras: r.story.extras ?? x.extras, saved: x.saved } : x)),
     stamps: !stamp ? st.stamps : st.stamps.some((x) => x.cc === stamp.cc) ? st.stamps.map((x) => (x.cc === stamp.cc ? stamp : x)) : [...st.stamps, stamp],
   }))
 }

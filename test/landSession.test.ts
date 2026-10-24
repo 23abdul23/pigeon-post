@@ -99,3 +99,20 @@ describe('run', () => {
     expect(op.body).not.toHaveProperty('leftAtMs')
   })
 })
+
+describe('adoptSession extras', () => {
+  it('keeps local extras when the server story has none', async () => {
+    const now = Date.now()
+    setState({ trip, stories: [], stamps: [], sessions: [], session: { tripId: 't1', startMs: now - 5 * 60000, durationMin: 25, baseKm: 0 } })
+    let reply!: (r: unknown) => void
+    sendMock.mockReturnValueOnce(new Promise((r) => (reply = r)))
+    await landSession('ended')
+    const local = { ...getState().stories[0], extras: { culture: 'Fado.' } }
+    setState({ stories: [local] })
+    const { extras: _local, ...bare } = local
+    reply({ trip: { ...trip, route: undefined, progressKm: 1, legs: 1 }, story: bare, delivered: [], pickedUp: [] })
+    await vi.waitFor(() => expect(getState().trip!.progressKm).toBe(1))
+    expect(_local).toBeDefined()
+    expect(getState().stories[0].extras).toEqual({ culture: 'Fado.' })
+  })
+})

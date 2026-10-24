@@ -2,6 +2,7 @@ import Avatar from '../components/Avatar'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
+import StoryDetails from '../components/StoryDetails'
 import MiniMap from '../components/MiniMap'
 import { fmtKm } from '../lib/geo'
 import { dms } from './Landing'
@@ -152,6 +153,8 @@ export default function JournalDetail() {
               )}
             </p>
           </section>
+
+          <StoryDetails extras={story.extras} />
 
           {story.birds.length > 0 && (
             <section className="flex flex-col gap-1">
