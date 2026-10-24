@@ -70,6 +70,7 @@ export default function Focus() {
   // Clock tick + local heartbeat while flying (or watching); the server heartbeat every 30 s, owner only.
   useEffect(() => {
     if (!flying && !observing) return
+    setNow(serverNow()) // fresh at once, e.g. after resumeFlight moved startMs
     const id = window.setInterval(() => {
       setNow(serverNow())
       const s = getState().session
@@ -90,9 +91,12 @@ export default function Focus() {
   const midStop = landing?.reason === 'completed' && !session && !!trip && trip.progressKm < trip.routeKm
   const stops = useMemo(
     () => {
-      if (!trip) return []
-      if (midStop && landing) return stopsAhead(trip.routeKm, landing.km, landing.durationMin) // the HUD stays at the landing point behind the stop card
-      return live ? stopsAhead(trip.routeKm, live.baseKm, live.durationMin) : []
+      const base = midStop && landing ? landing.km : live?.baseKm // at the landing point behind the stop card
+      const slot = midStop && landing ? landing.durationMin : live?.durationMin
+      if (!trip || base === undefined || !slot) return []
+      // stops stay aligned to where the run began, so reached stops remain on the map and rail across slots
+      const step = slot * KM_PER_FOCUS_MINUTE
+      return stopsAhead(trip.routeKm, base % step, slot)
     },
     [live?.baseKm, live?.durationMin, trip?.routeKm, midStop, landing?.km, landing?.durationMin], // eslint-disable-line react-hooks/exhaustive-deps
   )
@@ -159,7 +163,6 @@ export default function Focus() {
 
   const species = birdBySpecies(bird?.species ?? 'pigeon')
   const km = midStop && landing ? landing.km : (progress?.km ?? 0)
-  const fromKm = midStop && landing ? landing.km : (live?.baseKm ?? 0)
   const countdown = mmss(midStop && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
   const pct = Math.round((km / trip.routeKm) * 100)
   const circ = 2 * Math.PI * 20
@@ -227,7 +230,7 @@ export default function Focus() {
               <span className="relative text-[12px] font-bold tracking-[0.36px] text-sage">{pct}%</span>
             </div>
           </div>
-          <StopsRail stops={stops} fromKm={fromKm} routeKm={trip.routeKm} km={km} />
+          <StopsRail stops={stops} fromKm={0} routeKm={trip.routeKm} km={km} />
           <p className="pt-2 text-[14px] text-muted">
             Next stop in <span className="font-bold text-ink">{countdown}</span>
           </p>
