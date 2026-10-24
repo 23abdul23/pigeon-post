@@ -14,7 +14,6 @@ const canned = (url: string, off: string[] = []) => {
   if (url.includes('iconic_taxa=Aves')) return taxa('Aves', ['Robin', 'Wren', 'Owl'])
   if (url.includes('iconic_taxa=Plantae')) return taxa('Plantae', ['Oak', 'Fern', 'Robin', 'Moss'])
   if (url.includes('iconic_taxa=Mammalia')) return taxa('Mammalia', ['Fox', 'Newt', 'Bee'])
-  if (url.includes('restcountries')) return { capital: ['Lisbon'], population: 10_000_000, languages: { por: 'Portuguese' }, currencies: { EUR: { name: 'Euro' } }, demonyms: { eng: { m: 'Portuguese' } } }
   if (url.includes('rest_v1/page/summary')) return { extract: 'Culture is shaped by fado and tiles.' }
   return null
 }
@@ -39,25 +38,30 @@ describe('story extras', () => {
     expect(names.filter((n) => n === 'Robin')).toHaveLength(1)
     expect(x.wildlife!.find((w) => w.name === 'Oak')).toMatchObject({ kind: 'Plant', photo: 'https://img/Oak.jpg' })
     expect(x.wildlife!.find((w) => w.name === 'Fox')!.kind).toBe('Mammal')
-    expect(x.people).toEqual({ capital: 'Lisbon', population: 10_000_000, languages: ['Portuguese'], currency: 'Euro', demonym: 'Portuguese' })
+    expect(x.people).toMatchObject({ capital: 'Lisbon', languages: ['Portuguese'], currency: 'euro', demonym: 'Portuguese' })
+    expect(x.people!.population).toBeGreaterThan(1e7)
     expect(x.culture).toContain('fado')
   })
 
-  it('omits people when only restcountries fails', async () => {
-    stub(['restcountries'])
-    const x = (await buildStory(41.1, -8.6, 10)).extras!
+  it('omits people when the country is not in the bundled table', async () => {
+    stub()
+    vi.resetModules()
+    vi.doMock('../src/data/countryFacts.json', () => ({ default: {} }))
+    const { buildStory: build } = await import('../src/lib/stories')
+    const x = (await build(38.7, -9.1, 10)).extras!
+    vi.doUnmock('../src/data/countryFacts.json')
     expect(x.people).toBeUndefined()
     expect(x.culture && x.nearby && x.wildlife).toBeTruthy()
   })
 
-  it('has no extras when every extra fetch fails, but keeps the story text', async () => {
-    stub(['iconic_taxa', 'restcountries', 'rest_v1'])
+  it('keeps only the bundled people facts when every extra fetch fails, but keeps the story text', async () => {
+    stub(['iconic_taxa', 'rest_v1'])
     const s = await buildStory(40.2, -8.4, 10)
     expect(s.text.length).toBeGreaterThan(20)
     expect(s.extras?.wildlife).toBeUndefined()
-    expect(s.extras?.people).toBeUndefined()
+    expect(s.extras?.people).toBeDefined() // bundled, needs no network
     expect(s.extras?.culture).toBeUndefined()
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-    expect((await buildStory(50.5, 5.5, 10)).extras).toBeUndefined()
+    expect(Object.entries((await buildStory(50.5, 5.5, 10)).extras ?? {}).filter(([, v]) => v).map(([k]) => k)).toEqual(['people'])
   })
 })

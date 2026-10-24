@@ -29,16 +29,7 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
   return (
     <div role="dialog" aria-label={`Stop: ${story.place}`} className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex p-4">
       <div className="pointer-events-auto relative flex max-h-[46dvh] w-full flex-col rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
-        <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="relative h-24 shrink-0 overflow-hidden rounded-xl bg-card-soft">
-          <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={story.photo ? story.place : ''} className="absolute inset-0 size-full object-cover" />
-          {newStampCc && (
-            <span className="absolute -bottom-6 right-1 origin-bottom-right scale-[0.55]">
-              <Stamp cc={newStampCc} country={story.country} place={story.place} dateMs={story.dateMs} />
-            </span>
-          )}
-        </div>
-        <div className="flex items-start justify-between gap-2 pt-3">
+        <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="truncate font-serif text-[22px] font-semibold leading-7 text-ink">{story.place}</h2>
             <p className="truncate text-[13px] text-ink-2">{[story.region, story.country].filter(Boolean).join(', ')}</p>
@@ -46,7 +37,7 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
           <Pill tone="sky">{story.lens}</Pill>
         </div>
         {tabs.length > 1 && (
-          <div role="tablist" aria-label="Stop details" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pt-2">
+          <div role="tablist" aria-label="Stop details" className="-mx-1 flex shrink-0 gap-1.5 overflow-x-auto px-1 pt-2">
             {tabs.map((t, i) => (
               <button
                 key={t.id}
@@ -65,13 +56,19 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
             ))}
           </div>
         )}
-        <div role="tabpanel" id="stop-panel" aria-labelledby={`stop-tab-${active}`}>
+        <div role="tabpanel" id="stop-panel" aria-labelledby={`stop-tab-${active}`} className="min-h-0 flex-1 overflow-y-auto pt-3">
         {active !== 'overview' ? (
-          <div className="pt-3">
-            <StoryDetails extras={story.extras} only={active} />
-          </div>
+          <StoryDetails extras={story.extras} only={active} />
         ) : (
         <>
+        <div className="relative h-24 shrink-0 overflow-hidden rounded-xl bg-card-soft">
+          <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={story.photo ? story.place : ''} className="absolute inset-0 size-full object-cover" />
+          {newStampCc && (
+            <span className="absolute -bottom-6 right-1 origin-bottom-right scale-[0.55]">
+              <Stamp cc={newStampCc} country={story.country} place={story.place} dateMs={story.dateMs} />
+            </span>
+          )}
+        </div>
         <p className="line-clamp-3 pt-2 text-[14px] leading-5 text-ink-2">{story.text}</p>
         {story.birds.length > 0 && <p className="pt-2 text-[12px] font-medium text-sage">Birds here: {story.birds.join(', ')}</p>}
         {covered && covered.length > 0 && (
@@ -89,7 +86,6 @@ export default function StopCard({ story, newStampCc, covered, queued, onDone }:
         )}
         </>
         )}
-        </div>
         </div>
         <PrimaryButton onClick={onDone} className="mt-3 shrink-0 py-2.5">
           {queued > 1 ? 'Next card' : 'Got it'}

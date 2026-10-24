@@ -43,7 +43,6 @@ type Near = { query?: { pages?: Record<string, Page> } }
 type Occ = { results?: { vernacularName?: string; species?: string }[] }
 type Taxon = { preferred_common_name?: string; name?: string; iconic_taxon_name?: string; default_photo?: { square_url?: string } }
 type Inat = { results?: { taxon?: Taxon }[] }
-type Country = { capital?: string[]; population?: number; languages?: Record<string, string>; currencies?: Record<string, { name?: string }>; demonyms?: { eng?: { m?: string } } }
 type Summary = { extract?: string }
 
 const INAT = 'https://api.inaturalist.org/v1/observations/species_counts'
@@ -72,17 +71,16 @@ async function cultureOf(cc: string): Promise<string | undefined> {
   return t.length > 600 ? `${t.slice(0, 599).replace(/\s+\S*$/, '')}\u2026` : t || undefined
 }
 
+type Facts = Record<string, NonNullable<StoryExtras['people']>>
+
+/** From the bundled table (tools/build-country-facts.mjs); a separate chunk, loaded on first use. */
 async function peopleOf(cc: string): Promise<StoryExtras['people']> {
-  const c = await getJson<Country>(`https://restcountries.com/v3.1/alpha/${encodeURIComponent(cc)}?fields=name,capital,population,languages,currencies,demonyms`)
-  if (!c) return undefined
-  const p = {
-    capital: c.capital?.[0],
-    population: c.population,
-    languages: c.languages ? Object.values(c.languages).slice(0, 6) : undefined,
-    currency: Object.values(c.currencies ?? {})[0]?.name,
-    demonym: c.demonyms?.eng?.m,
+  try {
+    const facts = (await import('../data/countryFacts.json')).default as Facts
+    return facts[cc.toUpperCase()]
+  } catch {
+    return undefined
   }
-  return Object.values(p).some((v) => v !== undefined) ? p : undefined
 }
 
 /** Optional Bedrock polish of the facts via POST /stories/compose; any failure (429, offline, signed out, slow) keeps the plain text. */
