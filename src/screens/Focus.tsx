@@ -30,7 +30,6 @@ export default function Focus() {
   const landing = useStore((s) => s.landing)
   const bird = useStore((s) => s.bird)
   const soundOn = useStore((s) => s.soundOn)
-  const volume = useStore((s) => s.settings.volume)
   const [now, setNow] = useState(() => serverNow())
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
@@ -85,17 +84,22 @@ export default function Focus() {
 
   const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
+  // a completed slot short of the destination shows its stop card here; every other landing goes to the landing page
+  const midStop = landing?.reason === 'completed' && !session && !!trip && trip.progressKm < trip.routeKm
   const stops = useMemo(
-    () => (live && trip ? stopsAhead(trip.routeKm, live.baseKm, live.durationMin) : []),
-    [live?.baseKm, live?.durationMin, trip?.routeKm], // eslint-disable-line react-hooks/exhaustive-deps
+    () => {
+      if (!trip) return []
+      if (midStop && landing) return stopsAhead(trip.routeKm, landing.km, landing.durationMin) // the HUD stays at the landing point behind the stop card
+      return live ? stopsAhead(trip.routeKm, live.baseKm, live.durationMin) : []
+    },
+    [live?.baseKm, live?.durationMin, trip?.routeKm, midStop, landing?.km, landing?.durationMin], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   useEffect(() => {
-    if (flying && progress && (progress.done || progress.arrived)) void landSession('completed')
+    // a session found stale on load has leftAtMs set in the store by now: the resume prompt handles it, not a completion
+    if (flying && progress && (progress.done || progress.arrived) && !getState().session?.leftAtMs) void landSession('completed')
   }, [flying, progress])
 
-  // a completed slot short of the destination shows its stop card here; every other landing goes to the landing page
-  const midStop = landing?.reason === 'completed' && !session && !!trip && trip.progressKm < trip.routeKm
   useEffect(() => {
     if (landing && !midStop && !session) nav(`/landing/${landing.storyId}`, { replace: true })
   }, [landing, midStop, session, nav])
@@ -108,7 +112,7 @@ export default function Focus() {
     prefetchStory(pt[0], wrapLng(pt[1]), endKm)
   }, [flying, session?.tripId, session?.startMs, session?.durationMin]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Place names for the little notes on the map.
+  // Wind and temperature at the bird's position.
   useEffect(() => {
     if ((!flying && !observing) || !trip) return
     let cancelled = false
@@ -136,7 +140,9 @@ export default function Focus() {
   }
 
   const species = birdBySpecies(bird?.species ?? 'pigeon')
-  const km = progress?.km ?? 0
+  const km = midStop && landing ? landing.km : (progress?.km ?? 0)
+  const fromKm = midStop && landing ? landing.km : (live?.baseKm ?? 0)
+  const countdown = mmss(midStop && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
   const pct = Math.round((km / trip.routeKm) * 100)
   const circ = 2 * Math.PI * 20
 
@@ -185,7 +191,7 @@ export default function Focus() {
           <div className="flex items-center justify-between pt-1">
             <div>
               <p className="font-serif text-[38px] font-semibold leading-[38px] tracking-[-0.95px] text-ink" aria-live="off">
-                {mmss(progress?.remainingMs ?? 0)}
+                {countdown}
               </p>
               <p className="flex items-center gap-1 pt-1 text-[12px] font-semibold tracking-[0.36px] text-sky-ink">
                 <img src="/assets/ic-nav-small.svg" alt="" className="size-[10.5px]" />
@@ -202,9 +208,9 @@ export default function Focus() {
               <span className="relative text-[12px] font-bold tracking-[0.36px] text-sage">{pct}%</span>
             </div>
           </div>
-          <StopsRail stops={stops} fromKm={live?.baseKm ?? 0} routeKm={trip.routeKm} km={km} />
+          <StopsRail stops={stops} fromKm={fromKm} routeKm={trip.routeKm} km={km} />
           <p className="pt-2 text-[14px] text-muted">
-            Next stop in <span className="font-bold text-ink">{mmss(progress?.remainingMs ?? 0)}</span>
+            Next stop in <span className="font-bold text-ink">{countdown}</span>
           </p>
         </aside>
 
@@ -215,7 +221,7 @@ export default function Focus() {
               type="button"
               onClick={() => setState({ soundOn: !soundOn })}
               aria-pressed={soundOn}
-              aria-label={soundOn ? `Mute sound (volume ${volume}%)` : 'Unmute sound'}
+              aria-label="Sound"
               className="flex size-11 items-center justify-center rounded-full bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]"
             >
               <span className={`flex size-7 items-center justify-center rounded-full ${soundOn ? 'bg-[#c6ecd0]' : 'bg-card'}`}>
