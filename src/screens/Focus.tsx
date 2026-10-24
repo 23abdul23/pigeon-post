@@ -6,6 +6,7 @@ import { Frame } from '../components/Layout'
 import ResumePrompt from '../components/ResumePrompt'
 import StopCard from '../components/StopCard'
 import StopsRail from '../components/StopsRail'
+import WindStreaks from '../components/WindStreaks'
 import { birdBySpecies } from '../lib/birds'
 import { serverNow } from '../lib/device'
 import { computeProgress, continueRun, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, resumeFlight, takeOver } from '../lib/flight'
@@ -159,6 +160,7 @@ export default function Focus() {
           className="absolute inset-0"
         />
         <div className="pointer-events-none absolute inset-0 bg-[rgba(255,248,244,0.18)]" />
+        <WindStreaks wind={wind} />
 
         <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
           <BirdViewer bird={species} flight className="h-44 w-60" />
