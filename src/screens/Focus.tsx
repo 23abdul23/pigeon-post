@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import BirdViewer from '../components/BirdViewer'
+import CountryStamps from '../components/CountryStamps'
 import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
 import ResumePrompt from '../components/ResumePrompt'
@@ -8,8 +9,11 @@ import StopCard from '../components/StopCard'
 import StopsRail from '../components/StopsRail'
 import WindStreaks from '../components/WindStreaks'
 import { birdBySpecies } from '../lib/birds'
+import { coveredBetween, countryEntries, enteredBetween } from '../lib/countriesAlong'
+import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
-import { computeProgress, continueRun, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, resumeFlight, takeOver } from '../lib/flight'
+import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
+import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
@@ -25,6 +29,19 @@ const mmss = (ms: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 }
 
+/** Lock-screen text and slot progress for the running flight; a waiting stop card takes over the text. */
+function keepAliveInfo() {
+  const { session: s, trip: t, bird: b, stopCards: all, stories } = getState()
+  if (!s || !t || s.leftAtMs) return null
+  const stopCards = unreadCards(all, t.id, stories)
+  const p = computeProgress(s, t, serverNow())
+  const card = stories.find((x) => x.id === stopCards[0]?.storyId)
+  const meta = card
+    ? { title: `New card: ${card.place}`, artist: `${stopCards.length} stop${stopCards.length === 1 ? '' : 's'} to read` }
+    : { title: `${b?.name ?? 'Your bird'} is flying to ${t.dest.name}`, artist: `Next stop in about ${Math.max(1, Math.ceil(p.remainingMs / 60000))} min` }
+  return { meta, duration: s.durationMin * 60, elapsed: p.elapsedMs / 1000 }
+}
+
 export default function Focus() {
   const { tripId } = useParams()
   const nav = useNavigate()
@@ -33,6 +50,7 @@ export default function Focus() {
   const stories = useStore((s) => s.stories)
   const trip = useStore((s) => s.trip)
   const landing = useStore((s) => s.landing)
+  const allCards = useStore((s) => s.stopCards)
   const bird = useStore((s) => s.bird)
   const soundOn = useStore((s) => s.soundOn)
   const [now, setNow] = useState(() => serverNow())
@@ -44,11 +62,13 @@ export default function Focus() {
   const [watched, setWatched] = useState<ActiveFlight | null>(null)
   if (observing && flight !== watched) setWatched(flight) // remembered so its landing can be shown once it ends elsewhere
   const live = session ?? (observing ? flight : null)
+  const turnRef = useRef(0)
   const liveRef = useRef(live)
   liveRef.current = live
 
   const flying = !!session && !session.leftAtMs
   const away = !!session?.leftAtMs
+  const cards = useMemo(() => unreadCards(allCards, tripId ?? '', stories), [allCards, tripId, stories]) // this trip's cards whose story exists
 
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
@@ -59,9 +79,11 @@ export default function Focus() {
   }, [])
 
   // Leaving the tab freezes progress; coming back shows the resume prompt (it reads the store, so showing does nothing).
+  // A hidden tab whose keep-alive audio plays is treated as the screen being locked and the flight carries on: the web
+  // cannot tell a screen lock from an app switch, so an app switch with the audio playing does not count as leaving either.
   useEffect(() => {
     const onHide = markLeft
-    const onVis = () => document.visibilityState === 'hidden' && onHide()
+    const onVis = () => document.visibilityState === 'hidden' && !isKeepAliveActive() && onHide()
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('pagehide', onHide)
     return () => {
@@ -99,9 +121,46 @@ export default function Focus() {
     return () => window.clearInterval(id)
   }, [flying])
 
+  // Quiet audio + Media Session while flying: the lock screen shows the flight and Chrome keeps the tab running.
+  useEffect(() => {
+    if (!flying) return
+    const start = () => {
+      const i = keepAliveInfo()
+      if (i) void ensureKeepAlive(i.meta).then((ok) => ok && setKeepAlivePosition(i.duration, i.elapsed))
+    }
+    start() // also while hidden: a chained slot restarts it with the screen off
+    const onVis = () => document.visibilityState === 'visible' && start() // retry when autoplay was blocked earlier
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      releaseKeepAlive() // delayed: the handoff to the next chained slot must not cut the audio
+    }
+  }, [flying])
+
+  // Refresh the notification text and progress on a slot change, a card arriving or reading, and every 30 s.
+  useEffect(() => {
+    if (!flying) return
+    const sync = () => {
+      const i = isKeepAliveActive() ? keepAliveInfo() : null
+      if (i) {
+        setKeepAliveMeta(i.meta)
+        setKeepAlivePosition(i.duration, i.elapsed)
+      }
+    }
+    sync()
+    const id = window.setInterval(sync, 30_000)
+    return () => window.clearInterval(id)
+  }, [flying, session?.startMs, cards.length])
+
+  const [countryAt, setCountryAt] = useState<((lat: number, lng: number) => string | null) | null>(null)
+  useEffect(() => {
+    void loadCountryAt().then((f) => setCountryAt(() => f))
+  }, [])
+  const hits = useMemo(() => (trip && countryAt ? countryEntries(trip.route, trip.routeKm, countryAt) : []), [trip?.id, trip?.route, trip?.routeKm, countryAt]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
-  // a completed slot short of the destination shows its stop card here; every other landing goes to the landing page
+  // a completed slot short of the destination only exists for a moment: the next slot follows at once and its card is queued
   const midStop = landing?.reason === 'completed' && !session && !!trip && trip.progressKm < trip.routeKm
   const stops = useMemo(
     () => {
@@ -117,12 +176,18 @@ export default function Focus() {
 
   useEffect(() => {
     // a session found stale on load has leftAtMs set in the store by now: the resume prompt handles it, not a completion
-    if (flying && progress && (progress.done || progress.arrived) && !getState().session?.leftAtMs) void landSession('completed')
+    if (flying && progress && (progress.done || progress.arrived) && !getState().session?.leftAtMs) void settleElapsedSlots()
   }, [flying, progress])
 
+  // a mid-journey landing found on load (a reload between landing and continuing) flies on and queues its card
   useEffect(() => {
-    if (landing && !midStop && !session) nav(`/landing/${landing.storyId}`, { replace: true })
-  }, [landing, midStop, session, nav])
+    if (midStop) recoverStranded()
+  }, [midStop, landing?.storyId])
+
+  // unread stop cards are shown before leaving for the landing page
+  useEffect(() => {
+    if (landing && !midStop && !session && cards.length === 0) nav(`/landing/${landing.storyId}`, { replace: true })
+  }, [landing, midStop, session, cards.length, nav])
 
   // warm the story for the place this slot ends at, so the stop card needs no spinner
   useEffect(() => {
@@ -181,8 +246,8 @@ export default function Focus() {
   }
 
   const species = birdBySpecies(bird?.species ?? 'pigeon')
-  const km = midStop && landing ? landing.km : (progress?.km ?? 0)
-  const countdown = mmss(midStop && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
+  const km = !session && landing ? landing.km : (progress?.km ?? 0)
+  const countdown = mmss(!session && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
   const pct = Math.round((km / trip.routeKm) * 100)
   const circ = 2 * Math.PI * 20
 
@@ -196,14 +261,17 @@ export default function Focus() {
             const s = liveRef.current
             return s ? computeProgress(s, trip, serverNow()).km : km
           }}
+          turnRef={turnRef}
           className="absolute inset-0"
         />
         <div className="pointer-events-none absolute inset-0 bg-[rgba(255,248,244,0.18)]" />
         <WindStreaks wind={wind} />
 
         <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
-          <BirdViewer bird={species} flight className="h-44 w-60" />
+          <BirdViewer bird={species} flight turnRef={turnRef} className="h-44 w-60" />
         </div>
+
+        {!midStop && live && <CountryStamps entered={enteredBetween(hits, live.baseKm, km)} />}
 
         <aside className="absolute right-4 top-3 w-[270px] max-w-[calc(100%-2rem)] rounded-2xl bg-white/90 p-3.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-[6px]">
           <div className="flex items-center justify-between">
@@ -282,18 +350,16 @@ export default function Focus() {
         </div>
 
         {away && <ResumePrompt onContinue={resumeFlight} onLand={() => void landIfStillOwner('left')} />}
-        {midStop && landing && (() => {
-          const story = stories.find((x) => x.id === landing.storyId)
-          return story ? (
+        {(() => {
+          const head = cards[0]
+          const story = head && stories.find((x) => x.id === head.storyId)
+          return head && story ? (
             <StopCard
               story={story}
-              newStampCc={landing.newStampCc}
-              stopsLeft={stopsAhead(trip.routeKm, trip.progressKm, landing.durationMin).length}
-              onContinue={() => void continueRun()}
-              onFinish={() => {
-                setState({ landing: null })
-                nav(`/landing/${landing.storyId}`, { replace: true })
-              }}
+              newStampCc={head.newStampCc}
+              covered={coveredBetween(hits, head.km - head.gainedKm, head.km)}
+              queued={cards.length}
+              onDone={() => setState((st) => ({ stopCards: st.stopCards.filter((c) => c.storyId !== head.storyId) }))}
             />
           ) : null
         })()}

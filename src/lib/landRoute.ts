@@ -10,11 +10,16 @@ const ROWS = 180
 const COLS = 360
 const WATER_COST = 3
 const LAND = Uint8Array.from((mask as string[]).join(''), (ch) => (ch === '1' ? 1 : 0))
-const isLand = (n: number) => LAND[n] === 1
+const isLandCell = (n: number) => LAND[n] === 1
 const cellOf = ([lat, lng]: Pt): [number, number] => [
   Math.min(ROWS - 1, Math.max(0, Math.floor(90 - lat))),
   (((Math.floor(lng + 180) % COLS) + COLS) % COLS),
 ]
+/** True when the 1 degree cell holding (lat, lng) is land in the bundled mask. */
+export function isLand(lat: number, lng: number): boolean {
+  const [r, c] = cellOf([lat, lng])
+  return isLandCell(r * COLS + c)
+}
 const centre = (r: number, c: number): Pt => [89.5 - r, c - 179.5]
 // km from a cell in row r to its neighbour (dr, dc); depends only on the row, so it is computed once
 const STEP = Array.from({ length: ROWS }, (_, r) =>
@@ -124,7 +129,7 @@ export function landRoute(from: Pt, to: Pt): Pt[] {
         if (!dr && !dc) continue
         const nc = (c + dc + COLS) % COLS
         const m = nr * COLS + nc
-        const step = stepKm(r, dr, dc) * (isLand(m) || m === goal ? 1 : WATER_COST)
+        const step = stepKm(r, dr, dc) * (isLandCell(m) || m === goal ? 1 : WATER_COST)
         if (base + step < g[m]) {
           g[m] = base + step
           prev[m] = n

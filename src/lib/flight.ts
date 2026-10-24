@@ -6,7 +6,7 @@ import { FLIGHT_STALE_MS, KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from './geo'
 import { send, setOnRejected } from './outbox'
 import { replyFrom } from './social'
 import { buildStory } from './stories'
-import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type Trip } from './store'
+import { getState, setState, type ActiveFlight, type ActiveSession, type Landing, type Letter, type SessionResult, type StopCardEntry, type Trip } from './store'
 
 export type Progress = { km: number; remainingMs: number; elapsedMs: number; done: boolean; arrived: boolean }
 
@@ -101,19 +101,75 @@ function putFlight(s: ActiveSession, takeover = false): Promise<void> {
   })
 }
 
-export function startSession(trip: Trip, durationMin: number) {
-  const now = serverNow()
-  const session: ActiveSession = { tripId: trip.id, startMs: now, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: now }
-  setState({ session, landing: null })
+/** The cards of `tripId` whose story exists: what Focus shows and counts. */
+export const unreadCards = (cards: StopCardEntry[], tripId: string, stories: { id: string }[]) => cards.filter((c) => c.tripId === tripId && stories.some((x) => x.id === c.storyId))
+
+/** Drops a trip's unread cards (its landing page was opened). */
+export const clearStopCards = (tripId: string) => setState((st) => ({ stopCards: st.stopCards.filter((c) => c.tripId !== tripId) }))
+
+export function startSession(trip: Trip, durationMin: number, startMs = serverNow()) {
+  const session: ActiveSession = { tripId: trip.id, startMs, durationMin, baseKm: trip.progressKm, legs: trip.legs, heartbeatMs: serverNow() }
+  endRequested = null // a new flight is a new decision
+  // cards of other trips (and orphans) never carry into this flight
+  setState((st) => ({ session, landing: null, stopCards: unreadCards(st.stopCards, trip.id, st.stories) }))
   void putFlight(session)
 }
 
-/** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress. */
-export function continueRun(): Trip | null {
+/** The user's end request made while a completed slot was being landed (see `landSession`); stops chaining. */
+let endRequested: Landing['reason'] | null = null
+
+/** After a completed slot short of the destination: flies the next slot of the same length from the trip's progress, starting at `atMs` (default now). */
+export function continueRun(atMs?: number): Trip | null {
   const { landing, trip } = getState()
   if (!trip || landing?.reason !== 'completed' || landing.tripId !== trip.id || trip.progressKm >= trip.routeKm) return null
-  startSession(trip, landing.durationMin)
+  startSession(trip, landing.durationMin, atMs)
   return trip
+}
+
+/** Queues the stop card of a mid-journey completed landing and flies on from `atMs`. Returns false when there was no such stop. */
+export function chainFrom(l: Landing, atMs?: number): boolean {
+  const { trip, session } = getState()
+  if (session || l.reason !== 'completed' || !trip || trip.id !== l.tripId || l.km >= trip.routeKm) return false
+  setState((st) => ({ stopCards: st.stopCards.some((c) => c.storyId === l.storyId) ? st.stopCards : [...st.stopCards, { tripId: l.tripId, storyId: l.storyId, km: l.km, gainedKm: l.gainedKm, newStampCc: l.newStampCc }] }))
+  return !!continueRun(atMs)
+}
+
+/** A mid-journey landing found with no session (reload between landing and continuing): flies on from its scheduled end. */
+export function recoverStranded(): boolean {
+  const { landing: l, session } = getState()
+  return !!l && !session && !settling && chainFrom(l, l.atMs)
+}
+
+let settling: Promise<number> | null = null
+export const isSettling = () => !!settling
+
+/**
+ * Lands every slot whose time is up and flies on from its scheduled end, so a tab that noticed late (screen off, frozen)
+ * loses no time. Records one stop card per mid-journey slot; stops at the clock, the arrival, or `cap` slots.
+ * Returns the number of stops recorded. Concurrent calls share one run.
+ */
+export function settleElapsedSlots(cap = 50): Promise<number> {
+  settling ??= (async () => {
+    let stops = 0
+    for (let i = 0; i < cap; i++) {
+      const { session: s, trip } = getState()
+      if (!s || s.leftAtMs || !trip || trip.id !== s.tripId) break
+      const p = computeProgress(s, trip, serverNow())
+      if (!p.done && !p.arrived) break
+      const l = await landSession('completed')
+      if (l && endRequested) {
+        setState({ landing: { ...l, reason: endRequested } }) // the user ended the flight meanwhile: land with their reason
+        break
+      }
+      if (!l || !chainFrom(l, s.startMs + s.durationMin * 60000)) break
+      stops++
+    }
+    return stops
+  })().finally(() => {
+    settling = null
+    endRequested = null
+  })
+  return settling
 }
 
 /** Back on the tab: unfreezes the flight where `markLeft` stopped it, as if the time away had not passed. */
@@ -180,6 +236,7 @@ export function startReturn(durationMin = 25): Trip | null {
   setState({ trip: back })
   void send({ id: `return:${t.id}`, method: 'POST', path: `/trips/${t.id}/return`, touches: ['trip'] })
   startSession(back, durationMin)
+  clearStopCards(t.id) // the way back is a new leg
   return back
 }
 
@@ -196,7 +253,8 @@ function adoptSession(r: SessionResult, sent: Trip) {
     letters: upsert(st.letters, [...r.delivered, ...r.pickedUp]),
     // the server keeps no route, so keep ours; and leave the trip alone if it moved on meanwhile (e.g. already flying home)
     trip: st.trip === sent ? { ...sent, ...r.trip, route: sent.route } : st.trip,
-    stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, saved: x.saved } : x)),
+    // an older API drops extras: keep the ones built locally
+    stories: st.stories.map((x) => (x.id === r.story.id ? { ...r.story, extras: r.story.extras ?? x.extras, saved: x.saved } : x)),
     stamps: !stamp ? st.stamps : st.stamps.some((x) => x.cc === stamp.cc) ? st.stamps.map((x) => (x.cc === stamp.cc ? stamp : x)) : [...st.stamps, stamp],
   }))
 }
@@ -208,14 +266,18 @@ let landing: Promise<Landing | null> | null = null
  * Safe to call twice (second tab, double click): the second call returns the first result.
  */
 export function landSession(reason: Landing['reason']): Promise<Landing | null> {
-  if (landing) return landing
+  if (landing) {
+    if (settling && reason !== 'completed') endRequested = reason // the caller shares a settle's landing: tell the settle to stop
+    return landing
+  }
   landing = (async () => {
     const st = getState()
     const s = st.session
     const trip = st.trip
     if (!s || !trip || trip.id !== s.tripId) return st.landing
     const now = serverNow()
-    const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : now
+    // a completed slot ends at its schedule even when noticed late, so chained slots never overlap in the log
+    const endMs = reason === 'left' && s.leftAtMs ? s.leftAtMs : reason === 'completed' ? Math.min(now, s.startMs + s.durationMin * 60000) : now
     const p = computeProgress({ ...s, leftAtMs: s.leftAtMs ?? endMs }, trip, endMs)
     const spot = pointAtKm(trip.route, p.km).pt
     const story = await buildStory(spot[0], wrapLng(spot[1]), p.km) // routes carry unwrapped longitudes

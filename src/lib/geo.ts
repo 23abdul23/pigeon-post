@@ -47,6 +47,19 @@ export function bearing(a: Pt, b: Pt): number {
   return (deg(Math.atan2(y, x)) + 360) % 360
 }
 
+/** Signed shortest turn in degrees from one compass bearing to another, in (-180, 180]; positive = clockwise. */
+export const shortestAngleDelta = (from: number, to: number) => {
+  const d = ((((to - from) % 360) + 360) % 360)
+  return d > 180 ? d - 360 : d
+}
+
+/** Move a bearing toward the target by at most ratePerSec * dtSec degrees, the short way round; result in [0, 360). */
+export function easeBearing(current: number, target: number, dtSec: number, ratePerSec: number): number {
+  const d = shortestAngleDelta(current, target)
+  const step = Math.min(Math.abs(d), ratePerSec * dtSec)
+  return (((current + Math.sign(d) * step) % 360) + 360) % 360
+}
+
 /** Points along the great circle from a to b, about one every stepKm. */
 export function greatCircle(a: Pt, b: Pt, stepKm = 50): Pt[] {
   const d = ptKm(a, b) / R

@@ -24,6 +24,13 @@ export type Trip = {
 /** The flight in progress, owned by one device (`PUT /flight`); `heartbeatMs` is server time; `legs` is the trip's legs at start (required on PUT; may be missing on rows written before it existed). */
 export type ActiveFlight = { tripId: string; startMs: number; durationMin: number; baseKm: number; deviceId: string; leftAtMs?: number; heartbeatMs: number; legs?: number }
 
+export type StoryExtras = {
+  nearby?: { title: string; blurb?: string; photo?: string; url?: string }[]
+  wildlife?: { name: string; kind: 'Bird' | 'Plant' | 'Mammal' | 'Reptile' | 'Amphibian' | 'Insect' | 'Fungus' | 'Other'; photo?: string }[]
+  people?: { capital?: string; population?: number; languages?: string[]; currency?: string; demonym?: string }
+  culture?: string
+}
+
 export type Story = {
   id: string
   place: string
@@ -36,6 +43,7 @@ export type Story = {
   dateMs: number
   saved: boolean
   birds: string[]
+  extras?: StoryExtras
   sourceUrl?: string
   km: number
   lat: number

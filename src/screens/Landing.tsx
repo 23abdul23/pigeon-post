@@ -2,8 +2,9 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import Flag from '../components/Flag'
 import Stamp from '../components/Stamp'
+import StoryDetails from '../components/StoryDetails'
 import { Frame } from '../components/Layout'
-import { startReturn } from '../lib/flight'
+import { clearStopCards, startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
 import { setState, useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
@@ -46,6 +47,7 @@ export default function Landing() {
   const stampNo = stamps.findIndex((s) => s.cc === story.cc) + 1
 
   function leave() {
+    if (landing) clearStopCards(landing.tripId)
     setState({ landing: null })
     nav('/home')
   }
@@ -56,6 +58,7 @@ export default function Landing() {
   }
 
   function openMailbox() {
+    if (landing) clearStopCards(landing.tripId)
     setState({ landing: null })
     nav('/mailbox')
   }
@@ -131,6 +134,8 @@ export default function Landing() {
           </div>
 
           <p className="text-[16px] leading-[26px] text-ink-2">{story.text}</p>
+
+          <StoryDetails extras={story.extras} />
 
           {story.birds.length > 0 && (
             <div className="flex flex-col gap-2 pb-3 pt-2">

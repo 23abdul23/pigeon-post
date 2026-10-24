@@ -30,6 +30,9 @@ export type Landing = {
   newStampCc?: string
 }
 
+/** An unread stop card: the slot that ended mid-journey while the bird flew on. Local only, never synced. */
+export type StopCardEntry = { tripId: string; storyId: string; km: number; gainedKm: number; newStampCc?: string }
+
 export const defaultSettings: Settings = {
   bio: '',
   volume: 40,
@@ -57,6 +60,8 @@ export type State = {
   /** serverTime - Date.now() at the last `GET /state` */
   clockOffsetMs: number
   landing: Landing | null
+  /** stop cards waiting to be read, oldest first (persisted on this device only) */
+  stopCards: StopCardEntry[]
   stories: Story[]
   letters: Letter[]
   friends: Friend[]
@@ -87,6 +92,7 @@ const initial: State = {
   flight: null,
   clockOffsetMs: 0,
   landing: null,
+  stopCards: [],
   stories: [],
   letters: [],
   friends: [],

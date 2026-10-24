@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import type { BirdSpecies } from '../lib/birds'
 
-type Props = { bird: BirdSpecies; className?: string; flight?: boolean }
+type Props = { bird: BirdSpecies; className?: string; flight?: boolean; /** Degrees the route ahead turns clockwise from the map heading; the bird yaws and banks toward it. */ turnRef?: { current: number } }
 
 /** Drag-to-rotate 3D bird. three.js loads on demand. */
-export default function BirdViewer({ bird, className = '', flight = false }: Props) {
+export default function BirdViewer({ bird, className = '', flight = false, turnRef }: Props) {
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -104,7 +104,11 @@ export default function BirdViewer({ bird, className = '', flight = false }: Pro
         const dt = Math.min(clock.getDelta(), 0.05)
         t += dt
         rig.update(dt)
-        if (flight) rig.group.rotation.z = Math.sin(t * 0.9) * 0.08
+        if (flight) {
+          const turn = Math.max(-35, Math.min(35, turnRef?.current ?? 0)) * (Math.PI / 180)
+          rig.group.rotation.y = -turn // +Z is up-screen and +X screen-left, so a clockwise route turn is negative yaw
+          rig.group.rotation.z = Math.sin(t * 0.9) * 0.08 + turn * 0.6 // roll into the turn (right wing down for a right turn)
+        }
         if (idle) rig.group.rotation.y += 0.006
         renderer.render(scene, camera)
       }
@@ -122,7 +126,7 @@ export default function BirdViewer({ bird, className = '', flight = false }: Pro
       cancelled = true
       cleanup()
     }
-  }, [bird, flight])
+  }, [bird, flight, turnRef])
 
   return <div ref={host} role="img" aria-label="Rotatable 3D bird preview" className={className} />
 }
