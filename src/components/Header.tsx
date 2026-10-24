@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from './Avatar'
+import FlightLog from './FlightLog'
 import { setState, useStore } from '../lib/store'
 import { retrySync, useSyncStatus } from '../lib/sync'
 
@@ -51,6 +52,7 @@ export default function Header({ title, back, hand, extra }: { title?: string; b
         </div>
         <div className="flex items-center gap-1">
           <SyncChip />
+          <FlightLog />
           <button
             type="button"
             aria-label={soundOn ? 'Mute sound' : 'Unmute sound'}

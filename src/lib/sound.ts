@@ -11,6 +11,23 @@ function audio(): AudioContext | null {
   }
 }
 
+/**
+ * Releases the audio device so the browser drops its lock-screen / notification media controls. A running AudioContext
+ * keeps the page looking like a media player, which lets the user wander off to other apps during a focus flight.
+ */
+export function releaseAudio() {
+  if (!ctx || ctx.state !== 'running') return
+  void ctx.suspend().catch(() => {})
+  try {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null
+      navigator.mediaSession.playbackState = 'none'
+    }
+  } catch {
+    // mediaSession is optional
+  }
+}
+
 function tone(c: AudioContext, start: number, from: number, to: number, dur: number, gain = 0.08, attack = 0.03) {
   gain = Math.max(0.0002, gain) // exponential ramps cannot target 0
   const o = c.createOscillator()
@@ -107,5 +124,6 @@ export function startAmbience(): () => void {
     bg.gain.setValueAtTime(bg.gain.value, t)
     bg.gain.linearRampToValueAtTime(0, t + 0.3)
     bed.stop(t + 0.3)
+    setTimeout(releaseAudio, 350) // after the fade, so nothing keeps the device (and the lock-screen player) alive
   }
 }

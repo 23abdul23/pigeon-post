@@ -14,7 +14,7 @@ import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
-import { startAmbience } from '../lib/sound'
+import { releaseAudio, startAmbience } from '../lib/sound'
 import { windAt, type Wind } from '../lib/weather'
 
 const mmss = (ms: number) => {
@@ -119,17 +119,22 @@ export default function Focus() {
   }, [flying, session?.tripId, session?.startMs, session?.durationMin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Breeze and birdsong while flying; stops when muted or the tab is hidden (startAmbience itself checks soundOn and settings.ambience).
+  // Hiding also releases the audio device at once, so no player lingers on the lock screen to leave the flight through.
   useEffect(() => {
     if (!flying || !soundOn) return
     let stop: (() => void) | null = null
     const sync = () => {
       stop?.()
-      stop = document.hidden ? null : startAmbience()
+      stop = null
+      if (document.hidden) releaseAudio()
+      else stop = startAmbience()
     }
     sync()
     document.addEventListener('visibilitychange', sync)
+    window.addEventListener('pagehide', releaseAudio)
     return () => {
       document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('pagehide', releaseAudio)
       stop?.()
     }
   }, [flying, soundOn])
