@@ -3,17 +3,18 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import BirdViewer from '../components/BirdViewer'
 import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
+import ResumePrompt from '../components/ResumePrompt'
+import StopCard from '../components/StopCard'
+import StopsRail from '../components/StopsRail'
 import { birdBySpecies } from '../lib/birds'
 import { serverNow } from '../lib/device'
-import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, takeOver } from '../lib/flight'
-import { fmtKm, pointAtKm, wrapLng } from '../lib/geo'
-import { nearestCity } from '../lib/places'
+import { computeProgress, continueRun, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, resumeFlight, takeOver } from '../lib/flight'
+import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
+import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
-import { windAt, windNote, type Wind } from '../lib/weather'
-import WelcomeBack from './WelcomeBack'
+import { windAt, type Wind } from '../lib/weather'
 
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000))
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -32,8 +33,6 @@ export default function Focus() {
   const volume = useStore((s) => s.settings.volume)
   const [now, setNow] = useState(() => serverNow())
   const [confirmEnd, setConfirmEnd] = useState(false)
-  const [near, setNear] = useState('')
-  const [ahead, setAhead] = useState('')
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
   const [takingOver, setTakingOver] = useState(false)
   // observer: another device flies this trip; the bird moves on the server clock, and only the owner heartbeats or lands
@@ -45,7 +44,7 @@ export default function Focus() {
   liveRef.current = live
 
   const flying = !!session && !session.leftAtMs
-  const away = !!session?.leftAtMs || landing?.reason === 'left'
+  const away = !!session?.leftAtMs
 
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
@@ -55,17 +54,12 @@ export default function Focus() {
     }
   }, [])
 
-  // Leaving the tab freezes progress; coming back lands the bird (this also lands a session found stale on mount).
+  // Leaving the tab freezes progress; coming back shows the resume prompt (it reads the store, so showing does nothing).
   useEffect(() => {
     const onHide = markLeft
-    // lands only if no other device took the flight over meanwhile (else this screen turns into the observer view)
-    const onShow = () => {
-      if (getState().session?.leftAtMs) void landIfStillOwner('left')
-    }
-    const onVis = () => (document.visibilityState === 'hidden' ? onHide() : onShow())
+    const onVis = () => document.visibilityState === 'hidden' && onHide()
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('pagehide', onHide)
-    if (getState().session?.leftAtMs && document.visibilityState === 'visible') onShow()
     return () => {
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('pagehide', onHide)
@@ -100,9 +94,19 @@ export default function Focus() {
     if (flying && progress && (progress.done || progress.arrived)) void landSession('completed')
   }, [flying, progress])
 
+  // a completed slot short of the destination shows its stop card here; every other landing goes to the landing page
+  const midStop = landing?.reason === 'completed' && !session && !!trip && trip.progressKm < trip.routeKm
   useEffect(() => {
-    if (landing && landing.reason !== 'left' && !session) nav(`/landing/${landing.storyId}`, { replace: true })
-  }, [landing, session, nav])
+    if (landing && !midStop && !session) nav(`/landing/${landing.storyId}`, { replace: true })
+  }, [landing, midStop, session, nav])
+
+  // warm the story for the place this slot ends at, so the stop card needs no spinner
+  useEffect(() => {
+    if (!flying || !session || !trip) return
+    const endKm = Math.min(trip.routeKm, session.baseKm + session.durationMin * KM_PER_FOCUS_MINUTE)
+    const pt = pointAtKm(trip.route, endKm).pt
+    prefetchStory(pt[0], wrapLng(pt[1]), endKm)
+  }, [flying, session?.tripId, session?.startMs, session?.durationMin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Place names for the little notes on the map.
   useEffect(() => {
@@ -113,13 +117,8 @@ export default function Focus() {
       if (!s) return
       const p = computeProgress(s, trip, serverNow())
       const here = pointAtKm(trip.route, p.km).pt
-      const front = pointAtKm(trip.route, Math.min(trip.routeKm, p.km + 250)).pt
-      const [a, b, w] = await Promise.all([nearestCity(here[0], here[1]), nearestCity(front[0], front[1]), windAt(here[0], wrapLng(here[1]))])
-      if (!cancelled) {
-        setNear(a.name)
-        setAhead(b.name)
-        if (w) setWind({ w, heading: pointAtKm(trip.route, p.km).bearing })
-      }
+      const w = await windAt(here[0], wrapLng(here[1]))
+      if (!cancelled && w) setWind({ w, heading: pointAtKm(trip.route, p.km).bearing })
     }
     void look()
     const id = window.setInterval(look, 8000)
@@ -136,12 +135,9 @@ export default function Focus() {
     return <Navigate to={id && stories.some((x) => x.id === id) ? `/landing/${id}` : '/home'} replace />
   }
 
-  if (away) return <WelcomeBack />
-
   const species = birdBySpecies(bird?.species ?? 'pigeon')
   const km = progress?.km ?? 0
   const pct = Math.round((km / trip.routeKm) * 100)
-  const heading = Math.round(pointAtKm(trip.route, km).bearing)
   const circ = 2 * Math.PI * 20
 
   return (
@@ -161,19 +157,6 @@ export default function Focus() {
         <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
           <BirdViewer bird={species} flight className="h-44 w-60" />
         </div>
-
-        <div className="pointer-events-none absolute left-6 top-[42%] flex flex-col gap-1 opacity-80">
-          <span className="flex w-fit items-center gap-1 rounded-full bg-card-soft/85 px-2.5 py-1 text-[14px] text-ink-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[2px]">
-            <img src="/assets/ic-cloud.svg" alt="" className="h-[8.7px] w-3" />
-            Over {near || 'open'} skies
-          </span>
-          <span className="-rotate-3 pl-2 font-hand text-[22px] font-medium text-[#8e4d31]">{wind ? windNote(wind.w, wind.heading) : 'reading the wind...'}</span>
-        </div>
-        {ahead && (
-          <span className="pointer-events-none absolute bottom-[26%] right-8 rounded-md bg-card/70 px-2 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-muted opacity-70">
-            {ahead} ahead
-          </span>
-        )}
 
         <aside className="absolute right-4 top-3 w-[270px] max-w-[calc(100%-2rem)] rounded-2xl bg-white/90 p-3.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-[6px]">
           <div className="flex items-center justify-between">
@@ -219,33 +202,24 @@ export default function Focus() {
               <span className="relative text-[12px] font-bold tracking-[0.36px] text-sage">{pct}%</span>
             </div>
           </div>
-          <div className="flex items-center justify-between pt-2.5">
-            <span className="text-[14px] text-muted">Distance remaining</span>
-            <span className="text-[12px] font-bold tracking-[0.36px] text-ink">{fmtKm(Math.max(0, trip.routeKm - km))} left</span>
-          </div>
+          <StopsRail stops={stops} fromKm={live?.baseKm ?? 0} routeKm={trip.routeKm} km={km} />
+          <p className="pt-2 text-[14px] text-muted">
+            Next stop in <span className="font-bold text-ink">{mmss(progress?.remainingMs ?? 0)}</span>
+          </p>
         </aside>
 
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 px-4 pb-6 pt-2">
-          <p className="mx-auto flex items-center gap-1.5 rounded-full bg-card-soft/70 px-4 py-1 text-[16px] text-[rgba(142,77,49,0.9)]">
-            <img src="/assets/ic-leaf.svg" alt="" className="size-[10.7px]" />
-            {observing ? 'Flying on your other device' : 'Stay on this tab. Your bird is flying.'}
-          </p>
-          <p className="-rotate-2 text-center font-hand text-[22px] font-medium leading-7 text-sage">
-            heading {heading}° {COMPASS[Math.round(heading / 45) % 8]} · steady wings
-          </p>
+          {observing && <p className="mx-auto rounded-full bg-card-soft/70 px-4 py-1 text-[16px] text-[rgba(142,77,49,0.9)]">Flying on your other device</p>}
           <div className="flex items-end justify-between">
             <button
               type="button"
               onClick={() => setState({ soundOn: !soundOn })}
               aria-pressed={soundOn}
-              className="flex items-center gap-2 rounded-full bg-white/90 py-2 pl-2 pr-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]"
+              aria-label={soundOn ? `Mute sound (volume ${volume}%)` : 'Unmute sound'}
+              className="flex size-11 items-center justify-center rounded-full bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]"
             >
-              <span className="flex size-7 items-center justify-center rounded-full bg-[#c6ecd0]">
-                <img src="/assets/ic-wave.svg" alt="" className="h-[14.2px] w-[12.75px]" />
-              </span>
-              <span className="text-left">
-                <span className="block text-[12px] font-bold leading-[15px] tracking-[0.36px] text-ink">Meadow &amp; coo</span>
-                <span className="block text-[10px] leading-[12.5px] text-muted">{soundOn ? `Volume ${volume}%` : 'Muted'}</span>
+              <span className={`flex size-7 items-center justify-center rounded-full ${soundOn ? 'bg-[#c6ecd0]' : 'bg-card'}`}>
+                <img src="/assets/ic-wave.svg" alt="" className={`h-[14.2px] w-[12.75px] ${soundOn ? '' : 'opacity-40'}`} />
               </span>
             </button>
             <div className="flex items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
@@ -259,6 +233,23 @@ export default function Focus() {
             </div>
           </div>
         </div>
+
+        {away && <ResumePrompt onContinue={resumeFlight} onLand={() => void landIfStillOwner('left')} />}
+        {midStop && landing && (() => {
+          const story = stories.find((x) => x.id === landing.storyId)
+          return story ? (
+            <StopCard
+              story={story}
+              newStampCc={landing.newStampCc}
+              stopsLeft={stopsAhead(trip.routeKm, trip.progressKm, landing.durationMin).length}
+              onContinue={() => void continueRun()}
+              onFinish={() => {
+                setState({ landing: null })
+                nav(`/landing/${landing.storyId}`, { replace: true })
+              }}
+            />
+          ) : null
+        })()}
 
         {confirmEnd && (
           <div role="dialog" aria-modal="true" aria-label="Land here?" className="absolute inset-0 z-20 flex items-center justify-center bg-ink/30 p-6">
