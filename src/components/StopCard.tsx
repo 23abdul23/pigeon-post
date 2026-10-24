@@ -1,9 +1,10 @@
 import type { Story } from '../lib/store'
+import Flag from './Flag'
 import Stamp from './Stamp'
 import { PrimaryButton, Pill } from './ui'
 
 /** The reward for a finished slot, shown over the map instead of navigating away. */
-export default function StopCard({ story, newStampCc, stopsLeft, onContinue, onFinish }: { story: Story; newStampCc?: string; stopsLeft: number; onContinue: () => void; onFinish: () => void }) {
+export default function StopCard({ story, newStampCc, covered, stopsLeft, onContinue, onFinish }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; stopsLeft: number; onContinue: () => void; onFinish: () => void }) {
   return (
     <div role="dialog" aria-modal="true" aria-label={`Stop: ${story.place}`} className="absolute inset-0 z-20 flex items-end bg-ink/30 p-4">
       <div className="relative max-h-full w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
@@ -24,6 +25,19 @@ export default function StopCard({ story, newStampCc, stopsLeft, onContinue, onF
         </div>
         <p className="line-clamp-5 pt-2 text-[14px] leading-5 text-ink-2">{story.text}</p>
         {story.birds.length > 0 && <p className="pt-2 text-[12px] font-medium text-sage">Birds here: {story.birds.join(', ')}</p>}
+        {covered && covered.length > 0 && (
+          <div className="pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-muted">Countries this leg</p>
+            <ul className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+              {covered.map((c) => (
+                <li key={c.cc} className="flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
+                  <Flag cc={c.cc} className="!h-3 !w-4" />
+                  {c.country}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <PrimaryButton onClick={onContinue} className="mt-4 flex-col gap-0 py-2.5">
           <span>Continue journey</span>
           <span className="text-[11px] font-medium normal-case tracking-normal opacity-90">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import BirdViewer from '../components/BirdViewer'
+import CountryStamps from '../components/CountryStamps'
 import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
 import ResumePrompt from '../components/ResumePrompt'
@@ -8,6 +9,8 @@ import StopCard from '../components/StopCard'
 import StopsRail from '../components/StopsRail'
 import WindStreaks from '../components/WindStreaks'
 import { birdBySpecies } from '../lib/birds'
+import { coveredBetween, countryEntries, enteredBetween } from '../lib/countriesAlong'
+import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
 import { computeProgress, continueRun, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, resumeFlight, takeOver } from '../lib/flight'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
@@ -84,6 +87,12 @@ export default function Focus() {
     const id = window.setInterval(heartbeat, 30_000)
     return () => window.clearInterval(id)
   }, [flying])
+
+  const [countryAt, setCountryAt] = useState<((lat: number, lng: number) => string | null) | null>(null)
+  useEffect(() => {
+    void loadCountryAt().then((f) => setCountryAt(() => f))
+  }, [])
+  const hits = useMemo(() => (trip && countryAt ? countryEntries(trip.route, trip.routeKm, countryAt) : []), [trip?.id, trip?.route, trip?.routeKm, countryAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const progress = useMemo(() => (live && trip ? computeProgress(live, trip, now) : null), [live, trip, now])
 
@@ -186,6 +195,8 @@ export default function Focus() {
           <BirdViewer bird={species} flight className="h-44 w-60" />
         </div>
 
+        {!midStop && live && <CountryStamps entered={enteredBetween(hits, live.baseKm, km)} />}
+
         <aside className="absolute right-4 top-3 w-[270px] max-w-[calc(100%-2rem)] rounded-2xl bg-white/90 p-3.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-[6px]">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.6px] text-ink-2">
@@ -269,6 +280,7 @@ export default function Focus() {
             <StopCard
               story={story}
               newStampCc={landing.newStampCc}
+              covered={coveredBetween(hits, landing.km - landing.gainedKm, landing.km)}
               stopsLeft={stopsAhead(trip.routeKm, trip.progressKm, landing.durationMin).length}
               onContinue={() => void continueRun()}
               onFinish={() => {
