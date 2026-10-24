@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
@@ -60,7 +61,7 @@ export default function JournalDetail() {
           <h1 className="max-w-[200px] truncate font-serif text-[20px] font-semibold leading-7 text-ink">Journal Story Detail</h1>
         </div>
         <Link to="/settings/profile" aria-label="Profile" className="flex size-11 items-center justify-center">
-          <img src="/assets/profile.jpg" alt="" className="size-8 rounded-full" />
+          <Avatar className="size-8" />
         </Link>
       </header>
 
