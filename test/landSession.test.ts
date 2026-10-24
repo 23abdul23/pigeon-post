@@ -55,6 +55,7 @@ describe('run', () => {
   it('continueRun_starts_next_slot_from_trip_progress', () => {
     sendMock.mockResolvedValue(null)
     setState({ trip: { ...trip, progressKm: 2500 }, landing, session: null })
+    sendMock.mockClear()
     expect(continueRun()).toMatchObject({ id: 't1' })
     expect(getState().session).toMatchObject({ tripId: 't1', baseKm: 2500, durationMin: 25 })
     expect(getState().landing).toBeNull()
@@ -63,11 +64,14 @@ describe('run', () => {
 
   it('continueRun_is_null_on_arrival_or_early_landing', () => {
     setState({ trip: { ...trip, progressKm: 10000 }, landing, session: null })
+    sendMock.mockClear()
     expect(continueRun()).toBeNull()
     expect(getState().landing).toEqual(landing)
+    expect(sendMock).not.toHaveBeenCalled()
     setState({ trip: { ...trip, progressKm: 2500 }, landing: { ...landing, reason: 'ended' }, session: null })
     expect(continueRun()).toBeNull()
     expect(getState().landing).toMatchObject({ reason: 'ended' })
+    expect(sendMock).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -79,6 +83,7 @@ describe('run', () => {
     vi.useFakeTimers({ now })
     const leftAtMs = now - away
     setState({ trip, clockOffsetMs: 0, landing: null, session: { tripId: 't1', startMs: leftAtMs - 5 * 60000, durationMin: 25, baseKm: 0, leftAtMs } })
+    sendMock.mockClear()
     resumeFlight()
     const s = getState().session!
     expect(s.leftAtMs).toBeUndefined()
@@ -88,6 +93,9 @@ describe('run', () => {
     expect(p.done).toBe(false)
     vi.advanceTimersByTime(0)
     expect(computeProgress(s, trip, serverNow()).km).toBeCloseTo(500, 3)
-    expect(sendMock).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/flight', body: expect.not.objectContaining({ leftAtMs: expect.anything() }) }), expect.any(Function))
+    expect(sendMock).toHaveBeenCalledTimes(1)
+    const [op] = sendMock.mock.calls[0]
+    expect(op).toMatchObject({ path: '/flight', body: { startMs: now - 5 * 60000 } })
+    expect(op.body).not.toHaveProperty('leftAtMs')
   })
 })
