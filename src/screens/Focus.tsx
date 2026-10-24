@@ -14,6 +14,7 @@ import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
+import { startAmbience } from '../lib/sound'
 import { windAt, type Wind } from '../lib/weather'
 
 const mmss = (ms: number) => {
@@ -112,6 +113,22 @@ export default function Focus() {
     const pt = pointAtKm(trip.route, endKm).pt
     prefetchStory(pt[0], wrapLng(pt[1]), endKm)
   }, [flying, session?.tripId, session?.startMs, session?.durationMin]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Breeze and birdsong while flying; stops when muted or the tab is hidden (startAmbience itself checks soundOn and settings.ambience).
+  useEffect(() => {
+    if (!flying || !soundOn) return
+    let stop: (() => void) | null = null
+    const sync = () => {
+      stop?.()
+      stop = document.hidden ? null : startAmbience()
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      stop?.()
+    }
+  }, [flying, soundOn])
 
   // Wind and temperature at the bird's position.
   useEffect(() => {
