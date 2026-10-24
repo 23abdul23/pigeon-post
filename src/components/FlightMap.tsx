@@ -42,6 +42,7 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
     let map: MapLibreMap | null = null
     let cancelled = false
     let stopTimer = () => {}
+    const markers: { remove: () => void }[] = []
     ;(async () => {
       const [maplibregl] = await Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')])
       if (cancelled || !el.current) return
@@ -100,7 +101,7 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
       ]
       marks.forEach(({ km, el }) => {
         const pt = pointAtKm(route, km).pt
-        new maplibregl.Marker({ element: el }).setLngLat([pt[1], pt[0]]).addTo(m)
+        markers.push(new maplibregl.Marker({ element: el }).setLngLat([pt[1], pt[0]]).addTo(m))
       })
       const markReached = (km: number) =>
         marks.forEach(({ km: at, el }) => {
@@ -119,7 +120,6 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
           lastSplit = now
           markReached(km)
           ;(m.getSource('done') as GeoJSONSource).setData(line([...route.slice(0, index), pt]) as never)
-          ;(m.getSource('ahead') as GeoJSONSource).setData(line([pt, ...route.slice(index)]) as never)
         }
       }
       raf = requestAnimationFrame(tick)
@@ -127,6 +127,7 @@ export default function FlightMap({ route, stops, getKm, className = '' }: Props
     return () => {
       cancelled = true
       stopTimer()
+      markers.forEach((k) => k.remove())
       cancelAnimationFrame(raf)
       map?.remove()
     }
