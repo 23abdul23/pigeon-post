@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1",
+    "deploy:local": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy.ps1 -Local"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

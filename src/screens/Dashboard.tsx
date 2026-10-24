@@ -22,10 +22,8 @@ export default function Dashboard() {
   const nav = useNavigate()
   const user = useStore((s) => s.user)
   const home = useStore((s) => s.homeCity)
-  const bird = useStore((s) => s.bird)
   const trip = useStore((s) => s.trip)
   const stories = useStore((s) => s.stories)
-  const letters = useStore((s) => s.letters)
   const sessions = useStore((s) => s.sessions)
   const stamps = useStore((s) => s.stamps)
   const flight = useStore((s) => s.flight)
@@ -42,8 +40,14 @@ export default function Dashboard() {
   const [dest, setDest] = useState<Place | null>(null)
   const [range, setRange] = useState<(typeof RANGES)[number]>('This week')
   const [error, setError] = useState('')
+  const [logOpen, setLogOpen] = useState(false)
+  useEffect(() => {
+    if (!logOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setLogOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [logOpen])
 
-  const unopened = letters.filter((l) => l.status === 'DELIVERED')
   const latest = stories[0]
   const active = trip && trip.status !== 'DONE' ? trip : null
   const km = home && dest ? Math.round(haversineKm(home, dest)) : 0
@@ -97,8 +101,18 @@ export default function Dashboard() {
   const segs = 8
   const filled = Math.floor((pct / 100) * segs)
 
+  const logButton = (
+    <button type="button" aria-label="Open Log Book" aria-haspopup="dialog" onClick={() => setLogOpen(true)} className="flex size-11 items-center justify-center rounded-full text-ink">
+      <svg viewBox="0 0 24 24" className="size-[22px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z" />
+        <path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3" />
+        <path d="M9 7.5h6M9 11h4" />
+      </svg>
+    </button>
+  )
+
   return (
-    <AppLayout>
+    <AppLayout headerExtra={logButton}>
       <div className="flex flex-col gap-4 pb-2">
         <div className="flex items-center justify-between pt-1">
           <div className="flex flex-col gap-0.5">
@@ -245,31 +259,38 @@ export default function Dashboard() {
           </Link>
         </Card> */}
 
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="font-serif text-[20px] font-semibold leading-7 text-ink">Flight Log</h2>
-            <div className="flex items-center rounded-full bg-[#efe7e1] p-0.5" role="tablist" aria-label="Time range">
-              {RANGES.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  role="tab"
-                  aria-selected={range === r}
-                  onClick={() => setRange(r)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] ${range === r ? 'bg-white text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'text-ink-2'}`}
-                >
-                  {r}
+        {logOpen && (
+          <div role="dialog" aria-modal="true" aria-label="Flight Log" className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => setLogOpen(false)}>
+            <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-2xl bg-cream p-4 shadow-[0_8px_24px_rgba(62,58,54,0.25)]" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-serif text-[20px] font-semibold leading-7 text-ink">Flight Log</h2>
+                <div className="flex items-center rounded-full bg-[#efe7e1] p-0.5" role="tablist" aria-label="Time range">
+                  {RANGES.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      role="tab"
+                      aria-selected={range === r}
+                      onClick={() => setRange(r)}
+                      className={`rounded-full px-2.5 py-1 text-[11px] ${range === r ? 'bg-white text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'text-ink-2'}`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" autoFocus aria-label="Close Flight Log" onClick={() => setLogOpen(false)} className="flex size-9 shrink-0 items-center justify-center rounded-full text-ink-2">
+                  <img src="/assets/ic-close.svg" alt="" className="size-3.5" />
                 </button>
-              ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <Stat to="/journal" icon="/assets/ic-places.svg" iw="w-3 h-[15px]" label="Places" value={String(stats.places)} note={`${stats.places} stories collected`} />
+                <Stat to="/passport" icon="/assets/ic-countries.svg" iw="size-[15px]" label="Countries" value={String(stats.countries)} note="Stamped in your passport" />
+                <Stat icon="/assets/ic-distance.svg" iw="size-[13.5px]" label="Distance" value={stats.dist.toLocaleString('en-US')} unit="km" note="Flown with focus" />
+                <Stat icon="/assets/ic-focus.svg" iw="w-3 h-[15px]" label="Focus" value={String(stats.hrs)} unit="hrs" note="Time in flight" />
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <Stat to="/journal" icon="/assets/ic-places.svg" iw="w-3 h-[15px]" label="Places" value={String(stats.places)} note={`${stats.places} stories collected`} />
-            <Stat to="/passport" icon="/assets/ic-countries.svg" iw="size-[15px]" label="Countries" value={String(stats.countries)} note="Stamped in your passport" />
-            <Stat icon="/assets/ic-distance.svg" iw="size-[13.5px]" label="Distance" value={stats.dist.toLocaleString('en-US')} unit="km" note="Flown with focus" />
-            <Stat icon="/assets/ic-focus.svg" iw="w-3 h-[15px]" label="Focus" value={String(stats.hrs)} unit="hrs" note="Time in flight" />
-          </div>
-        </div>
+        )}
 
         {latest && (
           <Card className="flex flex-col gap-3 p-4">

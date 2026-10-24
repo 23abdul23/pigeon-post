@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from './Avatar'
 import { setState, useStore } from '../lib/store'
@@ -21,7 +22,7 @@ function SyncChip() {
   )
 }
 
-export default function Header({ title, back, hand }: { title?: string; back?: string; hand?: string }) {
+export default function Header({ title, back, hand, extra }: { title?: string; back?: string; hand?: string; extra?: ReactNode }) {
   const soundOn = useStore((s) => s.soundOn)
   return (
     <header className="sticky top-0 z-30 bg-cream/85 shadow-[0_2px_12px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
@@ -59,6 +60,7 @@ export default function Header({ title, back, hand }: { title?: string; back?: s
           >
             <img src="/assets/ic-sound.svg" alt="" className={`h-4 w-[16.5px] ${soundOn ? '' : 'opacity-35'}`} />
           </button>
+          {extra}
           <Link to="/settings/profile" aria-label="Profile and settings" className="flex size-11 items-center justify-center rounded-full">
             <Avatar className="size-8 shadow-[0_1px_4px_rgba(0,0,0,0.08)]" />
           </Link>
