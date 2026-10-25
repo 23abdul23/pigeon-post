@@ -44,7 +44,6 @@ export default function Friends() {
         <div className="flex items-center justify-between pt-1">
           <div>
             <h1 className="font-serif text-[24px] leading-8 tracking-[-0.6px] text-ink">Friends</h1>
-            <p className="-rotate-1 font-hand text-[22px] font-medium leading-7 text-[#8e4d31]">epistolary companions</p>
           </div>
           <Link to="/friends/add" className="flex items-center gap-1.5 rounded-full bg-[#8e4d31] px-4 py-2 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
             <img src="/assets/fr-add.svg" alt="" className="h-3 w-[16.5px]" />

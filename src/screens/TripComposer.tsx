@@ -11,7 +11,7 @@ import { startSession } from '../lib/flight'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { COGNITO_CONFIGURED } from '../lib/auth'
 import { avatarColor, initials, uploadAttachment, writeLetter } from '../lib/social'
-import { getState, useStore, type Letter, type Place } from '../lib/store'
+import { useStore, type Letter, type Place } from '../lib/store'
 import { createTrip, tripProblem } from '../lib/trips'
 
 const MAX_CHARS = 600
@@ -338,14 +338,10 @@ export default function TripComposer() {
               <div className="flex items-center gap-2">
                 <img src="/assets/tc-envelope.svg" alt="" className="size-[18.3px]" />
                 <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.6px] text-muted">Step 3 • Companion letter</p>
-                  <h3 className="font-serif text-[20px] font-semibold leading-7 text-ink">Parchment Scroll</h3>
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.6px] text-muted">Step 3 • Letter</p>
                 </div>
               </div>
-              <div className="rotate-2 rounded bg-white px-2.5 pb-1.5 pt-1 text-center shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-                <p className="text-[12px] font-bold tracking-[0.36px] text-[#8e4d31]">AIR POST</p>
-                <p className="text-[10px] text-muted">No. {String(1 + getState().letters.length).padStart(4, '0')}</p>
-              </div>
+              
             </div>
 
             <div className="relative flex flex-col gap-3 overflow-hidden rounded-xl bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
@@ -368,13 +364,9 @@ export default function TripComposer() {
               />
               <div className="flex flex-col gap-2 pt-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[12px] font-semibold tracking-[0.36px] text-ink-2">
-                    <img src="/assets/tc-paperclip.svg" alt="" className="h-[12.5px] w-[7.8px]" />
-                    Attached Leaves &amp; Notes
-                  </span>
                   <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="flex items-center gap-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
-                    <img src="/assets/tc-plus.svg" alt="" className="size-2" />
-                    {uploading ? 'Uploading...' : 'Add file'}
+                    <img src="/assets/tc-paperclip.svg" alt="" className="h-[12.5px] w-[7.8px]" />
+                    {uploading ? 'Uploading...' : 'Attach Leaves & Notes'}
                   </button>
                   <input ref={fileInput} type="file" accept=".png,.jpg,.jpeg,.pdf" multiple hidden onChange={(e) => void addFiles(e.target.files)} />
                 </div>

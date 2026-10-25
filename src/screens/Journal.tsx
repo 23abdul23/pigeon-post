@@ -48,7 +48,6 @@ export default function Journal() {
       <div className="flex flex-col pb-8">
         <div className="flex flex-col gap-1 pb-2 pt-4">
           <h1 className="font-serif text-[32px] leading-10 text-ink">Journal</h1>
-          <p className="text-[16px] leading-6 text-ink-2">Every place your bird has shown you.</p>
         </div>
 
         <div className="py-4">

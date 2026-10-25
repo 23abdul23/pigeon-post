@@ -6,20 +6,20 @@ const at = (h: number, m = 0) => greeting(new Date(2026, 9, 24, h, m))
 
 describe('greeting', () => {
   it.each([
-    [0, 'Good night'],
-    [4, 'Good night'],
-    [5, 'Good morning'],
-    [11, 'Good morning'],
-    [12, 'Good afternoon'],
-    [16, 'Good afternoon'],
-    [17, 'Good evening'],
-    [21, 'Good evening'],
-    [22, 'Good night'],
-    [23, 'Good night'],
+    [0, 'Good Night'],
+    [4, 'Good Night'],
+    [5, 'Good Morning'],
+    [11, 'Good Morning'],
+    [12, 'Good Afternoon'],
+    [16, 'Good Afternoon'],
+    [17, 'Good Evening'],
+    [21, 'Good Evening'],
+    [22, 'Good Night'],
+    [23, 'Good Night'],
   ])('at %i:00 says %s', (h, text) => expect(at(h)).toBe(text))
 
   it('switches exactly on the hour', () => {
-    expect(at(11, 59)).toBe('Good morning')
-    expect(at(12, 0)).toBe('Good afternoon')
+    expect(at(11, 59)).toBe('Good Morning')
+    expect(at(12, 0)).toBe('Good Afternoon')
   })
 })
