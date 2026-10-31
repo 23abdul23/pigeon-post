@@ -28,7 +28,6 @@ export default function Mailbox() {
   const box = (params.get('box') as Box) ?? 'all'
   const letters = useStore((s) => s.letters)
   const friends = useStore((s) => s.friends)
-  const bird = useStore((s) => s.bird)
   const trip = useStore((s) => s.trip)
 
   const received = letters.filter((l) => l.toId === 'me' && (l.status === 'DELIVERED' || l.status === 'OPENED'))
@@ -38,7 +37,6 @@ export default function Mailbox() {
   const inflight = sent.filter((l) => l.status === 'CARRIED')
   const pending = sent.filter((l) => l.status === 'WAITING' || l.status === 'CARRIED')
   const [pendingOpen, setPendingOpen] = useState(false)
-  const coming = letters.filter((l) => l.toId === 'me' && l.status === 'CARRIED')
 
   const list: Letter[] = useMemo(() => {
     if (box === 'unopened') return unopened
@@ -48,7 +46,6 @@ export default function Mailbox() {
   }, [box, received, unopened, keep])
 
   const showSent = box === 'sent' || box === 'all'
-  const senders = [...new Set(unopened.map((l) => l.fromName.split(' ')[0]))]
   const friendName = (id: string) => friends.find((f) => f.id === id)
 
   function sentRow(l: Letter) {
