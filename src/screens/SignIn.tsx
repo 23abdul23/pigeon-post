@@ -6,17 +6,19 @@ import { COGNITO_CONFIGURED, signIn as cognitoSignIn } from '../lib/auth'
 import { getState, setState } from '../lib/store'
 import bg1 from '../assets/bird_bg.png'
 import bg2 from '../assets/bird_bg_2.png'
+import webBg1 from '../assets/web_bird_bg.png'
+import webBg2 from '../assets/web_bird_bg_2.png'
 
 const SLIDES = [bg1, bg2]
-// Desktop pictures (the left 70%). Add the wide versions to src/assets and import them here; until then the phone pictures are reused.
-const DESKTOP_SLIDES = [bg1, bg2]
+// Desktop pictures (the left 70%)
+const DESKTOP_SLIDES = [webBg1, webBg2]
 const SLIDE_MS = 5000
 
 function Slides({ images, slide }: { images: string[]; slide: number }) {
   return (
     <>
       {images.map((src, i) => (
-        <img key={src} src={src} alt="" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />
+        <img key={src} src={src} alt="" loading="lazy" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />
       ))}
     </>
   )
