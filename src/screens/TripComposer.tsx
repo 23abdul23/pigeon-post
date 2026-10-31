@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import MiniMap from '../components/MiniMap'
 import PlaceMapPicker from '../components/PlaceMapPicker'
 import PlaceSearch from '../components/PlaceSearch'
@@ -165,7 +166,8 @@ export default function TripComposer() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav(-1)} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -177,7 +179,7 @@ export default function TripComposer() {
         </Link>
       </header>
 
-      <main className="flex-1 px-5 pb-10 pt-1">
+      <main className="lg:max-w-[760px] flex-1 px-5 pb-10 pt-1">
         <div className="pb-4 pt-1">
           <div className="flex flex-col gap-4 rounded-xl bg-card p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
             <ol className="flex items-center" aria-label="Trip steps">

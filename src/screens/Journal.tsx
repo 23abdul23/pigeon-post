@@ -45,12 +45,17 @@ export default function Journal() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col pb-8">
-        <div className="flex flex-col gap-1 pb-2 pt-4">
-          <h1 className="font-serif text-[32px] leading-10 text-ink">Journal</h1>
+      <div className="relative flex flex-col pb-8">
+        <div className="flex flex-col gap-1 pb-2 pt-4 lg:gap-0 lg:pt-6">
+          <p className="hidden items-center gap-3 font-hand text-[22px] leading-7 text-[#8e4d31] lg:flex">
+            Volume III • Field Notebooks
+            <span className="h-px w-5 bg-[#8e4d31]/40" />
+          </p>
+          <h1 className="font-serif text-[32px] leading-10 text-ink lg:text-[40px] lg:font-bold lg:leading-[48px] lg:tracking-[-1px]">Journal</h1>
+          <p className="hidden text-[14px] leading-5 text-ink-2 lg:block">Every place your bird has shown you, penned down on soft cotton paper.</p>
         </div>
 
-        <div className="py-4">
+        <div className="py-4 lg:absolute lg:right-0 lg:top-[72px] lg:w-[420px] lg:py-0">
           <div className="flex rounded-full bg-[#efe7e1] p-1 shadow-[0_1px_1px_rgba(0,0,0,0.05)]" role="tablist">
             <button
               type="button"
@@ -74,7 +79,7 @@ export default function Journal() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 pb-6">
+        <div className="flex flex-col gap-2 pb-6 lg:mb-8 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-x-3 lg:gap-y-3 lg:rounded-3xl lg:bg-card lg:p-4 lg:pb-4">
           <div className="relative">
             <img src="/assets/tc-search.svg" alt="" className="pointer-events-none absolute left-3.5 top-1/2 size-[15px] -translate-y-1/2" />
             <input
@@ -82,11 +87,11 @@ export default function Journal() {
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search places, folklore, notes..."
               aria-label="Search journal"
-              className="h-11 w-full rounded-full bg-card-soft pl-10 pr-4 text-[14px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] outline-none placeholder:text-muted focus:ring-2 focus:ring-sage/40"
+              className="h-11 w-full rounded-full bg-card-soft pl-10 lg:bg-white pr-4 text-[14px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] outline-none placeholder:text-muted focus:ring-2 focus:ring-sage/40"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <label className="relative flex items-center gap-1.5 rounded-full bg-card py-1.5 pl-3.5 pr-3 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center justify-between lg:gap-3">
+            <label className="relative flex items-center gap-1.5 rounded-full bg-card py-1.5 lg:bg-white lg:py-2.5 pl-3.5 pr-3 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
               <img src="/assets/jn-globe.svg" alt="" className="size-[13.3px]" />
               <select value={cc} onChange={(e) => setParam('cc', e.target.value || null)} aria-label="Filter by country" className="appearance-none bg-transparent pr-1 outline-none">
                 <option value="">All countries ({countries.length})</option>
@@ -98,7 +103,7 @@ export default function Journal() {
               </select>
               <img src="/assets/jn-chev.svg" alt="" className="h-[4.9px] w-2" />
             </label>
-            <label className="relative flex items-center gap-1 rounded-full bg-card py-1.5 pl-3 pr-3 text-[12px] font-bold tracking-[0.36px] text-ink-2 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+            <label className="relative flex items-center gap-1 rounded-full bg-card py-1.5 pl-3 pr-3 lg:bg-white lg:py-2.5 text-[12px] font-bold tracking-[0.36px] text-ink-2 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
               <img src="/assets/jn-sort.svg" alt="" className="h-[13.3px] w-[10.7px]" />
               <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort stories" className="appearance-none bg-transparent pr-1 outline-none">
                 <option value="new">Newest first</option>
@@ -108,7 +113,7 @@ export default function Journal() {
               <img src="/assets/jn-chev.svg" alt="" className="h-[4.9px] w-2" />
             </label>
           </div>
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1 lg:col-span-2 lg:mx-0 lg:px-0">
             <Pill on={!lens} onClick={() => setParam('lens', null)}>
               All
             </Pill>
@@ -132,11 +137,11 @@ export default function Journal() {
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:items-start lg:gap-8">
             {shown.map((s, i) => (
               <article key={s.id} className="relative flex flex-col gap-2 rounded-[20px] bg-card-soft p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
                 <span className={`absolute rounded-[2px] opacity-90 shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${TAPES[i % 3].cls}`} aria-hidden />
-                <Link to={`/journal/${s.id}`} aria-label={`Read ${s.place}`} className="relative block h-[232px] overflow-hidden rounded-xl bg-card shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
+                <Link to={`/journal/${s.id}`} aria-label={`Read ${s.place}`} className="relative block h-[232px] overflow-hidden lg:h-[190px] rounded-xl bg-card shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
                   <img src={s.photo ?? '/assets/place-fallback.jpg'} alt="" className="absolute inset-0 size-full object-cover" />
                   <span className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
                     <img src="/assets/jn-arrived.svg" alt="" className="h-[10.6px] w-3" />
@@ -184,8 +189,9 @@ export default function Journal() {
           </div>
         )}
 
-        <div className="pb-4 pt-8">
-          <div className="flex flex-col items-center rounded-2xl bg-card-soft p-6 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+        <div className="pb-4 pt-8 lg:pt-16">
+          <p className="hidden pb-2 text-center font-hand text-[26px] leading-8 text-[#8e4d31] lg:block">“Letters and places gathered at the speed of care.”</p>
+          <div className="flex flex-col items-center rounded-2xl bg-card-soft p-6 shadow-[0_1px_1px_rgba(0,0,0,0.05)] lg:bg-transparent lg:p-0 lg:shadow-none">
             <span className="mb-2 flex size-10 items-center justify-center rounded-full bg-[rgba(127,163,138,0.2)]">
               <img src="/assets/jn-epi.svg" alt="" className="size-[18.3px]" />
             </span>

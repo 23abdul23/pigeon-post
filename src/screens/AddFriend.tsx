@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import { countryName, haversineKm } from '../lib/geo'
 import { COGNITO_CONFIGURED } from '../lib/auth'
 import { findPersonByCode, myInviteCode, requestFriend, requestFriendByCode, type Person } from '../lib/social'
@@ -89,7 +90,8 @@ export default function AddFriend() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav('/friends')} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -101,7 +103,7 @@ export default function AddFriend() {
         </Link>
       </header>
 
-      <main className="flex-1 pb-8">
+      <main className="lg:max-w-[760px] flex-1 pb-8">
         <div className="px-5 pb-4 pt-2">
           <div className="flex rounded-full bg-[#efe7e1] p-1 shadow-[0_1px_1px_rgba(0,0,0,0.05)]" role="tablist">
             {(['invite', 'code'] as const).map((t) => (

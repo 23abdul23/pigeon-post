@@ -32,7 +32,7 @@ export default function SignIn() {
   return (
     <Frame>
       <Header title="Sign In" hideLog />
-      <main className="relative flex flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
+      <main className="lg:max-w-[760px] relative flex flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
         <div className="absolute inset-0 -z-0" aria-hidden>
           {SLIDES.map((src, i) => (
             <img key={src} src={src} alt="" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />

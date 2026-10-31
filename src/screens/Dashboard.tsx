@@ -11,6 +11,9 @@ import { flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip, tripProblem } from '../lib/trips'
 import { greeting } from '../lib/greeting'
 import { markIdleAsked, requestIdlePermission, shouldAskIdlePermission } from '../lib/idle'
+import BirdThumb from '../components/BirdThumb'
+import { birdBySpecies } from '../lib/birds'
+import { RANGES, useFlightStats, type FlightRange } from '../components/FlightLog'
 import ScreenLockPrompt from '../components/ScreenLockPrompt'
 
 const DURATIONS = [10, 15, 25, 30]
@@ -35,6 +38,7 @@ export default function Dashboard() {
   const hello = useGreeting()
   const user = useStore((s) => s.user)
   const home = useStore((s) => s.homeCity)
+  const bird = useStore((s) => s.bird)
   const trip = useStore((s) => s.trip)
   const stories = useStore((s) => s.stories)
   const flight = useStore((s) => s.flight)
@@ -110,13 +114,17 @@ export default function Dashboard() {
     else go?.()
   }
 
+  const letters = useStore((s) => s.letters)
+  const unopened = letters.filter((l) => l.toId === 'me' && l.status === 'DELIVERED')
+  const [range, setRange] = useState<FlightRange>('This week')
+  const stats = useFlightStats(range)
   const pct = active ? Math.min(100, Math.round((active.progressKm / active.routeKm) * 100)) : 0
   const segs = 8
   const filled = Math.floor((pct / 100) * segs)
 
   return (
     <AppLayout>
-      <div className="flex flex-col gap-4 pb-2">
+      <div className="flex flex-col gap-4 pb-2 lg:hidden">
         <div className="flex items-center justify-between pt-1">
           <div className="flex flex-col gap-0.5">
             <span className="flex items-center gap-1 text-[12px] font-semibold uppercase tracking-[0.6px] text-ink-2">
@@ -300,6 +308,267 @@ export default function Dashboard() {
             </div>
           </Card>
         )}
+      </div>
+
+      <div className="hidden lg:block lg:pb-12">
+        <div className="flex items-end justify-between py-4">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex h-7 items-center gap-2">
+              <span className="-rotate-1 font-hand text-[22px] leading-7 text-[#8e4d31]">Morning dispatch • log no. 142</span>
+              <span className="size-1.5 rounded-full bg-[#7fa38a]" />
+              <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">Postmaster roost</span>
+            </div>
+            <h1 className="pt-0.5 font-serif text-[32px] leading-10 tracking-[-0.8px] text-ink">
+              {hello}, {user?.name ?? 'friend'}
+            </h1>
+            <p className="flex items-center gap-1 text-[16px] leading-6 text-ink-2">
+              Home roost: {home ? home.name : '—'} {home && <Flag cc={home.cc} className="w-4" />}
+            </p>
+          </div>
+          <span className="flex items-center gap-2 rounded-full bg-card px-4 py-1 text-[14px] font-bold leading-5 tracking-[0.28px] text-ink drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+            <img src="/assets/ic-check.svg" alt="" className="size-4" />
+            {bird?.name ?? 'Your bird'}&apos;s roost
+            <span className="rounded-full bg-[#efe7e1] px-1 py-0.5 text-[12px] leading-4 tracking-[0.36px] text-ink-2">{foreign ? 'Away' : 'Active'}</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-12 items-start gap-6 pt-2">
+          <div className="col-span-8 flex flex-col gap-6">
+            <section className="relative flex min-h-[560px] flex-col justify-between overflow-hidden rounded-[20px] bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+              <img src="/assets/dash-map-watercolor.png" alt="" className="absolute inset-0 size-full object-cover opacity-85" />
+              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/0 via-50% to-cream/40" />
+              <div className="relative flex items-start justify-between p-4">
+                <div className="flex flex-col rounded-xl bg-cream/90 px-4 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[4px]">
+                  <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">Cartographic sector</span>
+                  <span className="font-serif text-[20px] font-bold leading-7 text-ink">Old World &amp; Eastern Corridors</span>
+                </div>
+                <div className="flex items-center gap-1 rounded-full bg-cream/90 p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[12px]" aria-hidden>
+                  <span className="flex size-9 items-center justify-center text-[18px] text-ink-2">+</span>
+                  <span className="flex size-9 items-center justify-center text-[18px] text-ink-2">−</span>
+                  <span className="h-5 w-px bg-outline/40" />
+                  <img src="/assets/ic-compass.svg" alt="" className="mx-2.5 size-[18px]" />
+                </div>
+              </div>
+              <div className="relative flex flex-1 items-center justify-center py-12">
+                <div className="flex flex-col items-center gap-2">
+                  <span className="flex items-center gap-1.5 rounded-full bg-cream/95 px-4 py-1 font-hand text-[22px] leading-[22px] text-sage shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[4px]">
+                    <span className="size-2 rounded-full bg-sage" />
+                    {bird?.name ?? 'Your bird'} resting in {home?.name ?? 'home'}
+                  </span>
+                  <span className="flex size-24 items-center justify-center overflow-hidden rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.06),0_4px_6px_rgba(0,0,0,0.07)]">
+                    {bird && <BirdThumb bird={birdBySpecies(bird.species)} className="size-full object-cover" />}
+                  </span>
+                  {home && (
+                    <span className="rounded-md bg-[#efe7e1]/90 px-2 py-0.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                      {Math.abs(home.lat).toFixed(2)}°{home.lat >= 0 ? 'N' : 'S'} {Math.abs(home.lng).toFixed(2)}°{home.lng >= 0 ? 'E' : 'W'}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="relative flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-4 rounded-full bg-cream/80 px-4 py-1 backdrop-blur-[4px]">
+                  {[
+                    ['bg-sage', active ? `Outbound (${active.dest.name})` : 'Outbound'],
+                    ['bg-sky-ink', 'Planned'],
+                    ['bg-[#8e4d31]', 'Historic'],
+                  ].map(([c, t]) => (
+                    <span key={t} className="flex items-center gap-1 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">
+                      <span className={`h-1 w-2.5 rounded-full ${c}`} />
+                      {t}
+                    </span>
+                  ))}
+                </div>
+                <span className="-rotate-2 font-hand text-[22px] leading-7 text-ink-2">Airmail Route No. 9 ~</span>
+              </div>
+            </section>
+
+            {latest && (
+              <section className="flex items-center gap-4 rounded-[20px] bg-card p-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <div className="relative h-28 w-44 shrink-0 overflow-hidden rounded-xl bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                  {latest.photo && <img src={latest.photo} alt="" className="size-full object-cover" />}
+                  <span className="absolute left-2 top-2 rounded bg-cream/90 px-1 py-0.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink">{latest.cc}</span>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-center gap-1 pb-1 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">
+                    <span className="uppercase tracking-[0.6px] text-[#8e4d31]">Latest landing dispatch</span>
+                    <span>•</span>
+                    <span>{new Date(latest.dateMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                  <h2 className="truncate font-serif text-[20px] font-bold leading-7 text-ink">{latest.place}</h2>
+                  <div className="flex items-center justify-between gap-4 pt-2">
+                    <span className="line-clamp-2 -rotate-1 font-hand text-[22px] leading-7 text-sage">&quot;{latest.text}&quot;</span>
+                    <Link to={`/journal/${latest.id}`} className="flex shrink-0 items-center gap-1 text-[14px] font-bold leading-5 tracking-[0.28px] text-sage">
+                      <span>Read story in<br />Journal</span>
+                      <img src="/assets/ic-arrow-right.svg" alt="" className="size-[10.7px]" />
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
+
+          <div className="col-span-4 flex flex-col gap-6">
+            <section className="flex flex-col rounded-[20px] bg-card p-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+              <div className="flex h-16 items-end justify-between pb-1">
+                <div className="flex flex-col gap-[3px] pt-[5px]">
+                  <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">Session dispatch</span>
+                  <h2 className="font-serif text-[24px] leading-8 text-ink">Flight Desk</h2>
+                </div>
+                <span className="rotate-2 pb-6 font-hand text-[22px] leading-7 text-[#8e4d31]">{elsewhere ? 'In the air ~' : 'Ready for departure ~'}</span>
+              </div>
+              <div className="py-4">
+                <div className="flex flex-col items-center rounded-xl bg-card-soft py-4 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
+                  <span className="font-serif text-[56px] font-bold leading-[64px] tracking-[-1.4px] text-ink">{String(minutes).padStart(2, '0')}:00</span>
+                  <span className="flex items-center gap-1 pt-1 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">
+                    <img src="/assets/ic-timer.svg" alt="" className="size-3" />
+                    {dest ? `Estimated flight distance: ${fmtKm(km)}` : 'Pick a destination to see the distance'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 pb-4">
+                <span className="text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">Focus Duration (Minutes)</span>
+                <div className="flex gap-1" role="radiogroup" aria-label="Session length in minutes">
+                  {DURATIONS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      role="radio"
+                      aria-checked={minutes === d}
+                      onClick={() => setMinutes(d)}
+                      className={`flex-1 rounded-full py-2 text-[14px] font-bold leading-5 tracking-[0.28px] ${
+                        minutes === d ? 'bg-[#7fa38a] text-[#183926] drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'bg-cream text-ink'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="relative flex flex-col gap-1 pb-6">
+                <span className="text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">Destination Flight Waypoint</span>
+                <PlaceSearch
+                  kind="any"
+                  value={dest}
+                  onChange={(p) => {
+                    setDest(p)
+                    setError('')
+                  }}
+                />
+                {error && (
+                  <p role="alert" className="text-[13px] text-[#ba1a1a]">
+                    {error}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={start}
+                className="flex items-center justify-center gap-2 rounded-full bg-[#d58767] px-6 py-3.5 text-[14px] font-bold leading-5 tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
+              >
+                <img src="/assets/ic-play.svg" alt="" className="h-[13px] w-4 brightness-0 invert" />
+                {elsewhere ? 'Watch flight' : 'Start Flight'}
+              </button>
+              <p className="pt-2 text-center text-[14px] leading-5 text-ink-2">
+                1 minute of focused work = 100 km traveled{bird ? ` by ${bird.name}` : ''}
+              </p>
+            </section>
+
+            {active ? (
+              <section className="flex flex-col rounded-[20px] bg-card p-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-2">
+                    <img src="/assets/ic-flight.svg" alt="" className="h-[17px] w-auto" />
+                    <h3 className="font-serif text-[20px] font-bold leading-7 text-ink">{active.dest.name} Journey</h3>
+                  </div>
+                  <Pill tone={active.status === 'DELIVERED' ? 'sage' : active.status === 'OUTBOUND' ? 'sky' : 'sand'}>
+                    {active.status === 'RETURNING' ? 'Returning home' : active.status}
+                  </Pill>
+                </div>
+                <div className="flex items-baseline justify-between pt-1 text-[14px] leading-5 text-ink-2">
+                  <span>
+                    {pct}% completed • {fmtKm(Math.max(0, active.routeKm - active.progressKm))} left
+                  </span>
+                  <span className="text-[12px] font-bold tracking-[0.36px] text-ink">Leg {active.legs + 1}</span>
+                </div>
+                <div className="flex gap-1.5 py-4" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+                  {Array.from({ length: segs }, (_, i) => (
+                    <span key={i} className={`h-2 flex-1 rounded-full ${i < filled ? 'bg-sage' : i === filled && pct > 0 ? 'bg-[#7fa38a]' : 'bg-[#e0d9d3]'}`} />
+                  ))}
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <Hand className="text-[#8e4d31]">{active.status === 'RETURNING' ? 'Winging home' : active.status === 'DELIVERED' ? 'Letter delivered' : 'Over open skies ~'}</Hand>
+                  <button type="button" onClick={continueTrip} className="rounded-full bg-cream px-4 py-1.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                    {elsewhere ? 'Watch flight' : active.status === 'DELIVERED' ? 'Fly home' : 'Continue trip'}
+                  </button>
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-[20px] bg-card p-6 text-center drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <p className="font-serif text-[18px] text-ink">Where shall we go first?</p>
+                <p className="pt-1 text-[14px] text-ink-2">Pick a place above and your bird will take off.</p>
+              </section>
+            )}
+
+            <section className="flex items-center gap-4 rounded-[20px] bg-card p-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+              <span className="relative flex size-14 shrink-0 items-center justify-center rounded-2xl bg-cream drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <img src="/assets/ic-mail-box.svg" alt="" className="size-[26.7px]" />
+                {unopened.length > 0 && (
+                  <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-[#8e4d31]">
+                    <span className="size-1.5 rounded-full bg-cream" />
+                  </span>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1 text-[14px] font-bold leading-5 tracking-[0.28px] text-ink">
+                  {unopened.length === 0 ? 'No letters waiting' : `${unopened.length} letter${unopened.length > 1 ? 's' : ''} waiting`}
+                  {unopened.length > 0 && <span className="size-2 rounded-full bg-[#8e4d31]" />}
+                </p>
+                <p className="truncate text-[14px] leading-5 text-ink-2">
+                  {unopened.length === 0 ? 'Letters from friends will land here' : `From ${[...new Set(unopened.map((l) => l.fromName))].slice(0, 3).join(', ')}`}
+                </p>
+              </div>
+              <Link to="/mailbox" className="flex items-center gap-1 rounded-full bg-[#efe7e1] px-4 py-2 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink">
+                Open
+                <img src="/assets/ic-arrow-right.svg" alt="" className="size-[9.3px]" />
+              </Link>
+            </section>
+
+            <section className="flex flex-col rounded-[20px] bg-card p-6 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center justify-between pb-4">
+                <h3 className="font-serif text-[20px] font-bold leading-7 text-ink">Flight Log</h3>
+                <div className="flex items-center rounded-full bg-card-soft p-0.5" role="tablist" aria-label="Time range">
+                  {RANGES.map((r) => (
+                    <button key={r} type="button" role="tab" aria-selected={range === r} onClick={() => setRange(r)} className={`rounded-full px-2 py-1 text-[12px] font-bold leading-4 tracking-[0.36px] ${range === r ? 'bg-cream text-ink' : 'text-ink-2'}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['Sites', '/assets/ic-places.svg', String(stats.places), '', 'Dispatched places'],
+                    ['Lands', '/assets/ic-countries.svg', String(stats.countries), '', 'Countries landed'],
+                    ['Path', '/assets/ic-distance.svg', stats.dist.toLocaleString('en-US'), '', 'Kilometers flown'],
+                    ['Focus', '/assets/ic-focus.svg', String(stats.hrs), 'h', 'Time in quiet air'],
+                  ] as const
+                ).map(([label, icon, value, unit, note]) => (
+                  <div key={label} className="flex flex-col rounded-xl bg-cream p-4">
+                    <div className="flex items-center justify-between pb-1">
+                      <img src={icon} alt="" className="size-4" />
+                      <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.36px] text-ink-2">{label}</span>
+                    </div>
+                    <span className="font-serif text-[24px] leading-8 text-ink">
+                      {value}
+                      {unit && <span className="pl-1 text-[14px]">{unit}</span>}
+                    </span>
+                    <span className="text-[14px] leading-5 text-ink-2">{note}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
       </div>
       {askLock && <ScreenLockPrompt onAllow={() => answerLockPrompt(true)} onSkip={() => answerLockPrompt(false)} />}
     </AppLayout>

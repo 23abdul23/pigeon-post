@@ -43,8 +43,43 @@ export default function Passport() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col gap-6 pb-4">
-        <section className="relative overflow-hidden rounded-xl bg-[#7fa38a] p-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
+      <div className="flex flex-col gap-6 pb-4 lg:gap-8 lg:py-6">
+        <section className="hidden overflow-hidden rounded-3xl bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)] lg:block">
+          <div className="flex items-center justify-between bg-[#7fa38a] px-6 py-3">
+            <span className="text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-white/90">
+              Republic of wings • Traveler passport • {user?.name ?? 'Wanderer'}&apos;s roost
+            </span>
+            <span className="rounded-full bg-black/20 px-2.5 py-0.5 text-[12px] font-bold tracking-[0.36px] text-white">
+              {visited.size} of {COUNTRIES.length} countries ({Math.max(1, Math.round((visited.size / COUNTRIES.length) * 100))}%)
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-8 p-8">
+            <div>
+              <p className="font-hand text-[22px] leading-7 text-[#8e4d31]">Personal Expedition Log</p>
+              <h1 className="font-serif text-[56px] font-bold leading-[64px] tracking-[-1.4px] text-ink">Passport</h1>
+              <p className="pt-1 text-[14px] leading-5 text-ink-2">
+                {visited.size} countries, {places} places, {km.toLocaleString('en-US')} km
+              </p>
+            </div>
+            <div className="flex gap-3">
+              {(
+                [
+                  ['Territories', String(visited.size), 'Countries visited', 'text-[#8e4d31]'],
+                  ['Waypoints', String(places), 'Places explored', 'text-sky-ink'],
+                  ['Distance', km.toLocaleString('en-US'), 'Kilometers flown', 'text-sage'],
+                ] as const
+              ).map(([k, v, note, c]) => (
+                <div key={k} className="flex min-w-[150px] flex-col rounded-2xl bg-card-soft p-4">
+                  <span className="text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">{k}</span>
+                  <span className={`font-serif text-[36px] font-bold leading-10 ${c}`}>{v}</span>
+                  <span className="text-[12px] leading-4 text-ink-2">{note}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="relative overflow-hidden rounded-xl bg-[#7fa38a] p-6 lg:hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
           <span className="absolute -bottom-10 -right-10 size-44 rounded-full bg-[rgba(68,102,80,0.2)]" aria-hidden />
           <span className="absolute -left-6 -top-6 size-32 rounded-full bg-[rgba(255,255,255,0.1)]" aria-hidden />
           <div className="relative flex flex-col items-center">
@@ -58,7 +93,7 @@ export default function Passport() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-2 rounded-xl bg-card p-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+        <section className="flex flex-col gap-2 rounded-xl bg-card p-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)] lg:hidden">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-1 font-serif text-[20px] font-bold leading-7 text-ink">
               <img src="/assets/pp-log.svg" alt="" className="size-[16.7px]" />
@@ -75,8 +110,8 @@ export default function Passport() {
           </div>
         </section>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center">
+        <div className="flex flex-col gap-2 lg:rounded-2xl lg:bg-card lg:px-4 lg:py-3">
+          <div className="flex items-center lg:justify-between">
             <div className="flex items-center gap-1" role="tablist" aria-label="Period">
               {(
                 [
@@ -90,6 +125,10 @@ export default function Passport() {
                 </button>
               ))}
             </div>
+            <button type="button" onClick={() => nav('/passport/share')} className="hidden items-center gap-2 rounded-full bg-[#d58767] px-5 py-2 text-[12px] font-bold leading-4 tracking-[0.36px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] lg:flex">
+              <img src="/assets/af-share.svg" alt="" className="h-3.5 w-3 brightness-0 invert" />
+              + Share stamps
+            </button>
           </div>
         </div>
 
@@ -126,7 +165,7 @@ export default function Passport() {
           </section>
         )}
 
-        <section className="relative rounded-xl bg-card-soft p-4 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
+        <section className="relative rounded-xl bg-card-soft p-4 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] lg:rounded-3xl lg:p-8">
           <div className="flex h-7 items-center">
             <span className="text-[12px] font-bold uppercase tracking-[0.6px] text-ink-2">Archival stamps</span>
           </div>
@@ -138,7 +177,7 @@ export default function Passport() {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 pt-4">
+            <div className="grid grid-cols-2 gap-4 pt-4 lg:grid-cols-4 lg:gap-6">
               {shown.map((s, i) => {
                 const last = stories.find((x) => x.cc === s.cc)
                 const isHome = s.cc === home?.cc
@@ -177,12 +216,16 @@ export default function Passport() {
           )}
         </section>
 
-        <div className="flex flex-col items-center pt-1">
+        <div className="flex flex-col items-center pt-1 lg:hidden">
           <button type="button" onClick={() => nav('/passport/share')} className="relative flex w-full items-center justify-center gap-1 rounded-full bg-[#d58767] px-6 py-3.5 text-[14px] font-bold uppercase tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
             <img src="/assets/pp-spark.svg" alt="" className="size-[18.3px]" />
             Share stamps
             <img src="/assets/af-share.svg" alt="" className="h-[15px] w-[13.5px] brightness-0 invert" />
           </button>
+        </div>
+        <div className="hidden flex-col items-center gap-1 pb-4 pt-6 text-center lg:flex">
+          <p className="font-serif text-[16px] font-bold italic text-ink">“Every stamp is a quiet hour spent in the clouds.”</p>
+          <p className="font-hand text-[22px] leading-7 text-[#8e4d31]">Official seal of the Bureau of Aerial Dispatch</p>
         </div>
       </div>
     </AppLayout>

@@ -57,3 +57,18 @@ body {
     animation: country-stamp-in 0.45s ease-out;
   }
 }
+
+/* Desktop: page content sits in a centred 1280px column under the top bar. */
+@layer components {
+@media (min-width: 1024px) {
+  body {
+    background: var(--color-cream);
+  }
+  .desktop-main > main {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+    padding-inline: 24px;
+  }
+}
+}

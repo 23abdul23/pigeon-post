@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import EnvelopeOpener from '../components/EnvelopeOpener'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import { playRustle } from '../lib/sound'
 import { countryName, haversineKm } from '../lib/geo'
 import { send } from '../lib/outbox'
@@ -93,7 +94,8 @@ export default function OpenedLetter() {
   return (
     <Frame nav>
       {unread && <EnvelopeOpener fromName={letter.fromName} fromCity={letter.fromCity} cc={letter.cc} dateMs={letter.dateMs} onDone={markOpened} />}
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav('/mailbox')} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -105,7 +107,7 @@ export default function OpenedLetter() {
         </Link>
       </header>
 
-      <main className="flex-1">
+      <main className="lg:max-w-[760px] flex-1">
         <div className="flex items-center justify-between px-5 pb-2 pt-1">
           <div className="flex items-center gap-1">
             <span className="flex items-center gap-1 rounded-full bg-sky px-2 py-1 text-[12px] font-semibold tracking-[0.36px] text-[#4d6876]">

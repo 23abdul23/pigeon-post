@@ -2,6 +2,7 @@ import Avatar from '../components/Avatar'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import Flag from '../components/Flag'
 import { useStore } from '../lib/store'
 
@@ -126,7 +127,8 @@ export default function ShareStamps() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav(-1)} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -138,7 +140,7 @@ export default function ShareStamps() {
         </Link>
       </header>
 
-      <main className="flex-1 px-5 pb-8">
+      <main className="lg:max-w-[760px] flex-1 px-5 pb-8">
         <div className="flex items-center justify-between pb-3 pt-1">
           <p className="flex items-center gap-1 font-serif text-[22px] leading-7 text-[#8e4d31]">
             <img src="/assets/ss-ready.svg" alt="" className="h-[15px] w-[17.5px]" />

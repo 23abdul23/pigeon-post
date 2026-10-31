@@ -89,7 +89,7 @@ export default function HomeCity() {
   return (
     <Frame>
       <Header title="Home City" />
-      <main className="flex-1 px-4 pb-8 pt-1">
+      <main className="lg:max-w-[760px] flex-1 px-4 pb-8 pt-1">
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center gap-1" aria-hidden>
             <span className="size-2.5 rounded-full bg-[rgba(127,163,138,0.4)]" />

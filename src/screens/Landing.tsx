@@ -4,6 +4,7 @@ import Flag from '../components/Flag'
 import Stamp from '../components/Stamp'
 import StoryDetails from '../components/StoryDetails'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import { clearStopCards, startReturn } from '../lib/flight'
 import { playCoo } from '../lib/sound'
 import { setState, useStore } from '../lib/store'
@@ -67,7 +68,8 @@ export default function Landing() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/80 px-4 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/80 px-4 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
         <button type="button" onClick={leave} aria-label="Close" className="flex size-11 items-center justify-center rounded-full">
           <img src="/assets/ic-close.svg" alt="" className="size-3.5" />
         </button>
@@ -77,7 +79,7 @@ export default function Landing() {
         </Link>
       </header>
 
-      <main className="flex-1 px-4 pb-28">
+      <main className="lg:max-w-[760px] flex-1 px-4 pb-28">
         <div className="pt-4">
           <div className="relative overflow-hidden rounded-3xl bg-line shadow-[0_4px_20px_-4px_rgba(62,58,54,0.08)]">
             <div className="relative h-[268px]">

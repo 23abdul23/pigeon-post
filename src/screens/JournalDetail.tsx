@@ -2,6 +2,7 @@ import Avatar from '../components/Avatar'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import StoryDetails from '../components/StoryDetails'
 import MiniMap from '../components/MiniMap'
 import { fmtKm } from '../lib/geo'
@@ -54,7 +55,8 @@ export default function JournalDetail() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav('/journal')} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -66,8 +68,8 @@ export default function JournalDetail() {
         </Link>
       </header>
 
-      <main className="flex-1 pb-2">
-        <div className="flex items-center justify-between px-5 pb-2 pt-1">
+      <main className="flex-1 pb-2 lg:pb-8 lg:pt-4">
+        <div className="flex items-center justify-between px-5 pb-2 pt-1 lg:px-0 lg:pb-8 lg:pt-2">
           <Link to="/journal" className="flex items-center gap-1 py-1 text-[12px] font-bold uppercase tracking-[0.6px] text-ink-2">
             <img src="/assets/sd-back.svg" alt="" className="size-3" />
             Back to journal
@@ -80,9 +82,10 @@ export default function JournalDetail() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 px-5">
-          <div className="relative max-h-[300px] overflow-hidden rounded-[20px] bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <img src={story.photo ?? '/assets/place-fallback.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover" />
+        <div className="flex flex-col gap-4 px-5 lg:grid lg:grid-cols-[440px_1fr] lg:items-start lg:gap-8 lg:px-0">
+          <div className="contents lg:flex lg:flex-col lg:gap-4">
+          <div className="relative max-h-[300px] overflow-hidden rounded-[20px] bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)] lg:max-h-none">
+            <img src={story.photo ?? '/assets/place-fallback.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover lg:h-[400px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[rgba(51,48,44,0.6)] via-[rgba(51,48,44,0)] to-[rgba(0,0,0,0.2)]" />
             <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 rounded-full bg-[rgba(255,248,244,0.9)] px-3 py-1 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
@@ -100,7 +103,31 @@ export default function JournalDetail() {
             </div>
           </div>
 
-          <section className="flex flex-col gap-2 rounded-[20px] bg-card p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+          <section className="order-5 flex flex-col gap-2 rounded-[20px] bg-card p-4 lg:order-none shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.6px] text-ink">
+                <img src="/assets/sd-way.svg" alt="" className="size-[15px]" />
+                Flight waypoint
+              </span>
+              <span className="text-[11px] font-bold text-sage">Route Completed</span>
+            </div>
+            <MiniMap center={{ lat: story.lat, lng: story.lng }} zoom={5} className="h-32 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+                <span className="flex size-7 items-center justify-center rounded-full bg-[#8e4d31] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
+                  <img src="/assets/sd-pin.svg" alt="" className="size-[11.3px]" />
+                </span>
+                <span className="pt-0.5 text-[9px] font-bold uppercase tracking-[-0.2px] text-[#8e4d31]">{story.place.slice(0, 22)}</span>
+              </div>
+            </MiniMap>
+            <div className="flex items-center justify-between px-1 text-[11px] leading-6 text-ink-2">
+              <span>Origin: {home?.name ?? 'Home Roost'}</span>
+              <span>{story.lat.toFixed(2)}°, {story.lng.toFixed(2)}°</span>
+            </div>
+          </section>
+
+          </div>
+          <div className="contents lg:flex lg:flex-col lg:gap-4">
+          <section className="flex flex-col gap-2 rounded-[20px] bg-card p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)] lg:bg-transparent lg:p-0 lg:shadow-none">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-[12px] font-bold uppercase tracking-[0.6px] text-sky-ink">{story.region ?? story.place}</span>
@@ -108,7 +135,7 @@ export default function JournalDetail() {
                   {dms(story.lat, 'N', 'S')}, {dms(story.lng, 'E', 'W')}
                 </span>
               </div>
-              <h2 className="pt-1 font-serif text-[24px] leading-[30px] text-ink">{story.place}</h2>
+              <h2 className="pt-1 font-serif text-[24px] leading-[30px] text-ink lg:text-[44px] lg:leading-[52px] lg:tracking-[-1px]">{story.place}</h2>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <Chip icon="/assets/sd-cal.svg" w="h-[13.3px] w-3">{d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</Chip>
@@ -132,7 +159,7 @@ export default function JournalDetail() {
             </div>
           </section>
 
-          <section className="flex flex-col gap-2 rounded-[20px] bg-white p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+          <section className="flex flex-col gap-2 rounded-[20px] bg-white p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)] lg:bg-transparent lg:p-0 lg:shadow-none">
             <h3 className="flex items-center gap-2 font-serif text-[20px] font-bold leading-7 text-ink">
               <img src="/assets/sd-story.svg" alt="" className="h-[14.6px] w-[16.5px]" />
               About {story.place}
@@ -179,29 +206,7 @@ export default function JournalDetail() {
             </section>
           )}
 
-          <section className="flex flex-col gap-2 rounded-[20px] bg-card p-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.6px] text-ink">
-                <img src="/assets/sd-way.svg" alt="" className="size-[15px]" />
-                Flight waypoint
-              </span>
-              <span className="text-[11px] font-bold text-sage">Route Completed</span>
-            </div>
-            <MiniMap center={{ lat: story.lat, lng: story.lng }} zoom={5} className="h-32 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-                <span className="flex size-7 items-center justify-center rounded-full bg-[#8e4d31] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
-                  <img src="/assets/sd-pin.svg" alt="" className="size-[11.3px]" />
-                </span>
-                <span className="pt-0.5 text-[9px] font-bold uppercase tracking-[-0.2px] text-[#8e4d31]">{story.place.slice(0, 22)}</span>
-              </div>
-            </MiniMap>
-            <div className="flex items-center justify-between px-1 text-[11px] leading-6 text-ink-2">
-              <span>Origin: {home?.name ?? 'Home Roost'}</span>
-              <span>{story.lat.toFixed(2)}°, {story.lng.toFixed(2)}°</span>
-            </div>
-          </section>
-
-          <div className="flex items-center justify-between pt-1">
+          <div className="order-6 flex items-center justify-between pt-1 lg:order-none">
             <button type="button" disabled={!prev} onClick={() => prev && nav(`/journal/${prev.id}`)} className="flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)] disabled:opacity-40">
               <img src="/assets/sd-prev.svg" alt="" className="h-2 w-[4.9px]" />
               {prev ? prev.place.split(',')[0].slice(0, 10) : 'Earlier'}
@@ -215,7 +220,7 @@ export default function JournalDetail() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-2 pb-6 pt-1">
+          <div className="order-6 flex flex-col gap-2 pb-6 pt-1 lg:order-none lg:pb-0">
             <div className="flex gap-2">
               <Action onClick={() => playCoo(true)} icon="/assets/sd-tram.svg" w="size-[16.7px]" label="Ambiance" />
               <Action onClick={toggleSave} icon="/assets/sd-keep.svg" w="h-[15px] w-[11.7px]" label={story.saved ? 'Saved' : 'Keepsake'} on={story.saved} />
@@ -229,6 +234,7 @@ export default function JournalDetail() {
               <img src="/assets/sd-fly.svg" alt="" className="size-[18.3px]" />
               Fly here again
             </button>
+          </div>
           </div>
         </div>
       </main>

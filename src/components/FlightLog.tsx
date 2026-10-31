@@ -3,24 +3,15 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useStore } from '../lib/store'
 
-const RANGES = ['This week', 'Month', 'All time'] as const
+export const RANGES = ['This week', 'Month', 'All time'] as const
+export type FlightRange = (typeof RANGES)[number]
 
-/** Navbar button plus the Flight Log dialog; lives in the Header so it is on every screen. */
-export default function FlightLog() {
+/** Places, countries, distance and focus hours for a time range; shared by the Flight Log dialog and the desktop dashboard card. */
+export function useFlightStats(range: FlightRange) {
   const sessions = useStore((s) => s.sessions)
   const stories = useStore((s) => s.stories)
   const stamps = useStore((s) => s.stamps)
-  const [open, setOpen] = useState(false)
-  const [range, setRange] = useState<(typeof RANGES)[number]>('This week')
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-
-  const stats = useMemo(() => {
+  return useMemo(() => {
     const now = Date.now()
     const span = range === 'This week' ? 7 : range === 'Month' ? 30 : 36500
     const inRange = sessions.filter((s) => now - s.endMs < span * 86400000)
@@ -29,6 +20,21 @@ export default function FlightLog() {
     const hrs = inRange.reduce((a, s) => a + (s.endMs - s.startMs), 0) / 3600000
     return { places, dist, hrs: Math.round(hrs * 10) / 10, countries: stamps.length }
   }, [sessions, stories, stamps, range])
+}
+
+/** Navbar button plus the Flight Log dialog; lives in the Header so it is on every screen. */
+export default function FlightLog() {
+  const [open, setOpen] = useState(false)
+  const [range, setRange] = useState<FlightRange>('This week')
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  const stats = useFlightStats(range)
 
   return (
     <>

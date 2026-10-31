@@ -32,7 +32,7 @@ export default function ChooseBird() {
   return (
     <Frame>
       <Header title="Choose Your Bird" />
-      <main className="flex-1 px-4 pb-4 pt-1">
+      <main className="lg:max-w-[1100px] flex-1 px-4 pb-4 pt-1">
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-1.5" aria-hidden>
             <span className="size-2 rounded-full bg-line" />
@@ -63,7 +63,7 @@ export default function ChooseBird() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 pt-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5 pt-5">
           {list.map((b, i) => {
             const on = b.id === selectedId
             return (

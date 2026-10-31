@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
@@ -36,12 +36,46 @@ export default function Friends() {
     const n = q.trim().toLowerCase()
     return n ? accepted.filter((f) => f.name.toLowerCase().includes(n) || f.city.toLowerCase().includes(n)) : accepted
   }, [accepted, q])
+  const letters = useStore((s) => s.letters)
+  const enRoute = accepted.filter((f) => f.flight && f.flight.endMs > now).length
+  const lastDispatch = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const l of letters) {
+      const other = l.fromId === 'me' ? l.toId : l.fromId
+      if ((m.get(other) ?? 0) < l.dateMs) m.set(other, l.dateMs)
+    }
+    return m
+  }, [letters])
   const inbound = accepted.find((f) => f.flight && f.flight.endMs > now)
 
   return (
     <AppLayout hand="Friends">
-      <div className="flex flex-col gap-3 pb-2">
-        <div className="flex items-center justify-between pt-1">
+      <div className="flex flex-col gap-3 pb-2 lg:gap-8 lg:py-4">
+        <div className="hidden items-end justify-between py-4 lg:flex">
+          <div className="flex flex-col gap-0.5">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-sky-ink">
+              <img src="/assets/ic-compass-small.svg" alt="" className="size-3" />
+              Cartographic registry
+              <span className="text-outline">•</span>
+              <span className="font-hand text-[22px] normal-case leading-6 tracking-normal text-[#8e4d31]">Vol. IV Dispatch</span>
+            </p>
+            <h1 className="font-serif text-[32px] leading-10 tracking-[-0.8px] text-ink">Friends</h1>
+            <p className="flex items-baseline gap-2 text-[14px] leading-5 text-ink-2">
+              Epistolary companions across the skies
+              <span className="font-hand text-[22px] leading-6 text-[#d58767]">~ charting quiet horizons ~</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-4 rounded-xl bg-card px-4 py-2">
+            <div>
+              <p className="text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">Airborne dispatches</p>
+              <p className="font-serif text-[18px] leading-6 text-sage">{enRoute} En Route</p>
+            </div>
+            <span className="flex size-10 items-center justify-center rounded-full bg-sky">
+              <img src="/assets/fr-st-flight.svg" alt="" className="size-4" />
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between pt-1 lg:hidden">
           <div>
             <h1 className="font-serif text-[24px] leading-8 tracking-[-0.6px] text-ink">Friends</h1>
           </div>
@@ -51,7 +85,8 @@ export default function Friends() {
           </Link>
         </div>
 
-        <div className="relative">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4 lg:rounded-2xl lg:bg-card-soft lg:p-2 lg:shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="relative lg:w-[320px] lg:shrink-0">
           <img src="/assets/tc-search.svg" alt="" className="pointer-events-none absolute left-3.5 top-1/2 size-[15px] -translate-y-1/2" />
           <input
             value={q}
@@ -62,9 +97,14 @@ export default function Friends() {
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-full bg-card p-1 shadow-[0_1px_1px_rgba(0,0,0,0.05)]" role="tablist">
+        <div className="flex items-center gap-1 rounded-full bg-card p-1 shadow-[0_1px_1px_rgba(0,0,0,0.05)] lg:w-[360px] lg:bg-transparent lg:shadow-none" role="tablist">
           <TabBtn on={tab === 'friends'} onClick={() => setParams({})} label="Friends" badge={String(accepted.length)} tone="sage" />
           <TabBtn on={tab === 'requests'} onClick={() => setParams({ tab: 'requests' })} label="Requests" badge={incoming.length ? String(incoming.length) : ''} tone="terracotta" />
+        </div>
+        <Link to="/friends/add" className="hidden items-center gap-1.5 rounded-full bg-[#8e4d31] px-6 py-3 text-[14px] font-bold leading-5 tracking-[0.28px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] lg:ml-auto lg:flex">
+          <img src="/assets/fr-add.svg" alt="" className="h-3 w-[16.5px]" />
+          + Add a friend
+        </Link>
         </div>
 
         {tab === 'friends' && (
@@ -82,9 +122,19 @@ export default function Friends() {
             )}
             {accepted.length > 0 && shown.length === 0 && <p className="py-6 text-center text-[14px] text-ink-2">No friends match "{q}".</p>}
 
-            <div className="flex flex-col gap-3">
+            {accepted.length > 0 && (
+              <div className="hidden items-center justify-between pt-2 lg:flex">
+                <h2 className="font-serif text-[24px] leading-8 text-ink">Dispatched Friends</h2>
+                <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">
+                  Showing {shown.length} of {accepted.length}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
               {shown.map((f, i) => (
-                <article key={f.id} className="flex flex-col gap-3 rounded-2xl bg-card-soft p-3.5 shadow-[0_2px_8px_-2px_rgba(62,58,54,0.05)]">
+                <Fragment key={f.id}>
+                <DesktopFriend f={f} i={i} now={now} mapOpen={open === f.id} onMap={() => setOpen(open === f.id ? null : f.id)} lastMs={lastDispatch.get(f.id)} onSend={() => nav(`/trip/new?friend=${f.id}&letter=1`)} onFly={() => nav(`/trip/new?friend=${f.id}`)} />
+                <article className="flex flex-col gap-3 rounded-2xl bg-card-soft p-3.5 shadow-[0_2px_8px_-2px_rgba(62,58,54,0.05)] lg:hidden">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar f={f} on={!!f.flight || i % 2 === 0} />
@@ -133,6 +183,7 @@ export default function Friends() {
                     </button>
                   </div>
                 </article>
+                </Fragment>
               ))}
             </div>
 
@@ -152,7 +203,7 @@ export default function Friends() {
             ))}
 
             {incoming.length > 0 && (
-              <button type="button" onClick={() => setParams({ tab: 'requests' })} className="mt-1 flex items-center justify-between rounded-2xl bg-[#ffdbcd] p-3.5 text-left shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+              <button type="button" onClick={() => setParams({ tab: 'requests' })} className="mt-1 flex items-center lg:hidden justify-between rounded-2xl bg-[#ffdbcd] p-3.5 text-left shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                 <span className="flex items-center gap-3">
                   <span className="flex size-9 items-center justify-center rounded-full bg-[#8e4d31] shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                     <img src="/assets/fr-envelope.svg" alt="" className="h-[15px] w-[16.7px]" />
@@ -167,12 +218,68 @@ export default function Friends() {
                 <img src="/assets/fr-arrow.svg" alt="" className="size-[13.3px]" />
               </button>
             )}
+            <div className="hidden grid-cols-[2fr_1fr] gap-6 lg:grid">
+              {incoming.length > 0 ? (
+                <section className="flex flex-col gap-4 rounded-3xl bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-9 items-center justify-center rounded-full bg-[#ffdbcd]">
+                        <img src="/assets/fr-envelope.svg" alt="" className="h-[15px] w-[16.7px]" />
+                      </span>
+                      <div>
+                        <h2 className="font-serif text-[18px] font-bold leading-6 text-ink">Incoming Requests</h2>
+                        <p className="text-[12px] leading-4 text-ink-2">
+                          {incoming.length} correspondent{incoming.length > 1 ? 's' : ''} waiting: Letters from {incoming.map((f) => f.city).join(' & ')}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-hand text-[22px] leading-7 text-[#8e4d31]">Sealed with wax</span>
+                  </div>
+                  {incoming.map((f) => (
+                    <div key={f.id} className="flex items-center justify-between rounded-2xl bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar f={f} />
+                        <div>
+                          <p className="flex items-center gap-1.5 font-serif text-[16px] font-bold leading-6 text-ink">
+                            {f.name}
+                            <Flag cc={f.cc} className="w-4" />
+                          </p>
+                          <p className="text-[12px] leading-4 text-ink-2">
+                            {f.city}, {countryName(f.cc)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => declineFriend(f.id)} className="rounded-full bg-line px-4 py-1.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink-2">
+                          Decline
+                        </button>
+                        <button type="button" onClick={() => acceptFriend(f.id)} className="rounded-full bg-[#7fa38a] px-4 py-1.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-[#183926]">
+                          Accept Letter
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              ) : (
+                <span />
+              )}
+              <section className="flex flex-col gap-2 rounded-3xl bg-card-soft p-6">
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">
+                  <img src="/assets/ic-book.svg" alt="" className="size-4" />
+                  Postmaster&apos;s note
+                </p>
+                <h2 className="font-serif text-[20px] font-bold leading-7 text-ink">The Flight of Pigeons</h2>
+                <p className="text-[14px] leading-5 text-ink-2">
+                  Homing birds rely on the Earth&apos;s low magnetosphere and olfactory gradients. Letters take time, and silence is simply the bird in calm transit over open seas.
+                </p>
+              </section>
+            </div>
             <p className="rotate-1 pt-2 text-center font-hand text-[22px] font-medium leading-7 text-[#8e4d31] opacity-75">~ every letter crosses winds and stars ~</p>
           </>
         )}
 
         {tab === 'requests' && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start">
             {incoming.length === 0 && outgoing.length === 0 && <p className="rounded-2xl bg-card-soft p-8 text-center text-[14px] text-ink-2">No requests right now.</p>}
             {incoming.map((f) => (
               <article key={f.id} className="flex flex-col gap-3 rounded-2xl bg-card-soft p-3.5 shadow-[0_2px_8px_-2px_rgba(62,58,54,0.05)]">
@@ -295,5 +402,62 @@ function InFlight({ friend, now, homeName }: { friend: Friend; now: number; home
         </div>
       </div>
     </section>
+  )
+}
+
+const ago = (ms?: number) => {
+  if (!ms) return '—'
+  const h = Math.floor((Date.now() - ms) / 3600000)
+  if (h < 1) return 'Just now'
+  if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`
+  const d = Math.floor(h / 24)
+  return d === 1 ? 'Yesterday' : `${d} days ago`
+}
+
+function DesktopFriend({ f, i, now, mapOpen, onMap, lastMs, onSend, onFly }: { f: Friend; i: number; now: number; mapOpen: boolean; onMap: () => void; lastMs?: number; onSend: () => void; onFly: () => void }) {
+  return (
+    <article className="hidden flex-col gap-4 rounded-3xl bg-card-soft p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] lg:flex">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <span className="[&>span]:size-14">
+            <Avatar f={f} on={!!f.flight || i % 2 === 0} />
+          </span>
+          <div>
+            <h2 className="flex items-center gap-1.5 font-serif text-[18px] font-bold leading-6 text-ink">
+              {f.name}
+              <Flag cc={f.cc} className="w-4" />
+            </h2>
+            <p className="text-[12px] leading-4 text-ink-2">
+              {f.city}, {countryName(f.cc)}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={onMap} aria-expanded={mapOpen} aria-label={`View ${f.city} on map`} className="flex size-9 items-center justify-center rounded-full bg-card">
+          <img src="/assets/fr-compass.svg" alt="" className="size-[15px]" />
+        </button>
+      </div>
+      {mapOpen && (
+        <div className="overflow-hidden rounded-xl bg-line">
+          <MiniMap center={{ lat: f.lat, lng: f.lng }} zoom={9} className="h-32" />
+          <div className="flex items-center justify-between p-2.5">
+            <span className="text-[12px] font-semibold tracking-[0.36px] text-ink-2">{f.city}</span>
+            <button type="button" onClick={onFly} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-sage">
+              Fly there
+            </button>
+          </div>
+        </div>
+      )}
+      <div>
+        <Status f={f} now={now} />
+      </div>
+      <div className="flex items-center justify-between text-[12px] leading-4 text-ink-2">
+        <span>Last dispatch</span>
+        <span className="font-bold text-ink">{ago(lastMs)}</span>
+      </div>
+      <button type="button" onClick={onSend} className="mt-2 flex items-center justify-center gap-2 rounded-full bg-[#7fa38a] py-2.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-[#183926]">
+        <img src="/assets/fr-send-green.svg" alt="" className="h-3 w-3.5" />
+        Send letter
+      </button>
+    </article>
   )
 }

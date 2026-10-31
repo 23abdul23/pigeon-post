@@ -5,6 +5,7 @@ import Avatar from '../components/Avatar'
 import BirdViewer from '../components/BirdViewer'
 import Flag from '../components/Flag'
 import { Frame } from '../components/Layout'
+import { DesktopBar } from '../components/Header'
 import { birdBySpecies } from '../lib/birds'
 import { DEMO_MODE, loadDemoData } from '../lib/demo'
 import { playCoo } from '../lib/sound'
@@ -101,7 +102,8 @@ export default function Settings() {
 
   return (
     <Frame nav>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
+      <DesktopBar />
+      <header className="lg:hidden sticky top-0 z-30 flex h-16 items-center justify-between bg-cream/85 px-2 shadow-[0_1px_8px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => nav(-1)} aria-label="Go back" className="flex size-11 items-center justify-center rounded-full">
             <img src="/assets/tc-back.svg" alt="" className="size-4" />
@@ -113,7 +115,7 @@ export default function Settings() {
         </Link>
       </header>
 
-      <nav aria-label="Settings sections" className="sticky top-16 z-20 flex gap-2 overflow-x-auto bg-cream/90 px-4 py-2 backdrop-blur-[12px]">
+      <nav aria-label="Settings sections" className="sticky top-16 lg:top-[72px] lg:mx-auto lg:w-full lg:max-w-[760px] z-20 flex gap-2 overflow-x-auto bg-cream/90 px-4 py-2 backdrop-blur-[12px]">
         {SECTIONS.map(([k, l]) => (
           <button
             key={k}
@@ -126,7 +128,7 @@ export default function Settings() {
         ))}
       </nav>
 
-      <main className="flex flex-1 flex-col gap-4 px-4 pb-32 pt-2">
+      <main className="lg:max-w-[760px] flex flex-1 flex-col gap-4 px-4 pb-32 pt-2">
         <Card id="profile" title="Profile" refs={refs}>
           <div className="flex items-center gap-4">
             <Avatar className="size-16 shadow-[0_0_0_2px_rgba(127,163,138,0.4)]" />
