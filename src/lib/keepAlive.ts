@@ -49,7 +49,7 @@ export function setKeepAliveMeta(meta: KeepAliveMeta): void {
       title: meta.title,
       artist: meta.artist ?? '',
       album: 'Pigeon Post',
-      artwork: [{ src: meta.artworkUrl ?? '/assets/logo.jpg', sizes: '512x512', type: 'image/jpeg' }],
+      artwork: [{ src: meta.artworkUrl ?? '/assets/logo.png', sizes: '512x512', type: 'image/png' }],
     })
   } catch {
     // metadata is cosmetic

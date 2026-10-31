@@ -21,7 +21,7 @@ import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
 import { getState, setState, useStore, type ActiveFlight } from '../lib/store'
-import { releaseAudio, startAmbience } from '../lib/sound'
+import { releaseAudio, startAmbience, startCoo } from '../lib/sound'
 import { windAt, type Wind } from '../lib/weather'
 
 /** How long the tab may be hidden before the flight ends instead of offering to continue. */
@@ -219,7 +219,11 @@ export default function Focus() {
       stop?.()
       stop = null
       if (document.hidden) releaseAudio()
-      else stop = startAmbience()
+      else {
+        const a = startAmbience()
+        const c = startCoo()
+        stop = () => (a(), c())
+      }
     }
     sync()
     document.addEventListener('visibilitychange', sync)

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
@@ -36,6 +36,8 @@ export default function Mailbox() {
   const unopened = received.filter((l) => l.status === 'DELIVERED')
   const keep = letters.filter((l) => l.saved)
   const inflight = sent.filter((l) => l.status === 'CARRIED')
+  const pending = sent.filter((l) => l.status === 'WAITING' || l.status === 'CARRIED')
+  const [pendingOpen, setPendingOpen] = useState(false)
   const coming = letters.filter((l) => l.toId === 'me' && l.status === 'CARRIED')
 
   const list: Letter[] = useMemo(() => {
@@ -48,6 +50,42 @@ export default function Mailbox() {
   const showSent = box === 'sent' || box === 'all'
   const senders = [...new Set(unopened.map((l) => l.fromName.split(' ')[0]))]
   const friendName = (id: string) => friends.find((f) => f.id === id)
+
+  function sentRow(l: Letter) {
+          const to = friendName(l.toId)
+          const status =
+            l.status === 'WAITING'
+              ? 'Waiting for a bird to visit'
+              : l.status === 'CARRIED'
+                ? `In flight${trip ? ` (${Math.max(0, Math.round(trip.routeKm - trip.progressKm)).toLocaleString('en-US')} km left)` : ''}`
+                : l.status === 'OPENED'
+                  ? 'Opened'
+                  : 'Delivered'
+          return (
+            <div key={l.id} className="flex items-center justify-between rounded-2xl bg-card p-3.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[rgba(202,231,248,0.5)]">
+                  <img src="/assets/mb-emblem.svg" alt="" className="h-[16.7px] w-[11.7px]" />
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 font-serif text-[15px] leading-[22px] text-ink">
+                    To: {to?.name ?? 'a friend'}
+                    {to && <Flag cc={to.cc} className="w-4" />}
+                  </p>
+                  <p className="flex items-center gap-2 pt-0.5 text-[11px] font-bold text-sky-ink">
+                    <span className="size-1.5 rounded-full bg-sky-ink" />
+                    {status}
+                  </p>
+                </div>
+              </div>
+              {l.status === 'WAITING' && to && (
+                <Link to={`/trip/new?friend=${to.id}`} aria-label={`Fly to ${to.name}`} className="flex size-8 items-center justify-center rounded-full bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                  <img src="/assets/fr-compass.svg" alt="" className="size-[15px]" />
+                </Link>
+              )}
+            </div>
+          )
+  }
 
   function open(l: Letter) {
     nav(`/mailbox/${l.id}`) // an unread letter plays the envelope opening on the letter screen itself
@@ -62,32 +100,7 @@ export default function Mailbox() {
           </div>
         </div>
 
-        <section className="relative flex gap-4 overflow-hidden rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-          <img src="/assets/mb-postmark.svg" alt="" className="pointer-events-none absolute -bottom-6 -right-6 size-[140px] opacity-10" />
-          <div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-xl bg-line shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <img src="/assets/mailbox-photo.jpg" alt="" className="absolute h-full max-w-none object-cover" style={{ left: '-57%', width: '215%' }} />
-            {unopened.length > 0 && <span className="absolute right-1 top-1 size-2.5 animate-pulse rounded-full bg-[#8e4d31]" />}
-          </div>
-          <div className="relative flex min-w-0 flex-1 flex-col justify-between py-0.5">
-            <span className="mb-1 flex w-fit items-center gap-1 rounded-full bg-[#ffdbcd] px-2 py-0.5 text-[12px] font-bold tracking-[0.36px] text-[#360f00]">
-              <img src="/assets/mb-mail-chip.svg" alt="" className="h-[10.5px] w-[11.7px]" />
-              {unopened.length === 0 ? 'No unread letters' : `${unopened.length} unread letter${unopened.length > 1 ? 's' : ''}`}
-            </span>
-            <p className="text-[14px] leading-[19px] text-ink">
-              {coming.length > 0 ? (
-                <>
-                  Your pigeon <b className="font-serif text-[15px] text-[#8e4d31]">{bird?.name ?? 'Pip'}</b> is gliding homeward with {coming.length} fresh despatch{coming.length > 1 ? 'es' : ''} from {[...new Set(coming.map((l) => l.fromCity))].join(' & ')}.
-                </>
-              ) : unopened.length > 0 ? (
-                <>
-                  Your pigeon <b className="font-serif text-[15px] text-[#8e4d31]">{bird?.name ?? 'Pip'}</b> brought {unopened.length === 1 ? 'a despatch' : 'fresh despatches'} from {senders.join(' & ')}.
-                </>
-              ) : (
-                'Your mailbox is quiet. Fly to a friend and your bird will bring back their reply.'
-              )}
-            </p>
-          </div>
-        </section>
+        
 
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Filter letters">
           {(
@@ -114,20 +127,25 @@ export default function Mailbox() {
           ))}
         </div>
 
-        {inflight.length > 0 && (
-          <div className="flex items-center justify-between rounded-xl bg-[rgba(202,231,248,0.6)] p-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <span className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-full bg-sky">
-                <img src="/assets/mb-flight.svg" alt="" className="size-[13.5px]" />
-              </span>
-              <span>
-                <span className="block text-[13px] leading-[16px] text-[#4d6876]">
-                  {inflight.length} letter{inflight.length > 1 ? 's' : ''} in flight
+        {pending.length > 0 && showSent && (
+          <div className="rounded-xl bg-[rgba(202,231,248,0.6)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <button type="button" onClick={() => setPendingOpen((o) => !o)} aria-expanded={pendingOpen} className="flex w-full items-center justify-between p-2 text-left">
+              <span className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-full bg-sky">
+                  <img src="/assets/mb-flight.svg" alt="" className="size-[13.5px]" />
                 </span>
-                <span className="block text-[12px] leading-[15px] text-[#4d6876] opacity-80">Arriving in next focus session</span>
+                <span>
+                  <span className="block text-[13px] leading-[16px] text-[#4d6876]">
+                    {pending.length} letter{pending.length > 1 ? 's' : ''} in flight or waiting
+                  </span>
+                  <span className="block text-[12px] leading-[15px] text-[#4d6876] opacity-80">
+                    {inflight.length > 0 && trip ? `Arriving in ~${Math.max(1, Math.ceil((trip.routeKm - trip.progressKm) / KM_PER_FOCUS_MINUTE))} min of focus` : 'Tap to see'}
+                  </span>
+                </span>
               </span>
-            </span>
-            <span className="px-1 font-hand text-[22px] font-bold leading-7 text-sky-ink">{trip ? `~${Math.max(1, Math.ceil((trip.routeKm - trip.progressKm) / KM_PER_FOCUS_MINUTE))} min` : ''}</span>
+              <img src="/assets/ic-angle-down.svg" alt="" className={`mr-2 size-3 transition-transform ${pendingOpen ? '' : 'rotate-180'}`} />
+            </button>
+            {pendingOpen && <div className="flex flex-col gap-2 p-2 pt-0">{pending.map(sentRow)}</div>}
           </div>
         )}
 
@@ -182,42 +200,7 @@ export default function Mailbox() {
           })}
         </div>
 
-        {showSent &&
-          sent.map((l) => {
-            const to = friendName(l.toId)
-            const status =
-              l.status === 'WAITING'
-                ? 'Waiting for a bird to visit'
-                : l.status === 'CARRIED'
-                  ? `In flight${trip ? ` (${Math.max(0, Math.round(trip.routeKm - trip.progressKm)).toLocaleString('en-US')} km left)` : ''}`
-                  : l.status === 'OPENED'
-                    ? 'Opened'
-                    : 'Delivered'
-            return (
-              <div key={l.id} className="flex items-center justify-between rounded-2xl bg-card p-3.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[rgba(202,231,248,0.5)]">
-                    <img src="/assets/mb-emblem.svg" alt="" className="h-[16.7px] w-[11.7px]" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 font-serif text-[15px] leading-[22px] text-ink">
-                      To: {to?.name ?? 'a friend'}
-                      {to && <Flag cc={to.cc} className="w-4" />}
-                    </p>
-                    <p className="flex items-center gap-2 pt-0.5 text-[11px] font-bold text-sky-ink">
-                      <span className="size-1.5 rounded-full bg-sky-ink" />
-                      {status}
-                    </p>
-                  </div>
-                </div>
-                {l.status === 'WAITING' && to && (
-                  <Link to={`/trip/new?friend=${to.id}`} aria-label={`Fly to ${to.name}`} className="flex size-8 items-center justify-center rounded-full bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-                    <img src="/assets/fr-compass.svg" alt="" className="size-[15px]" />
-                  </Link>
-                )}
-              </div>
-            )
-          })}
+        {showSent && sent.filter((l) => l.status !== 'WAITING' && l.status !== 'CARRIED').map(sentRow)}
 
         <p className="pt-4 text-center font-hand text-[22px] font-medium leading-7 text-ink-2">Letters gather quietly like dried leaves. Take your time replying.</p>
       </div>

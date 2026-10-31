@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useStore } from '../lib/store'
 
@@ -38,7 +39,7 @@ export default function FlightLog() {
           <path d="M9 7.5h6M9 11h4" />
         </svg>
       </button>
-      {open && (
+      {open && createPortal(
         <div role="dialog" aria-modal="true" aria-label="Flight Log" className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => setOpen(false)}>
           <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-2xl bg-cream p-4 shadow-[0_8px_24px_rgba(62,58,54,0.25)]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-2">
@@ -68,7 +69,8 @@ export default function FlightLog() {
               <Stat icon="/assets/ic-focus.svg" iw="w-3 h-[15px]" label="Focus" value={String(stats.hrs)} unit="hrs" note="Time in flight" />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body, // the sticky blurred Header would otherwise be this fixed overlay's containing block
       )}
     </>
   )

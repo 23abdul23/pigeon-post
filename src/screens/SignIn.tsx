@@ -1,12 +1,24 @@
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Frame } from '../components/Layout'
 import Header from '../components/Header'
 import { COGNITO_CONFIGURED, signIn as cognitoSignIn } from '../lib/auth'
 import { getState, setState } from '../lib/store'
+import bg1 from '../assets/bird_bg.png'
+import bg2 from '../assets/bird_bg_2.png'
+
+const SLIDES = [bg1, bg2]
+const SLIDE_MS = 5000
 
 export default function SignIn() {
   const nav = useNavigate()
   const returnTo = (useLocation().state as { returnTo?: string } | null)?.returnTo
+
+  const [slide, setSlide] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setSlide((i) => (i + 1) % SLIDES.length), SLIDE_MS)
+    return () => clearInterval(t)
+  }, [])
 
   function signIn() {
     if (COGNITO_CONFIGURED) return void cognitoSignIn(returnTo)
@@ -19,8 +31,15 @@ export default function SignIn() {
 
   return (
     <Frame>
-      <Header title="Sign In" />
-      <main className="flex-1 px-4 pb-4 pt-1">
+      <Header title="Sign In" hideLog />
+      <main className="relative flex flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
+        <div className="absolute inset-0 -z-0" aria-hidden>
+          {SLIDES.map((src, i) => (
+            <img key={src} src={src} alt="" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />
+          ))}
+          <div className="absolute inset-0 bg-gradient-to-b from-cream/90 via-cream/55 to-cream/10" />
+        </div>
+        <div className="relative flex flex-1 flex-col">
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-1" aria-hidden>
             <span className="h-2 w-6 rounded-full bg-sage" />
@@ -33,52 +52,30 @@ export default function SignIn() {
           </span>
         </div>
 
-        <div className="flex flex-col items-center gap-2 px-2 pt-8">
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-12">
+        <div className="flex flex-col items-center gap-3 px-2">
           <span className="flex items-center gap-1.5 rounded-full bg-sky/50 px-3 py-1 text-[12px] font-semibold tracking-[0.3px] text-sky-ink">
             <img src="/assets/ic-dispatch.svg" alt="" className="size-3" />
-            Pigeon Post Dispatch
+            Fly while you focus
           </span>
-          <h1 className="pt-0.5 text-center font-serif text-[16px] leading-5 tracking-[-0.4px] text-ink">Fly while you focus</h1>
           <p className="max-w-[320px] text-center text-[16px] leading-[26px] text-ink-2">
             Pick a place, stay on this tab, and your bird travels there.
           </p>
         </div>
 
-        <div className="pt-8">
+        <div className="flex flex-col items-center gap-3">
           <button
             type="button"
             onClick={signIn}
-            className="flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white px-6 shadow-[0_1px_1px_rgba(0,0,0,0.05)]"
+            className="inline-flex h-14 items-center justify-center gap-3 rounded-full bg-white px-8 shadow-[0_4px_16px_rgba(62,58,54,0.12)] transition active:scale-[0.98]"
           >
             <img src="/assets/google.svg" alt="" className="size-5" />
             <span className="text-[14px] font-bold tracking-[-0.35px] text-ink">Continue with Google</span>
           </button>
-          <p className="mt-3 text-center text-[12px] text-muted">We only ever share your city, never your exact location.</p>
+          <p className="text-center text-[12px] text-ink-2">We never share your exact location.</p>
         </div>
-
-        <div className="mt-6 flex items-center gap-3 rounded-xl bg-card p-3.5 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-line">
-            <img src="/assets/ic-globe.svg" alt="" className="size-[18px]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="font-serif text-[20px] font-semibold leading-[25px] text-ink">Quiet Collective Flight</span>
-              <span className="size-1.5 rounded-full bg-sage" />
-            </div>
-            <p className="text-[14px] leading-5 text-ink-2">4,128 pigeons airborne over 84 cities today</p>
-          </div>
         </div>
-
-        <footer className="pt-8 text-center">
-          <div className="flex items-center justify-center gap-2 text-[14px] text-ink-2">
-            <a href="#terms" className="underline decoration-outline">Terms of Service</a>
-            <span className="text-outline">•</span>
-            <a href="#privacy" className="underline decoration-outline">Privacy Policy</a>
-            <span className="text-outline">•</span>
-            <a href="#sanctuary" className="underline decoration-outline">Bird Sanctuary</a>
-          </div>
-          <p className="pt-2 text-[12px] font-semibold tracking-[0.36px] text-muted">Designed with slow intentions for deep work</p>
-        </footer>
+        </div>
       </main>
     </Frame>
   )

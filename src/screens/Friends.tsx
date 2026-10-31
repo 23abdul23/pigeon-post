@@ -126,9 +126,9 @@ export default function Friends() {
                     <button
                       type="button"
                       onClick={() => nav(`/trip/new?friend=${f.id}&letter=1`)}
-                      className={`flex items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold tracking-[0.36px] shadow-[0_1px_1px_rgba(0,0,0,0.05)] ${i % 2 === 0 ? 'bg-[#8e4d31] text-white' : 'bg-[#7fa38a] text-[#183926]'}`}
+                      className={`flex items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold tracking-[0.36px] shadow-[0_1px_1px_rgba(0,0,0,0.05)] bg-[#8e4d31] text-white`}
                     >
-                      <img src={i % 2 === 0 ? '/assets/fr-send-white.svg' : '/assets/fr-send-green.svg'} alt="" className="h-2.5 w-3" />
+                      <img src="/assets/fr-send-white.svg" alt="" className="h-2.5 w-3" />
                       Send letter
                     </button>
                   </div>

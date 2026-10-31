@@ -1,4 +1,6 @@
 import { getState } from './store'
+import coo1 from '../assets/Coo_1.wav'
+import coo2 from '../assets/Coo_2.wav'
 
 let ctx: AudioContext | null = null
 
@@ -132,5 +134,54 @@ export function startAmbience(): () => void {
     bg.gain.linearRampToValueAtTime(0, t + 0.3)
     bed.stop(t + 0.3)
     setTimeout(releaseAudio, 350) // after the fade, so nothing keeps the device (and the lock-screen player) alive
+  }
+}
+
+const cooBufs: Promise<AudioBuffer>[] = []
+const cooUrls = [coo1, coo2]
+const loadCoo = (c: AudioContext, i: number) => (cooBufs[i] ??= fetch(cooUrls[i]).then((r) => r.arrayBuffer()).then((b) => c.decodeAudioData(b)))
+
+/** Loops the recorded coos (Coo_1, Coo_2, Coo_1, ...) until the returned stop function runs. Silent when muted or coo is off. */
+export function startCoo(): () => void {
+  const { soundOn, settings } = getState()
+  if (!soundOn || !settings.coo) return () => {}
+  const c = audio()
+  if (!c) return () => {}
+  void c.resume()
+  const g = c.createGain()
+  g.gain.value = getState().settings.volume / 100
+  g.connect(c.destination)
+  let i = 0
+  let stopped = false
+  let src: AudioBufferSourceNode | null = null
+  const next = async () => {
+    try {
+      const buf = await loadCoo(c, i % cooUrls.length)
+      if (stopped) return
+      src = c.createBufferSource()
+      src.buffer = buf
+      src.connect(g)
+      src.onended = () => {
+        i++
+        void next()
+      }
+      src.start()
+    } catch {
+      cooBufs.length = 0 // a failed fetch/decode is retried on the next flight
+    }
+  }
+  void next()
+  return () => {
+    stopped = true
+    if (src) {
+      src.onended = null
+      try {
+        src.stop()
+      } catch {
+        // already ended
+      }
+    }
+    g.disconnect()
+    setTimeout(releaseAudio, 350)
   }
 }

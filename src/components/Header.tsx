@@ -23,7 +23,7 @@ function SyncChip() {
   )
 }
 
-export default function Header({ title, back, hand, extra }: { title?: string; back?: string; hand?: string; extra?: ReactNode }) {
+export default function Header({ title, back, hand, extra, hideLog }: { title?: string; back?: string; hand?: string; extra?: ReactNode; hideLog?: boolean }) {
   const soundOn = useStore((s) => s.soundOn)
   return (
     <header className="sticky top-0 z-30 bg-cream/85 shadow-[0_2px_12px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
@@ -34,7 +34,7 @@ export default function Header({ title, back, hand, extra }: { title?: string; b
               <img src="/assets/ic-nav-arrow.svg" alt="" className="size-4 -rotate-90" />
             </Link>
           )}
-          <img src="/assets/logo.jpg" alt="" className="size-8" />
+          <img src="/assets/logo.png" alt="" className="size-8" />
           {hand ? (
             <span className="flex flex-col">
               <span className="font-serif text-[20px] font-semibold leading-[22px] tracking-[-0.5px] text-ink">Pigeon Post</span>
@@ -52,7 +52,7 @@ export default function Header({ title, back, hand, extra }: { title?: string; b
         </div>
         <div className="flex items-center gap-1">
           <SyncChip />
-          <FlightLog />
+          {!hideLog && <FlightLog />}
           <button
             type="button"
             aria-label={soundOn ? 'Mute sound' : 'Unmute sound'}
