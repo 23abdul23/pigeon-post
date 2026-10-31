@@ -14,7 +14,7 @@ import { clearOutbox } from '../lib/outbox'
 
 const SECTIONS = [
   ['profile', 'Profile'],
-  ['city', 'Home city'],
+  ['city', 'Home'],
   ['birds', 'Birds'],
   ['sound', 'Sound'],
   ['notifications', 'Alerts'],
@@ -145,7 +145,7 @@ export default function Settings() {
           <p className="pt-1 text-right text-[12px] text-muted">{draft.bio.length} / 120</p>
         </Card>
 
-        <Card id="city" title="Home city" refs={refs}>
+        <Card id="city" title="Home" refs={refs}>
           <div className="flex items-center justify-between rounded-xl bg-white p-3 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
             <span className="flex items-center gap-3">
               {home && <Flag cc={home.cc} className="w-6" />}

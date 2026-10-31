@@ -211,7 +211,6 @@ export default function TripComposer() {
               <img src="/assets/tc-nav.svg" alt="" className="size-[15px]" />
               Where to?
             </h2>
-            <span className="-rotate-2 font-hand text-[22px] font-medium text-[#8e4d31]">{dest ? 'flight map set' : 'pick a course'}</span>
           </div>
 
           <div className="flex rounded-full bg-line p-1" role="radiogroup" aria-label="Destination type">

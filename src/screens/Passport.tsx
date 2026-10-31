@@ -55,7 +55,6 @@ export default function Passport() {
           </div>
           <div className="flex items-center justify-between gap-8 p-8">
             <div>
-              <p className="font-hand text-[22px] leading-7 text-[#8e4d31]">Personal Expedition Log</p>
               <h1 className="font-serif text-[56px] font-bold leading-[64px] tracking-[-1.4px] text-ink">Passport</h1>
               <p className="pt-1 text-[14px] leading-5 text-ink-2">
                 {visited.size} countries, {places} places, {km.toLocaleString('en-US')} km

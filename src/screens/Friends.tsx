@@ -56,13 +56,10 @@ export default function Friends() {
             <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase leading-4 tracking-[0.6px] text-sky-ink">
               <img src="/assets/ic-compass-small.svg" alt="" className="size-3" />
               Cartographic registry
-              <span className="text-outline">•</span>
-              <span className="font-hand text-[22px] normal-case leading-6 tracking-normal text-[#8e4d31]">Vol. IV Dispatch</span>
             </p>
             <h1 className="font-serif text-[32px] leading-10 tracking-[-0.8px] text-ink">Friends</h1>
             <p className="flex items-baseline gap-2 text-[14px] leading-5 text-ink-2">
               Epistolary companions across the skies
-              <span className="font-hand text-[22px] leading-6 text-[#d58767]">~ charting quiet horizons ~</span>
             </p>
           </div>
           <div className="flex items-center gap-4 rounded-xl bg-card px-4 py-2">

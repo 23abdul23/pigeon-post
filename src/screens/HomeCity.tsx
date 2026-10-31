@@ -88,7 +88,7 @@ export default function HomeCity() {
 
   return (
     <Frame>
-      <Header title="Home City" />
+      <Header title="Home" />
       <main className="lg:max-w-[760px] flex-1 px-4 pb-8 pt-1">
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center gap-1" aria-hidden>
@@ -102,7 +102,6 @@ export default function HomeCity() {
         <div className="pt-5">
           <div className="relative flex items-center justify-between">
             <h1 className="font-serif text-[32px] leading-10 tracking-[-0.8px] text-ink">Where is home?</h1>
-            <span className="-rotate-6 font-hand text-[22px] font-medium text-[#8e4d31]">home roost!</span>
           </div>
           <p className="pt-1 text-[16px] leading-[26px] text-ink-2">Your bird starts and returns here. City level only.</p>
         </div>

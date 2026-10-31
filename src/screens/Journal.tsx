@@ -53,10 +53,6 @@ export default function Journal() {
     <AppLayout>
       <div className="relative flex flex-col pb-8">
         <div className="flex flex-col gap-1 pb-2 pt-4 lg:gap-0 lg:pt-6">
-          <p className="hidden items-center gap-3 font-hand text-[22px] leading-7 text-[#8e4d31] lg:flex">
-            Volume III • Field Notebooks
-            <span className="h-px w-5 bg-[#8e4d31]/40" />
-          </p>
           <h1 className="font-serif text-[32px] leading-10 text-ink lg:text-[40px] lg:font-bold lg:leading-[48px] lg:tracking-[-1px]">Journal</h1>
           <p className="hidden text-[14px] leading-5 text-ink-2 lg:block">Every place your bird has shown you, penned down on soft cotton paper.</p>
         </div>

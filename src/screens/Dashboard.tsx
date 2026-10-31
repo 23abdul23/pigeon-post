@@ -223,7 +223,7 @@ export default function Dashboard() {
             <span className="h-px flex-1 bg-ink/10" />
           </div>
           <SoftButton onClick={() => nav('/trip/new')} className="py-3.5">
-            <img src="/assets/fr-envelope.svg" alt="" className="h-[15px] w-[16.7px]" />
+            <img src="/assets/fr-envelope.svg" alt="" className="h-[15px] w-[16.7px] brightness-0" />
             Send mail to a friend
           </SoftButton>
           <p className="flex items-center justify-center gap-1.5 text-[14px] text-ink-2">
@@ -326,8 +326,6 @@ export default function Dashboard() {
         <div className="flex items-end justify-between py-4">
           <div className="flex flex-col gap-0.5">
             <div className="flex h-7 items-center gap-2">
-              <span className="-rotate-1 font-hand text-[22px] leading-7 text-[#8e4d31]">Morning dispatch • log no. 142</span>
-              <span className="size-1.5 rounded-full bg-[#7fa38a]" />
               <span className="text-[12px] font-bold uppercase leading-4 tracking-[0.6px] text-ink-2">Postmaster roost</span>
             </div>
             <h1 className="pt-0.5 font-serif text-[32px] leading-10 tracking-[-0.8px] text-ink">

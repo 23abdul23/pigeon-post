@@ -88,31 +88,26 @@ export function DesktopBar({ extra, hideLog }: { extra?: ReactNode; hideLog?: bo
   )
 }
 
-export default function Header({ title, back, hand, extra, hideLog }: { title?: string; back?: string; hand?: string; extra?: ReactNode; hideLog?: boolean }) {
+/** `hand` (handwritten sub-label) is no longer drawn; callers may still pass it. */
+export default function Header({ title, back, extra, hideLog }: { title?: string; back?: string; hand?: string; extra?: ReactNode; hideLog?: boolean }) {
   const soundOn = useStore((s) => s.soundOn)
   return (
     <header className="sticky top-0 z-30 bg-cream/85 shadow-[0_2px_12px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">
       <DesktopBar extra={extra} hideLog={hideLog} />
       <div className="flex h-16 items-center justify-between px-4 lg:hidden">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {back && (
-            <Link to={back} aria-label="Back" className="-ml-2 flex size-10 items-center justify-center rounded-full text-ink">
+            <Link to={back} aria-label="Back" className="-ml-2 flex size-10 shrink-0 items-center justify-center rounded-full text-ink">
               <img src="/assets/ic-nav-arrow.svg" alt="" className="size-4 -rotate-90" />
             </Link>
           )}
-          <img src="/assets/logo.png" alt="" className="size-8" />
-          {hand ? (
-            <span className="flex flex-col">
-              <span className="font-serif text-[20px] font-semibold leading-[22px] tracking-[-0.5px] text-ink">Pigeon Post</span>
-              <span className="font-hand text-[20px] font-medium leading-[18px] tracking-[0.6px] text-[#8e4d31]">{hand}</span>
-            </span>
-          ) : (
-            <span className="font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink">Pigeon Post</span>
-          )}
+          <img src="/assets/logo.png" alt="" className="size-8 shrink-0" />
+          {/* with a title the wordmark drops out on phones, so the title stays on one line */}
+          <span className={`whitespace-nowrap font-serif text-[20px] font-semibold leading-7 tracking-[-0.5px] text-ink ${title ? 'hidden sm:inline' : ''}`}>Pigeon Post</span>
           {title && (
             <>
-              <span className="text-[14px] font-medium text-ink-2">/</span>
-              <span className="font-serif text-[20px] font-semibold leading-7 text-sage">{title}</span>
+              <span className="hidden text-[14px] font-medium text-ink-2 sm:inline">/</span>
+              <span className="truncate whitespace-nowrap font-serif text-[20px] font-semibold leading-7 text-sage">{title}</span>
             </>
           )}
         </div>

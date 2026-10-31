@@ -46,7 +46,6 @@ export default function ChooseBird() {
           <h1 className="font-serif text-[32px] leading-10 text-ink">Choose your bird</h1>
           <div className="flex h-7 items-center gap-1.5 whitespace-nowrap">
             <span className="text-[16px] text-ink-2">You can change it any time.</span>
-            <span className="-rotate-2 font-hand text-[19px] font-medium text-[#8e4d31]">Every soul has wings!</span>
           </div>
         </div>
 
