@@ -8,7 +8,19 @@ import bg1 from '../assets/bird_bg.png'
 import bg2 from '../assets/bird_bg_2.png'
 
 const SLIDES = [bg1, bg2]
+// Desktop pictures (the left 70%). Add the wide versions to src/assets and import them here; until then the phone pictures are reused.
+const DESKTOP_SLIDES = [bg1, bg2]
 const SLIDE_MS = 5000
+
+function Slides({ images, slide }: { images: string[]; slide: number }) {
+  return (
+    <>
+      {images.map((src, i) => (
+        <img key={src} src={src} alt="" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />
+      ))}
+    </>
+  )
+}
 
 export default function SignIn() {
   const nav = useNavigate()
@@ -30,16 +42,19 @@ export default function SignIn() {
   }
 
   return (
-    <Frame>
+    <Frame footer={false}>
       <Header title="Sign In" hideLog />
-      <main className="lg:max-w-[760px] relative flex flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
-        <div className="absolute inset-0 -z-0" aria-hidden>
-          {SLIDES.map((src, i) => (
-            <img key={src} src={src} alt="" className={`absolute inset-0 size-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`} />
-          ))}
+      <main className="relative flex flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 lg:flex-row lg:p-0">
+        {/* phones: the pictures sit behind the sign-in content */}
+        <div className="absolute inset-0 -z-0 lg:hidden" aria-hidden>
+          <Slides images={SLIDES} slide={slide} />
           <div className="absolute inset-0 bg-gradient-to-b from-cream/90 via-cream/55 to-cream/10" />
         </div>
-        <div className="relative flex flex-1 flex-col">
+        {/* desktop: 70 / 30 split, pictures on the left */}
+        <div className="relative hidden lg:block lg:w-[70%]" aria-hidden>
+          <Slides images={DESKTOP_SLIDES} slide={slide} />
+        </div>
+        <div className="relative flex flex-1 flex-col bg-cream lg:w-[30%] lg:flex-none lg:px-10 lg:py-6 lg:shadow-[-8px_0_24px_rgba(62,58,54,0.08)] max-lg:bg-transparent">
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-1" aria-hidden>
             <span className="h-2 w-6 rounded-full bg-sage" />

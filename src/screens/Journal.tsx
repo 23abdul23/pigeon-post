@@ -5,6 +5,7 @@ import { AppLayout } from '../components/Layout'
 import { playCoo } from '../lib/sound'
 import { useStore, type Story } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
+import { useWikiPhoto } from '../lib/wikiPhoto'
 
 const LENSES: Story['lens'][] = ['Hidden spot', 'Nature', 'Food', 'Legend', 'History']
 const TAPES = [
@@ -12,6 +13,12 @@ const TAPES = [
   { cls: 'right-6 top-[-12px] h-5 w-20 rotate-3 bg-[#aacfb5]' },
   { cls: 'left-6 top-[-9px] h-5 w-16 -rotate-[2.5deg] bg-[#ffb597]' },
 ]
+
+/** The card picture: Wikipedia's first result for "{place}, {country}", else the stored photo. */
+function StoryPhoto({ story }: { story: Story }) {
+  const src = useWikiPhoto(story)
+  return <img src={src ?? '/assets/place-fallback.jpg'} alt="" className="absolute inset-0 size-full object-cover" />
+}
 
 export default function Journal() {
   const [params, setParams] = useSearchParams()
@@ -142,7 +149,7 @@ export default function Journal() {
               <article key={s.id} className="relative flex flex-col gap-2 rounded-[20px] bg-card-soft p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
                 <span className={`absolute rounded-[2px] opacity-90 shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${TAPES[i % 3].cls}`} aria-hidden />
                 <Link to={`/journal/${s.id}`} aria-label={`Read ${s.place}`} className="relative block h-[232px] overflow-hidden lg:h-[190px] rounded-xl bg-card shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]">
-                  <img src={s.photo ?? '/assets/place-fallback.jpg'} alt="" className="absolute inset-0 size-full object-cover" />
+                  <StoryPhoto story={s} />
                   <span className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
                     <img src="/assets/jn-arrived.svg" alt="" className="h-[10.6px] w-3" />
                     Arrived by {bird?.name ?? 'Pip'}

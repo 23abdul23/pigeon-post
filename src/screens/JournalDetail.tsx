@@ -10,6 +10,7 @@ import { dms } from './Landing'
 import { playCoo } from '../lib/sound'
 import { useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
+import { useWikiPhoto } from '../lib/wikiPhoto'
 
 const BIRD_ICONS = [
   { icon: '/assets/sd-b1.svg', bg: 'bg-sky', w: 'h-[15px] w-[13.5px]', tag: 'Canopy' },
@@ -26,6 +27,7 @@ export default function JournalDetail() {
   const sorted = [...stories].sort((a, b) => b.dateMs - a.dateMs)
   const idx = sorted.findIndex((s) => s.id === storyId)
   const story = sorted[idx]
+  const photo = useWikiPhoto(story ?? { place: '', country: '' }) // Wikipedia's first result for "{place}, {country}"
   if (!story) return <Navigate to="/journal" replace />
 
   const prev = sorted[idx + 1]
@@ -85,7 +87,7 @@ export default function JournalDetail() {
         <div className="flex flex-col gap-4 px-5 lg:grid lg:grid-cols-[440px_1fr] lg:items-start lg:gap-8 lg:px-0">
           <div className="contents lg:flex lg:flex-col lg:gap-4">
           <div className="relative max-h-[300px] overflow-hidden rounded-[20px] bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)] lg:max-h-none">
-            <img src={story.photo ?? '/assets/place-fallback.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover lg:h-[400px]" />
+            <img src={photo ?? '/assets/place-fallback.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover lg:h-[400px]" />
             <div className="absolute inset-0 bg-gradient-to-t from-[rgba(51,48,44,0.6)] via-[rgba(51,48,44,0)] to-[rgba(0,0,0,0.2)]" />
             <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 rounded-full bg-[rgba(255,248,244,0.9)] px-3 py-1 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
