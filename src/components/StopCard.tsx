@@ -13,22 +13,22 @@ const TABS = [
   { id: 'people', label: 'People & culture' },
 ] as const
 
-export default function StopCard({ story, newStampCc, covered, queued, onDone }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; queued: number; onDone: () => void }) {
+export default function StopCard({ story, newStampCc, covered, queued, onDone, inline = false }: { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; queued: number; onDone: () => void; /** fills its container (the popup) instead of being a bottom sheet over the map */ inline?: boolean }) {
   const has = extrasHas(story.extras)
   const tabs = TABS.filter((t) => t.id === 'overview' || has[t.id])
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('overview')
   const active = tabs.some((t) => t.id === tab) ? tab : 'overview'
-  const move = (e: React.KeyboardEvent, i: number) => {
+  const move = (e: React.KeyboardEvent<HTMLElement>, i: number) => {
     const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!d) return
     e.preventDefault()
     const next = tabs[(i + d + tabs.length) % tabs.length]
     setTab(next.id)
-    document.getElementById(`stop-tab-${next.id}`)?.focus()
+    e.currentTarget.ownerDocument.getElementById(`stop-tab-${next.id}`)?.focus() // the popup has its own document
   }
   return (
-    <div role="dialog" aria-label={`Stop: ${story.place}`} className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex p-4">
-      <div className="pointer-events-auto relative flex max-h-[46dvh] w-full flex-col rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
+    <div role="dialog" aria-label={`Stop: ${story.place}`} className={inline ? 'flex h-full min-h-0 p-3' : 'pointer-events-none absolute inset-x-0 bottom-0 z-[5] flex p-4'}>
+      <div className={`relative flex w-full flex-col rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(62,58,54,0.2)] ${inline ? 'h-full' : 'pointer-events-auto max-h-[46dvh]'}`}>
         <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="truncate font-serif text-[22px] font-semibold leading-7 text-ink">{story.place}</h2>

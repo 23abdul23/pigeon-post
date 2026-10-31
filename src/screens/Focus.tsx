@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import BirdViewer from '../components/BirdViewer'
 import CountryStamps from '../components/CountryStamps'
+import FlightHud from '../components/FlightHud'
+import FlightPopup from '../components/FlightPopup'
 import FlightMap from '../components/FlightMap'
 import { Frame } from '../components/Layout'
 import ResumePrompt from '../components/ResumePrompt'
 import StopCard from '../components/StopCard'
-import StopsRail from '../components/StopsRail'
 import WindStreaks from '../components/WindStreaks'
 import { birdBySpecies } from '../lib/birds'
 import { coveredBetween, countryEntries, enteredBetween } from '../lib/countriesAlong'
@@ -14,6 +15,8 @@ import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
 import { startScreenWatch } from '../lib/idle'
+import { alertCheckpoint } from '../lib/checkpointAlert'
+import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup } from '../lib/pip'
 import { createPresence, isMobileDevice } from '../lib/presence'
 import { holdWakeLock } from '../lib/wakeLock'
 import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
@@ -56,6 +59,7 @@ export default function Focus() {
   const allCards = useStore((s) => s.stopCards)
   const bird = useStore((s) => s.bird)
   const soundOn = useStore((s) => s.soundOn)
+  const win = usePopup() // the floating flight popup, when open
   const [now, setNow] = useState(() => serverNow())
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
@@ -72,6 +76,21 @@ export default function Focus() {
   const flying = !!session && !session.leftAtMs
   const away = !!session?.leftAtMs
   const cards = useMemo(() => unreadCards(allCards, tripId ?? '', stories), [allCards, tripId, stories]) // this trip's cards whose story exists
+  const headCard = cards[0]
+  const headStory = headCard && stories.find((x) => x.id === headCard.storyId)
+  const headId = headStory ? headCard?.storyId : undefined
+
+  // A checkpoint in the popup: grow it (Chrome may refuse without a gesture, then it shows the card at its current size) and notify;
+  // the notification click is what brings this tab forward. Dismissing the last card shrinks it back to the flying view.
+  useEffect(() => {
+    if (!win) return
+    if (!headId) {
+      resizePopup(POPUP_SIZE)
+      return
+    }
+    resizePopup(CHECKPOINT_SIZE)
+    if (headStory) alertCheckpoint(headStory.place, () => window.focus())
+  }, [win, headId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
@@ -93,6 +112,7 @@ export default function Focus() {
       screen: watch.screen,
       onScreen: watch.subscribe,
       keepAliveActive: isKeepAliveActive,
+      pipActive: () => !!getPopup(), // the popup keeps the flight on screen, so a tab switch is not leaving
       onLeave: (at) => markLeft(at),
       now: serverNow,
     })
@@ -100,7 +120,10 @@ export default function Focus() {
       presence.stop()
       watch.stop()
     }
-  }, [flying])
+  }, [flying, win])
+
+  // Landing, End flight and in-app navigation all unmount this screen: the popup goes with it.
+  useEffect(() => () => closePopup(), [])
 
   // Stops the screen from locking by itself while the flight is on screen (a power-button lock is handled above).
   useEffect(() => (flying ? holdWakeLock() : undefined), [flying])
@@ -266,7 +289,24 @@ export default function Focus() {
   const km = !session && landing ? landing.km : (progress?.km ?? 0)
   const countdown = mmss(!session && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
   const pct = Math.round((km / trip.routeKm) * 100)
-  const circ = 2 * Math.PI * 20
+  const dismissHead = () => headCard && setState((st) => ({ stopCards: st.stopCards.filter((c) => c.storyId !== headCard.storyId) }))
+  const endAction = observing ? (
+    <button
+      type="button"
+      disabled={takingOver}
+      onClick={() => {
+        setTakingOver(true)
+        void takeOver().finally(() => setTakingOver(false))
+      }}
+      className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31] disabled:opacity-60"
+    >
+      Take over
+    </button>
+  ) : (
+    <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
+      End flight
+    </button>
+  )
 
   return (
     <Frame>
@@ -291,58 +331,21 @@ export default function Focus() {
         {!midStop && live && <CountryStamps entered={enteredBetween(hits, live.baseKm, km)} />}
 
         <aside className="absolute right-4 top-3 w-[270px] max-w-[calc(100%-2rem)] rounded-2xl bg-white/90 p-3.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-[6px]">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.6px] text-ink-2">
-              <span className="size-2 rounded-full bg-sage" />
-              Focus flight
-            </span>
-            {observing ? (
-              <button
-                type="button"
-                disabled={takingOver}
-                onClick={() => {
-                  setTakingOver(true)
-                  void takeOver().finally(() => setTakingOver(false))
-                }}
-                className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31] disabled:opacity-60"
-              >
-                Take over
-              </button>
-            ) : (
-              <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
-                End flight
-              </button>
-            )}
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <div>
-              <p className="font-serif text-[38px] font-semibold leading-[38px] tracking-[-0.95px] text-ink" aria-live="off">
-                {countdown}
-              </p>
-              <p className="flex items-center gap-1 pt-1 text-[12px] font-semibold tracking-[0.36px] text-sky-ink">
-                <img src="/assets/ic-nav-small.svg" alt="" className="size-[10.5px]" />
-                <span className="max-w-[130px] truncate">
-                  {trip.dest.name}, {trip.dest.country}
-                </span>
-              </p>
-            </div>
-            <div className="relative flex size-12 items-center justify-center" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Trip progress">
-              <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90">
-                <circle cx="24" cy="24" r="20" fill="none" stroke="#e9e1db" strokeWidth="4" />
-                <circle cx="24" cy="24" r="20" fill="none" stroke="#446650" strokeWidth="4" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - Math.min(1, pct / 100))} />
-              </svg>
-              <span className="relative text-[12px] font-bold tracking-[0.36px] text-sage">{pct}%</span>
-            </div>
-          </div>
-          <StopsRail stops={stops} fromKm={0} routeKm={trip.routeKm} km={km} />
-          <p className="pt-2 text-[14px] text-muted">
-            Next stop in <span className="font-bold text-ink">{countdown}</span>
-          </p>
+          <FlightHud
+            dest={`${trip.dest.name}, ${trip.dest.country}`}
+            countdown={countdown}
+            pct={pct}
+            stops={stops}
+            routeKm={trip.routeKm}
+            km={km}
+            action={endAction}
+          />
         </aside>
 
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 px-4 pb-6 pt-2">
           {observing && <p className="mx-auto rounded-full bg-card-soft/70 px-4 py-1 text-[16px] text-[rgba(142,77,49,0.9)]">Flying on your other device</p>}
           <div className="flex items-end justify-between">
+            <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setState({ soundOn: !soundOn })}
@@ -354,6 +357,12 @@ export default function Focus() {
                 <img src="/assets/ic-wave.svg" alt="" className={`h-[14.2px] w-[12.75px] ${soundOn ? '' : 'opacity-40'}`} />
               </span>
             </button>
+            {popupSupported() && !win && flying && (
+              <button type="button" onClick={() => void openPopup()} className="rounded-full bg-white/90 px-3 py-2.5 text-[13px] font-semibold text-ink-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
+                Pop out
+              </button>
+            )}
+            </div>
             <div className="flex items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">
               <span className="flex size-6 items-center justify-center rounded-full bg-card">
                 <img src="/assets/ic-compass-small.svg" alt="" className="size-[13.3px]" />
@@ -367,19 +376,25 @@ export default function Focus() {
         </div>
 
         {away && <ResumePrompt onContinue={resumeFlight} onLand={() => void landIfStillOwner('left')} />}
-        {(() => {
-          const head = cards[0]
-          const story = head && stories.find((x) => x.id === head.storyId)
-          return head && story ? (
-            <StopCard
-              story={story}
-              newStampCc={head.newStampCc}
-              covered={coveredBetween(hits, head.km - head.gainedKm, head.km)}
-              queued={cards.length}
-              onDone={() => setState((st) => ({ stopCards: st.stopCards.filter((c) => c.storyId !== head.storyId) }))}
-            />
-          ) : null
-        })()}
+        {!win && headCard && headStory && (
+          <StopCard
+            story={headStory}
+            newStampCc={headCard.newStampCc}
+            covered={coveredBetween(hits, headCard.km - headCard.gainedKm, headCard.km)}
+            queued={cards.length}
+            onDone={dismissHead}
+          />
+        )}
+        {win && flying && (
+          <FlightPopup
+            win={win}
+            species={species}
+            turnRef={turnRef}
+            hud={{ dest: `${trip.dest.name}, ${trip.dest.country}`, countdown, pct, stops, routeKm: trip.routeKm, km, onEnd: () => void landSession('ended') }} // the confirm dialog lives in the hidden tab, so the popup lands directly
+            card={headCard && headStory ? { story: headStory, newStampCc: headCard.newStampCc, covered: coveredBetween(hits, headCard.km - headCard.gainedKm, headCard.km), queued: cards.length, onDone: dismissHead } : null}
+            onOpenTab={() => window.focus()}
+          />
+        )}
 
         {confirmEnd && (
           <div role="dialog" aria-modal="true" aria-label="Land here?" className="absolute inset-0 z-20 flex items-center justify-center bg-ink/30 p-6">

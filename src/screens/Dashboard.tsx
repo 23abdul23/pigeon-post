@@ -15,6 +15,7 @@ import BirdThumb from '../components/BirdThumb'
 import { birdBySpecies } from '../lib/birds'
 import { RANGES, useFlightStats, type FlightRange } from '../components/FlightLog'
 import ScreenLockPrompt from '../components/ScreenLockPrompt'
+import { openPopup, popupSupported } from '../lib/pip'
 
 const DURATIONS = [10, 15, 25, 30]
 
@@ -76,6 +77,7 @@ export default function Dashboard() {
     setError('')
     afterLockPrompt(() => {
       const t = createTrip(dest)
+      if (popupSupported()) void openPopup() // best effort: needs the click's user activation, else the Pop out button is the fallback
       startSession(t, minutes)
       nav(`/fly/${t.id}`)
     })
@@ -89,12 +91,14 @@ export default function Dashboard() {
     }
     if (active.status === 'DELIVERED') {
       afterLockPrompt(() => {
+        if (popupSupported()) void openPopup()
         const back = startReturn(minutes)
         if (back) nav(`/fly/${back.id}`)
       })
       return
     }
     afterLockPrompt(() => {
+      if (popupSupported()) void openPopup()
       startSession({ ...active, status: active.status === 'PAUSED' ? 'OUTBOUND' : active.status }, minutes)
       nav(`/fly/${active.id}`)
     })

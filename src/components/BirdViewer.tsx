@@ -16,13 +16,14 @@ export default function BirdViewer({ bird, className = '', flight = false, turnR
       const { buildBird } = await import('../lib/birdModel')
       const el = host.current
       if (cancelled || !el) return
+      const view = el.ownerDocument.defaultView ?? window // the popup is another window: its frames keep coming while this tab is hidden
       let renderer: InstanceType<typeof THREE.WebGLRenderer>
       try {
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
       } catch {
         return // no WebGL: the empty tile stays as the fallback
       }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.setPixelRatio(Math.min(view.devicePixelRatio, 2))
       el.appendChild(renderer.domElement)
       renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab'
 
@@ -100,7 +101,7 @@ export default function BirdViewer({ bird, className = '', flight = false, turnR
       const clock = new THREE.Clock()
       let t = 0
       const loop = () => {
-        raf = requestAnimationFrame(loop)
+        raf = view.requestAnimationFrame(loop)
         const dt = Math.min(clock.getDelta(), 0.05)
         t += dt
         rig.update(dt)
@@ -115,7 +116,7 @@ export default function BirdViewer({ bird, className = '', flight = false, turnR
       loop()
 
       cleanup = () => {
-        cancelAnimationFrame(raf)
+        view.cancelAnimationFrame(raf)
         ro.disconnect()
         rig.dispose()
         renderer.dispose()
