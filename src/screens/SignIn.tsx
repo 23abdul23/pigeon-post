@@ -52,11 +52,11 @@ export default function SignIn() {
           <Slides images={SLIDES} slide={slide} />
           <div className="absolute inset-0 bg-gradient-to-b from-cream/90 via-cream/55 to-cream/10" />
         </div>
-        {/* desktop: 70 / 30 split, pictures on the left */}
-        <div className="relative hidden lg:block lg:w-[70%]" aria-hidden>
+        {/* desktop: the pictures cover the whole page, the sign-in panel floats over the right 30% */}
+        <div className="absolute inset-0 hidden lg:block" aria-hidden>
           <Slides images={DESKTOP_SLIDES} slide={slide} />
         </div>
-        <div className="relative flex flex-1 flex-col bg-cream lg:w-[30%] lg:flex-none lg:px-10 lg:py-6 lg:shadow-[-8px_0_24px_rgba(62,58,54,0.08)] max-lg:bg-transparent">
+        <div className="relative flex flex-1 flex-col max-lg:bg-transparent lg:ml-auto lg:w-[30%] lg:flex-none lg:bg-white/55 lg:px-10 lg:py-6 lg:shadow-[-8px_0_24px_rgba(62,58,54,0.12)] lg:backdrop-blur-xl">
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-1" aria-hidden>
             <span className="h-2 w-6 rounded-full bg-sage" />
