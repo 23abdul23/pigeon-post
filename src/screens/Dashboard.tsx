@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import MiniMap from '../components/MiniMap'
 import PlaceSearch from '../components/PlaceSearch'
 import { AppLayout } from '../components/Layout'
 import { Card, Hand, Pill, PrimaryButton, SoftButton } from '../components/ui'
 import Flag from '../components/Flag'
-import { deviceId } from '../lib/device'
-import { fmtKm, haversineKm } from '../lib/geo'
+import { deviceId, serverNow } from '../lib/device'
+import { fmtKm, haversineKm, pointAtKm, wrapLng } from '../lib/geo'
 import { useStore, type Place } from '../lib/store'
-import { flightRole, startReturn, startSession } from '../lib/flight'
+import { computeProgress, flightRole, startReturn, startSession } from '../lib/flight'
 import { createTrip, tripProblem } from '../lib/trips'
 import { greeting } from '../lib/greeting'
 import { markIdleAsked, requestIdlePermission, shouldAskIdlePermission } from '../lib/idle'
@@ -42,12 +43,13 @@ export default function Dashboard() {
   const trip = useStore((s) => s.trip)
   const stories = useStore((s) => s.stories)
   const flight = useStore((s) => s.flight)
+  const session = useStore((s) => s.session)
   useStore((s) => s.session) // re-render when this device starts or loses a flight
   const foreign = !!flight && flight.deviceId !== deviceId()
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!foreign) return
-    const id = window.setInterval(() => setTick((n) => n + 1), 15_000) // a foreign flight going stale frees "Start flight"
+    const id = window.setInterval(() => setTick((n) => n + 1), 5000) // a foreign flight going stale frees "Start flight"
     return () => window.clearInterval(id)
   }, [foreign])
   const elsewhere = flight && flightRole() === 'observer' ? flight : null // flying on another device
@@ -57,6 +59,16 @@ export default function Dashboard() {
 
   const latest = stories[0]
   const active = trip && trip.status !== 'DONE' ? trip : null
+  // where the bird is now (re-read on the 5 s tick): along the route while flying, at the trip's progress when landed, else at home
+  const flying = session && !session.leftAtMs ? session : flight
+  const here = (() => {
+    if (active && active.route.length > 1) {
+      const km = flying ? computeProgress(flying, active, serverNow()).km : active.progressKm
+      const [lat, lng] = pointAtKm(active.route, km).pt
+      return { lat, lng: wrapLng(lng) }
+    }
+    return home ? { lat: home.lat, lng: home.lng } : null
+  })()
   const km = home && dest ? Math.round(haversineKm(home, dest)) : 0
 
   function start() {
@@ -335,7 +347,13 @@ export default function Dashboard() {
         <div className="grid grid-cols-12 items-start gap-6 pt-2">
           <div className="col-span-8 flex flex-col gap-6">
             <section className="relative flex min-h-[560px] flex-col justify-between overflow-hidden rounded-[20px] bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <img src="/assets/dash-map-watercolor.png" alt="" className="absolute inset-0 size-full object-cover opacity-85" />
+              {here ? (
+                <div className="absolute inset-0 opacity-90">
+                  <MiniMap center={here} zoom={active ? 5 : 6} className="size-full" />
+                </div>
+              ) : (
+                <img src="/assets/dash-map-watercolor.png" alt="" className="absolute inset-0 size-full object-cover opacity-85" />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-card via-card/0 via-50% to-cream/40" />
               <div className="relative flex items-start justify-between p-4">
                 <div className="flex flex-col rounded-xl bg-cream/90 px-4 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[4px]">
@@ -353,14 +371,14 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center gap-2">
                   <span className="flex items-center gap-1.5 rounded-full bg-cream/95 px-4 py-1 font-hand text-[22px] leading-[22px] text-sage shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[4px]">
                     <span className="size-2 rounded-full bg-sage" />
-                    {bird?.name ?? 'Your bird'} resting in {home?.name ?? 'home'}
+                    {`${bird?.name ?? 'Your bird'} ${active ? `${flying ? 'flying' : 'resting en route'} to ${active.dest.name}` : `resting in ${home?.name ?? 'home'}`}`}
                   </span>
                   <span className="flex size-24 items-center justify-center overflow-hidden rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.06),0_4px_6px_rgba(0,0,0,0.07)]">
                     {bird && <BirdThumb bird={birdBySpecies(bird.species)} className="size-full object-cover" />}
                   </span>
-                  {home && (
+                  {here && (
                     <span className="rounded-md bg-[#efe7e1]/90 px-2 py-0.5 text-[12px] font-bold leading-4 tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                      {Math.abs(home.lat).toFixed(2)}°{home.lat >= 0 ? 'N' : 'S'} {Math.abs(home.lng).toFixed(2)}°{home.lng >= 0 ? 'E' : 'W'}
+                      {Math.abs(here.lat).toFixed(2)}°{here.lat >= 0 ? 'N' : 'S'} {Math.abs(here.lng).toFixed(2)}°{here.lng >= 0 ? 'E' : 'W'}
                     </span>
                   )}
                 </div>
