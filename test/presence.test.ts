@@ -3,7 +3,7 @@ import { createPresence, DECIDE_MS, isMobileDevice, UNLOCK_GRACE_MS } from '../s
 import type { ScreenState } from '../src/lib/idle'
 
 // A fake page: EventTargets plus the two fields the controller reads, driven by hand.
-function setup(opts: { mobile: boolean; screen?: ScreenState; audio?: boolean }) {
+function setup(opts: { mobile: boolean; screen?: ScreenState; audio?: boolean; pip?: boolean }) {
   const doc = Object.assign(new EventTarget(), { visibilityState: 'visible', focused: true, hasFocus() { return this.focused } })
   const win = new EventTarget()
   let screen: ScreenState = opts.screen ?? 'unknown'
@@ -17,6 +17,7 @@ function setup(opts: { mobile: boolean; screen?: ScreenState; audio?: boolean })
     screen: () => screen,
     onScreen: (cb) => (subs.add(cb), () => subs.delete(cb)),
     keepAliveActive: () => !!opts.audio,
+    pipActive: opts.pip === undefined ? undefined : () => opts.pip!,
     onLeave: (at) => left.push(at),
     now: () => clock,
   })
@@ -161,6 +162,43 @@ describe('desktop', () => {
 
   it('without the signal a hidden tab is leaving even while the keep-alive audio plays', () => {
     const t = setup({ mobile: false, audio: true })
+    t.hide()
+    t.tick(DECIDE_MS + 1)
+    expect(t.left.length).toBe(1)
+  })
+})
+
+describe('desktop with the flight popup (Document Picture-in-Picture)', () => {
+  it('desktop with the popup open: hiding the page does not leave', () => {
+    const t = setup({ mobile: false, screen: 'unlocked', pip: true })
+    t.hide()
+    t.tick(DECIDE_MS + 100)
+    expect(t.left).toEqual([])
+    expect(t.p.state()).toBe('present')
+  })
+
+  it('desktop with the popup open: window blur does not leave', () => {
+    const t = setup({ mobile: false, screen: 'unlocked', pip: true })
+    t.blur()
+    t.tick(DECIDE_MS + 100)
+    expect(t.left).toEqual([])
+  })
+
+  it('popup closed while the page is hidden: a fresh controller leaves after DECIDE_MS', () => {
+    // the Focus effect rebuilds the controller when the popup closes; the hidden page is then away again
+    const t = setup({ mobile: false, screen: 'unlocked', pip: true })
+    t.hide()
+    t.tick(1000)
+    t.p.stop()
+    const doc = { visibilityState: 'hidden', hasFocus: () => false, addEventListener() {}, removeEventListener() {} }
+    const left: number[] = []
+    createPresence({ doc, win: new EventTarget(), mobile: false, screen: () => 'unlocked', onScreen: () => () => {}, keepAliveActive: () => false, pipActive: () => false, onLeave: (at) => left.push(at) })
+    vi.advanceTimersByTime(DECIDE_MS)
+    expect(left.length).toBe(1)
+  })
+
+  it('without pipActive behaviour is unchanged', () => {
+    const t = setup({ mobile: false, screen: 'unlocked' })
     t.hide()
     t.tick(DECIDE_MS + 1)
     expect(t.left.length).toBe(1)

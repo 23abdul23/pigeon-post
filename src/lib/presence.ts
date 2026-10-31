@@ -6,6 +6,8 @@
 // The lock is read from Chrome's Idle Detection (`screen`). Without it (iOS Safari, Firefox, permission refused):
 //   mobile  -> a hidden page whose keep-alive audio plays counts as a lock (the earlier behaviour), anything else is leaving;
 //   desktop -> hidden or unfocused is leaving (the audio no longer excuses a tab switch).
+// While the flight popup (Document Picture-in-Picture) is open the flight stays on screen, so tab switches are not leaving;
+// closing it rebuilds the controller, and a page that is still hidden then leaves as above.
 // Mobile ignores window focus: the keyboard, the URL bar and dialogs blur the window without the person leaving.
 
 import type { ScreenState } from './idle'
@@ -24,6 +26,8 @@ export type PresenceDeps = {
   screen: () => ScreenState
   onScreen: (cb: (s: ScreenState) => void) => () => void
   keepAliveActive: () => boolean
+  /** the flight popup is open: it keeps the flight visible, so hiding or blurring this page is not leaving */
+  pipActive?: () => boolean
   /** `atMs` is when the person actually left (not when this was decided), on the `now` clock */
   onLeave: (atMs: number) => void
   now?: () => number
@@ -36,7 +40,7 @@ export function createPresence(deps: PresenceDeps): { stop(): void; state(): Pre
   let awaySince = 0
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const away = () => doc.visibilityState === 'hidden' || (!mobile && !doc.hasFocus())
+  const away = () => !deps.pipActive?.() && (doc.visibilityState === 'hidden' || (!mobile && !doc.hasFocus()))
   const clear = () => {
     clearTimeout(timer)
     timer = undefined
