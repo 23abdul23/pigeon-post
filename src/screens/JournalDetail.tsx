@@ -82,7 +82,7 @@ export default function JournalDetail() {
 
         <div className="flex flex-col gap-4 px-5">
           <div className="relative max-h-[300px] overflow-hidden rounded-[20px] bg-[#efe7e1] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <img src={story.photo ?? '/assets/terrain-underlayer.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover" />
+            <img src={story.photo ?? '/assets/place-fallback.jpg'} alt={`${story.place}`} className="h-[262px] w-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[rgba(51,48,44,0.6)] via-[rgba(51,48,44,0)] to-[rgba(0,0,0,0.2)]" />
             <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 rounded-full bg-[rgba(255,248,244,0.9)] px-3 py-1 text-[12px] font-bold tracking-[0.36px] text-ink shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-[6px]">

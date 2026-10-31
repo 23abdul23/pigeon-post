@@ -79,8 +79,8 @@ export default function Mailbox() {
                 </div>
               </div>
               {l.status === 'WAITING' && to && (
-                <Link to={`/trip/new?friend=${to.id}`} aria-label={`Fly to ${to.name}`} className="flex size-8 items-center justify-center rounded-full bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-                  <img src="/assets/fr-compass.svg" alt="" className="size-[15px]" />
+                <Link to={`/trip/new?friend=${to.id}`} aria-label={`Fly to ${to.name}`} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-sage shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                  Fly there
                 </Link>
               )}
             </div>
@@ -143,7 +143,7 @@ export default function Mailbox() {
                   </span>
                 </span>
               </span>
-              <img src="/assets/ic-angle-down.svg" alt="" className={`mr-2 size-3 transition-transform ${pendingOpen ? '' : 'rotate-180'}`} />
+              <img src="/assets/ic-angle-down.svg" alt="" className={`mr-2 size-5 transition-transform ${pendingOpen ? 'rotate-180' : ''}`} />
             </button>
             {pendingOpen && <div className="flex flex-col gap-2 p-2 pt-0">{pending.map(sentRow)}</div>}
           </div>
