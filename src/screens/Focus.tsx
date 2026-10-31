@@ -15,6 +15,7 @@ import { loadCountryAt } from '../lib/countryAt'
 import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
 import { startScreenWatch } from '../lib/idle'
+import { restHere } from '../lib/rest'
 import { alertCheckpoint } from '../lib/checkpointAlert'
 import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup, watchTabLeave } from '../lib/pip'
 import { createPresence, isMobileDevice } from '../lib/presence'
@@ -64,6 +65,7 @@ export default function Focus() {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
   const [takingOver, setTakingOver] = useState(false)
+  const [resting, setResting] = useState(false)
   // observer: another device flies this trip; the bird moves on the server clock, and only the owner heartbeats or lands
   const observing = flightRole() === 'observer' && flight?.tripId === tripId
   const [watched, setWatched] = useState<ActiveFlight | null>(null)
@@ -225,8 +227,8 @@ export default function Focus() {
 
   // unread stop cards are shown before leaving for the landing page
   useEffect(() => {
-    if (landing && !midStop && !session && cards.length === 0) nav(`/landing/${landing.storyId}`, { replace: true })
-  }, [landing, midStop, session, cards.length, nav])
+    if (landing && !midStop && !session && !resting && cards.length === 0) nav(`/landing/${landing.storyId}`, { replace: true })
+  }, [landing, midStop, session, cards.length, nav, resting])
 
   // warm the story for the place this slot ends at, so the stop card needs no spinner
   useEffect(() => {
@@ -292,6 +294,10 @@ export default function Focus() {
   const km = !session && landing ? landing.km : (progress?.km ?? 0)
   const countdown = mmss(!session && landing ? landing.durationMin * 60000 : (progress?.remainingMs ?? 0))
   const pct = Math.round((km / trip.routeKm) * 100)
+  const rest = () => {
+    setResting(true) // keeps the landing page back until the place's card is queued
+    void restHere().finally(() => setResting(false))
+  }
   const dismissHead = () => headCard && setState((st) => ({ stopCards: st.stopCards.filter((c) => c.storyId !== headCard.storyId) }))
   const endAction = observing ? (
     <button
@@ -306,9 +312,14 @@ export default function Focus() {
       Take over
     </button>
   ) : (
-    <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
-      End flight
-    </button>
+    <span className="flex items-center gap-1">
+      <button type="button" disabled={resting} onClick={rest} className="rounded bg-sage px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-white disabled:opacity-60">
+        {resting ? 'Resting…' : 'Rest here'}
+      </button>
+      <button type="button" onClick={() => setConfirmEnd(true)} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
+        End flight
+      </button>
+    </span>
   )
 
   return (
@@ -388,12 +399,12 @@ export default function Focus() {
             onDone={dismissHead}
           />
         )}
-        {win && flying && (
+        {win && (flying || !!headCard) && (
           <FlightPopup
             win={win}
             species={species}
             turnRef={turnRef}
-            hud={{ dest: `${trip.dest.name}, ${trip.dest.country}`, countdown, pct, stops, routeKm: trip.routeKm, km, onEnd: () => void landSession('ended') }} // the confirm dialog lives in the hidden tab, so the popup lands directly
+            hud={{ dest: `${trip.dest.name}, ${trip.dest.country}`, countdown, pct, stops, routeKm: trip.routeKm, km, onEnd: () => void landSession('ended'), onRest: rest, resting }} // the confirm dialog lives in the hidden tab, so the popup lands directly
             card={headCard && headStory ? { story: headStory, newStampCc: headCard.newStampCc, covered: coveredBetween(hits, headCard.km - headCard.gainedKm, headCard.km), queued: cards.length, onDone: dismissHead } : null}
             onOpenTab={() => window.focus()}
           />

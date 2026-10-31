@@ -6,7 +6,7 @@ import BirdViewer from './BirdViewer'
 import FlightHud from './FlightHud'
 import StopCard from './StopCard'
 
-type Hud = Omit<ComponentProps<typeof FlightHud>, 'action'> & { onEnd: () => void }
+type Hud = Omit<ComponentProps<typeof FlightHud>, 'action'> & { onEnd: () => void; onRest: () => void; resting: boolean }
 type Card = { story: Story; newStampCc?: string; covered?: { cc: string; country: string }[]; queued: number; onDone: () => void }
 
 /**
@@ -14,7 +14,7 @@ type Card = { story: Story; newStampCc?: string; covered?: { cc: string; country
  * Without a checkpoint: the flying bird with the flight card under it. With one: the stop card (place first) and a way back to the tab.
  */
 export default function FlightPopup({ win, species, turnRef, hud, card, onOpenTab }: { win: Window; species: BirdSpecies; turnRef: { current: number }; hud: Hud; card: Card | null; onOpenTab: () => void }) {
-  const { onEnd, ...hudProps } = hud
+  const { onEnd, onRest, resting, ...hudProps } = hud
   return createPortal(
     <div className="@container flex h-dvh min-h-0 flex-col bg-cream">
       {card ? (
@@ -36,9 +36,14 @@ export default function FlightPopup({ win, species, turnRef, hud, card, onOpenTa
               {...hudProps}
               stops={hudProps.stops}
               action={
-                <button type="button" onClick={onEnd} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
-                  End flight
-                </button>
+                <span className="flex items-center gap-1">
+                  <button type="button" disabled={resting} onClick={onRest} className="rounded bg-sage px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-white disabled:opacity-60">
+                    {resting ? 'Resting…' : 'Rest here'}
+                  </button>
+                  <button type="button" onClick={onEnd} className="rounded bg-[rgba(239,231,225,0.6)] px-1.5 py-0.5 text-[12px] font-semibold tracking-[0.36px] text-[#8e4d31]">
+                    End flight
+                  </button>
+                </span>
               }
             />
           </div>
