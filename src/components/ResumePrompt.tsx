@@ -10,7 +10,7 @@ export default function ResumePrompt({ onContinue, onLand }: { onContinue: () =>
         <PrimaryButton onClick={onContinue} className="mt-4">
           Continue
         </PrimaryButton>
-        <button type="button" onClick={onLand} className="mt-2 w-full py-2 text-[13px] font-semibold text-muted">
+        <button type="button" onClick={onLand} className="mt-2 mx-auto w-fit px-6 py-2 text-[13px] font-semibold text-muted">
           Land here
         </button>
       </div>

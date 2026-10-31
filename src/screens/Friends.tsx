@@ -295,11 +295,11 @@ export default function Friends() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => acceptFriend(f.id)} className="flex-1 rounded-full bg-[#8e4d31] py-2 text-[14px] font-bold text-white">
+                <div className="flex justify-center gap-2">
+                  <button type="button" onClick={() => acceptFriend(f.id)} className="px-5 rounded-full bg-[#8e4d31] py-2 text-[14px] font-bold text-white">
                     Accept
                   </button>
-                  <button type="button" onClick={() => declineFriend(f.id)} className="flex-1 rounded-full bg-line py-2 text-[14px] font-bold text-ink-2">
+                  <button type="button" onClick={() => declineFriend(f.id)} className="px-5 rounded-full bg-line py-2 text-[14px] font-bold text-ink-2">
                     Decline
                   </button>
                 </div>

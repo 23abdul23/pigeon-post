@@ -229,7 +229,7 @@ export default function JournalDetail() {
             <button
               type="button"
               onClick={() => nav(`/trip/new?place=${encodeURIComponent([story.place, story.country, story.cc, story.lat, story.lng].join('|'))}`)}
-              className="relative flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#d58767] text-[14px] font-bold uppercase tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
+              className="relative flex h-14 mx-auto w-fit px-6 items-center justify-center gap-2 rounded-full bg-[#d58767] text-[14px] font-bold uppercase tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
             >
               <img src="/assets/sd-fly.svg" alt="" className="size-[18.3px]" />
               Fly here again

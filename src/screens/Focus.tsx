@@ -415,8 +415,8 @@ export default function Focus() {
             <div className="w-full rounded-2xl bg-white p-5 text-center shadow-[0_8px_24px_rgba(62,58,54,0.2)]">
               <h2 className="font-serif text-[20px] font-semibold text-ink">Land here?</h2>
               <p className="pt-1 text-[14px] text-ink-2">Your bird will rest where it is and you can pick up this trip later.</p>
-              <div className="flex gap-2 pt-4">
-                <button type="button" onClick={() => setConfirmEnd(false)} className="flex-1 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2">
+              <div className="flex justify-center gap-2 pt-4">
+                <button type="button" onClick={() => setConfirmEnd(false)} className="px-5 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2">
                   Keep flying
                 </button>
                 <button
@@ -425,7 +425,7 @@ export default function Focus() {
                     setConfirmEnd(false)
                     void landSession('ended')
                   }}
-                  className="flex-1 rounded-full bg-[#8e4d31] py-2.5 text-[14px] font-bold text-white"
+                  className="px-5 rounded-full bg-[#8e4d31] py-2.5 text-[14px] font-bold text-white"
                 >
                   Land here
                 </button>

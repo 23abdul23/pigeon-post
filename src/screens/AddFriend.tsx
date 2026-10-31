@@ -155,12 +155,12 @@ export default function AddFriend() {
                   <span className="min-w-0 flex-1 truncate text-[14px] text-ink">{link || 'Loading your link...'}</span>
                   {copied && <img src="/assets/af-check.svg" alt="Copied" className="size-4" />}
                 </div>
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => void copy()} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#d58767] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                <div className="flex justify-center gap-2 pt-1">
+                  <button type="button" onClick={() => void copy()} className="flex px-5 items-center justify-center gap-1.5 rounded-full bg-[#d58767] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                     <img src="/assets/af-copy.svg" alt="" className="h-[15px] w-[12.8px]" />
                     {copied ? 'Copied' : 'Copy link'}
                   </button>
-                  <button type="button" onClick={() => void share()} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-card py-3 text-[14px] font-bold tracking-[0.28px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                  <button type="button" onClick={() => void share()} className="flex px-5 items-center justify-center gap-1.5 rounded-full bg-card py-3 text-[14px] font-bold tracking-[0.28px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                     <img src="/assets/af-share.svg" alt="" className="h-3 w-[14.3px]" />
                     Share via...
                   </button>
@@ -258,7 +258,7 @@ export default function AddFriend() {
                       {existing.status === 'accepted' ? "You're already friends" : 'Request already sent'}
                     </p>
                   ) : (
-                    <button type="button" onClick={send} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#d58767] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+                    <button type="button" onClick={send} className="flex mx-auto w-fit px-6 items-center justify-center gap-2 rounded-full bg-[#d58767] py-3 text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
                       <img src="/assets/af-send.svg" alt="" className="h-[14.2px] w-[16.7px]" />
                       Send roost request
                     </button>

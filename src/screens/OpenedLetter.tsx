@@ -231,17 +231,17 @@ export default function OpenedLetter() {
 
         <div className="flex flex-col gap-2 px-5 pb-6 pt-4">
           {other && !mine ? (
-            <button type="button" onClick={() => nav(`/trip/new?friend=${other.id}&letter=1`)} className="flex h-14 w-full items-center justify-center gap-1 rounded-full bg-[#8e4d31] text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_7px_rgba(142,77,49,0.28)]">
+            <button type="button" onClick={() => nav(`/trip/new?friend=${other.id}&letter=1`)} className="flex h-14 mx-auto w-fit px-6 items-center justify-center gap-1 rounded-full bg-[#8e4d31] text-[14px] font-bold tracking-[0.28px] text-white shadow-[0_4px_7px_rgba(142,77,49,0.28)]">
               <img src="/assets/ol-reply.svg" alt="" className="h-[13.3px] w-[15px]" />
               Reply with letter
             </button>
           ) : null}
-          <div className="flex gap-2">
-            <button type="button" onClick={toggleSave} aria-pressed={!!letter.saved} className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-card text-[14px] font-bold tracking-[0.28px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+          <div className="flex justify-center gap-2">
+            <button type="button" onClick={toggleSave} aria-pressed={!!letter.saved} className="flex h-11 px-5 items-center justify-center gap-1.5 rounded-full bg-card text-[14px] font-bold tracking-[0.28px] text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
               <img src="/assets/ol-bookmark.svg" alt="" className="h-[13.5px] w-[10.5px]" />
               {letter.saved ? 'Saved' : 'Save to Keepsakes'}
             </button>
-            <button type="button" onClick={() => nav('/mailbox')} className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#efe7e1] text-[14px] font-bold tracking-[0.28px] text-ink-2 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
+            <button type="button" onClick={() => nav('/mailbox')} className="flex h-11 px-5 items-center justify-center gap-1.5 rounded-full bg-[#efe7e1] text-[14px] font-bold tracking-[0.28px] text-ink-2 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
               <img src="/assets/ol-folder.svg" alt="" className="h-3 w-[16.1px]" />
               Close letter
             </button>

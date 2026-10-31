@@ -155,7 +155,7 @@ export default function Passport() {
                 <img src="/assets/pp-close.svg" alt="" className="size-[11.7px]" />
               </button>
             </div>
-            <button type="button" onClick={() => nav(`/journal?cc=${picked.cc}`)} disabled={pickedStories.length === 0} className="relative mt-2 flex w-full items-center justify-between rounded-lg bg-card-soft p-2 disabled:opacity-60">
+            <button type="button" onClick={() => nav(`/journal?cc=${picked.cc}`)} disabled={pickedStories.length === 0} className="relative mt-2 flex mx-auto w-fit px-6 items-center justify-between rounded-lg bg-card-soft p-2 disabled:opacity-60">
               <span className="flex items-center gap-1 text-[12px] font-bold tracking-[0.36px] text-ink">
                 <img src="/assets/pp-journal.svg" alt="" className="h-[14.6px] w-[16.5px]" />
                 View {pickedStories.length} stor{pickedStories.length === 1 ? 'y' : 'ies'} in Journal
@@ -217,7 +217,7 @@ export default function Passport() {
         </section>
 
         <div className="flex flex-col items-center pt-1 lg:hidden">
-          <button type="button" onClick={() => nav('/passport/share')} className="relative flex w-full items-center justify-center gap-1 rounded-full bg-[#d58767] px-6 py-3.5 text-[14px] font-bold uppercase tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
+          <button type="button" onClick={() => nav('/passport/share')} className="relative flex mx-auto w-fit items-center justify-center gap-1 rounded-full bg-[#d58767] px-6 py-3.5 text-[14px] font-bold uppercase tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
             <img src="/assets/pp-spark.svg" alt="" className="size-[18.3px]" />
             Share stamps
             <img src="/assets/af-share.svg" alt="" className="h-[15px] w-[13.5px] brightness-0 invert" />

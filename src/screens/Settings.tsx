@@ -294,11 +294,11 @@ export default function Settings() {
                 {deleteError}
               </p>
             )}
-            <div className="flex gap-2 pt-4">
-              <button type="button" disabled={deleting} onClick={() => (setConfirmDelete(false), setDeleteError(''))} className="flex-1 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2 disabled:opacity-60">
+            <div className="flex justify-center gap-2 pt-4">
+              <button type="button" disabled={deleting} onClick={() => (setConfirmDelete(false), setDeleteError(''))} className="px-5 rounded-full bg-card-soft py-2.5 text-[14px] font-bold text-ink-2 disabled:opacity-60">
                 Keep it
               </button>
-              <button type="button" disabled={deleting} onClick={deleteAccount} className="flex-1 rounded-full bg-[#ba1a1a] py-2.5 text-[14px] font-bold text-white disabled:opacity-60">
+              <button type="button" disabled={deleting} onClick={deleteAccount} className="px-5 rounded-full bg-[#ba1a1a] py-2.5 text-[14px] font-bold text-white disabled:opacity-60">
                 {deleting ? 'Deleting...' : deleteError ? 'Try again' : 'Delete'}
               </button>
             </div>

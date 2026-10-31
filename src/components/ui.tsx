@@ -20,7 +20,7 @@ export function PrimaryButton({ children, className = '', ...rest }: React.Butto
     <button
       type="button"
       {...rest}
-      className={`flex w-full items-center justify-center gap-2 rounded-full bg-[#d58767] py-3.5 text-[14px] font-bold uppercase tracking-[0.35px] text-white ${shadowSm} disabled:opacity-50 ${className}`}
+      className={`flex mx-auto w-fit px-8 items-center justify-center gap-2 rounded-full bg-[#d58767] py-3.5 text-[14px] font-bold uppercase tracking-[0.35px] text-white ${shadowSm} disabled:opacity-50 ${className}`}
     >
       {children}
     </button>
@@ -32,7 +32,7 @@ export function SoftButton({ children, className = '', ...rest }: React.ButtonHT
     <button
       type="button"
       {...rest}
-      className={`flex w-full items-center justify-center gap-2 rounded-full bg-card-soft py-2.5 text-[14px] font-bold tracking-[0.28px] text-sage disabled:opacity-50 ${className}`}
+      className={`flex mx-auto w-fit px-8 items-center justify-center gap-2 rounded-full bg-card-soft py-2.5 text-[14px] font-bold tracking-[0.28px] text-sage disabled:opacity-50 ${className}`}
     >
       {children}
     </button>

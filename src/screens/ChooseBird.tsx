@@ -148,7 +148,7 @@ export default function ChooseBird() {
           <button
             type="button"
             onClick={start}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#d58767] px-6 py-3 text-[14px] font-bold tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
+            className="flex items-center justify-center gap-2 rounded-full bg-[#d58767] px-6 py-3 text-[14px] font-bold tracking-[0.35px] text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
           >
             <img src="/assets/ic-plane-white.svg" alt="" className="h-[18.3px] w-[14.8px]" />
             {fromSettings ? 'Save bird' : 'Start flying'}
