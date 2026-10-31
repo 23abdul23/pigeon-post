@@ -5,8 +5,8 @@ import Stamp from '../components/Stamp'
 import StoryDetails from '../components/StoryDetails'
 import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
-import { clearStopCards, startReturn } from '../lib/flight'
-import { setState, useStore } from '../lib/store'
+import { clearStopCards, flightRole, startReturn, startSession } from '../lib/flight'
+import { getState, setState, useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
 
 export const dms = (v: number, pos: string, neg: string) => {
@@ -50,6 +50,15 @@ export default function Landing() {
     if (landing) clearStopCards(landing.tripId)
     setState({ landing: null })
     nav('/home')
+  }
+
+  /** Resumes the focus session: flies the next slot of this trip from where the bird rested, with the same length as the last one. */
+  function continueJourney() {
+    const { flight } = getState()
+    if (flight && flightRole() === 'observer') return nav(`/fly/${flight.tripId}`, { replace: true }) // another device already flies
+    if (!here || !trip || !landing || trip.status === 'DONE' || trip.status === 'DELIVERED') return leave()
+    startSession({ ...trip, status: trip.status === 'PAUSED' ? 'OUTBOUND' : trip.status }, landing.durationMin || 25)
+    nav(`/fly/${trip.id}`, { replace: true })
   }
 
   function flyHome() {
@@ -201,7 +210,7 @@ export default function Landing() {
           </div>
           <button
             type="button"
-            onClick={delivered ? flyHome : returned && waiting > 0 ? openMailbox : leave}
+            onClick={delivered ? flyHome : returned && waiting > 0 ? openMailbox : returned || trip?.status === 'DONE' ? leave : continueJourney}
             className="flex h-12 max-w-[190px] flex-1 items-center justify-center rounded-full bg-[#d58767] px-4 text-[14px] font-bold tracking-[0.28px] text-[#572309] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]"
           >
             {delivered ? 'Fly home' : returned && waiting > 0 ? 'Open mailbox' : returned || trip?.status === 'DONE' ? 'Back home' : 'Continue journey'}
