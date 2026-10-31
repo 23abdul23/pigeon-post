@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
-import { playCoo } from '../lib/sound'
 import { useStore, type Story } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
 import { useWikiPhoto } from '../lib/wikiPhoto'
@@ -170,11 +169,6 @@ export default function Journal() {
                 <div className="flex items-center justify-between border-t border-outline/30 pt-[9px]">
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-bold tracking-[0.36px] text-muted">{new Date(s.dateMs).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                    <span className="text-[16px] text-muted/50">•</span>
-                    <button type="button" onClick={() => playCoo()} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-bold tracking-[0.36px] ${i === 0 ? 'bg-[#c6ecd0] text-[#2c4e39]' : 'bg-card text-ink-2'}`}>
-                      <img src="/assets/jn-audio.svg" alt="" className="h-[13.3px] w-3" />
-                      coo replay
-                    </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

@@ -8,7 +8,6 @@ import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
 import { birdBySpecies } from '../lib/birds'
 import { DEMO_MODE, loadDemoData } from '../lib/demo'
-import { playCoo } from '../lib/sound'
 import { setState, useStore, type Settings as SettingsT } from '../lib/store'
 import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
@@ -197,9 +196,6 @@ export default function Settings() {
           <Row label="Flight ambience">
             <Switch on={draft.ambience} onChange={(v) => set('ambience', v)} label="Flight ambience" />
           </Row>
-          <button type="button" onClick={() => playCoo(true)} className="mt-2 rounded-full bg-white px-4 py-2 text-[12px] font-bold text-sage shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-            Play a test coo
-          </button>
         </Card>
 
         <Card id="notifications" title="Notifications" refs={refs}>

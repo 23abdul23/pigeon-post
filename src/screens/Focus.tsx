@@ -16,7 +16,7 @@ import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
 import { startScreenWatch } from '../lib/idle'
 import { alertCheckpoint } from '../lib/checkpointAlert'
-import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup } from '../lib/pip'
+import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup, watchTabLeave } from '../lib/pip'
 import { createPresence, isMobileDevice } from '../lib/presence'
 import { holdWakeLock } from '../lib/wakeLock'
 import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
@@ -121,6 +121,9 @@ export default function Focus() {
       watch.stop()
     }
   }, [flying, win])
+
+  // The popup appears when this tab is left and goes when the person returns; it is not shown while they are on this screen.
+  useEffect(() => (flying ? watchTabLeave() : undefined), [flying])
 
   // Landing, End flight and in-app navigation all unmount this screen: the popup goes with it.
   useEffect(() => () => closePopup(), [])

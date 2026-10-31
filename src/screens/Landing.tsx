@@ -6,7 +6,6 @@ import StoryDetails from '../components/StoryDetails'
 import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
 import { clearStopCards, startReturn } from '../lib/flight'
-import { playCoo } from '../lib/sound'
 import { setState, useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
 
@@ -193,9 +192,6 @@ export default function Landing() {
       <div className="sticky bottom-0 z-30 bg-[rgba(255,248,244,0.9)] px-4 py-3 shadow-[0_-4px_24px_rgba(62,58,54,0.06)] backdrop-blur-[12px]">
         <div className="flex items-center gap-5">
           <div className="flex items-center">
-            <button type="button" onClick={() => playCoo()} aria-label="Play a coo" className="flex size-11 items-center justify-center rounded-full bg-card">
-              <img src="/assets/ic-speaker.svg" alt="" className="h-[14.6px] w-[15px]" />
-            </button>
             <button type="button" onClick={toggleSave} aria-pressed={story.saved} aria-label={story.saved ? 'Remove from journal' : 'Save story to journal'} className={`ml-1 flex size-11 items-center justify-center rounded-full ${story.saved ? 'bg-[#c6ecd0]' : 'bg-card'}`}>
               <img src="/assets/ic-bookmark.svg" alt="" className="h-[15px] w-[11.7px]" />
             </button>

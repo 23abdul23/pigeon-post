@@ -191,6 +191,10 @@ Branch `claude/youthful-gates-b17ljo`, merged to `main`. Automated checks: `npx 
 - `Landing.tsx` (`startReturn`) does not open the popup; it was not one of the plan's four sites.
 - The repo root is itself a git repo, so the plan's "no git" note no longer applies and work was committed.
 
+### Behaviour change after review
+- The popup no longer opens on flight start (the Dashboard / TripComposer `openPopup()` calls were removed). `watchTabLeave()` in `src/lib/pip.ts` opens it when the tab is hidden, via `visibilitychange` and Chrome's `enterpictureinpicture` media-session action, and closes it when the person returns. A popup opened by hand with "Pop out" stays open.
+- Open question for Chrome: whether a popup can open on tab switch without a click. If it cannot, the flight freezes on leaving as before.
+
 ### Left to test (needs desktop Chrome/Edge; not run)
 - [ ] Task 4 Step 4: visual regression of the HUD at mobile and desktop widths (`/fly/<id>`).
 - [ ] Task 6 Step 2.1: start a flight; popup opens in a corner, drags and resizes, contents rescale.

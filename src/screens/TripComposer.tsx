@@ -13,7 +13,6 @@ import { fmtKm, haversineKm } from '../lib/geo'
 import { COGNITO_CONFIGURED } from '../lib/auth'
 import { avatarColor, initials, uploadAttachment, writeLetter } from '../lib/social'
 import { useStore, type Letter, type Place } from '../lib/store'
-import { openPopup, popupSupported } from '../lib/pip'
 import { createTrip, tripProblem } from '../lib/trips'
 
 const MAX_CHARS = 600
@@ -152,7 +151,6 @@ export default function TripComposer() {
     // the letter first, so the trip (and POST /trips) carries its id
     const letter = friend && withLetter && (text.trim() || files.length) ? writeLetter({ toId: friend.id, text: text.trim(), attachments: files, status: 'CARRIED' }) : null
     const trip = createTrip(dest, { friendId: friend?.id, letterIds: letter ? [letter.id] : [] })
-    if (popupSupported()) void openPopup()
     startSession(trip, 25)
     nav(`/fly/${trip.id}`)
   }

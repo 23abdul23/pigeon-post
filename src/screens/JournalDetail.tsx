@@ -7,7 +7,6 @@ import StoryDetails from '../components/StoryDetails'
 import MiniMap from '../components/MiniMap'
 import { fmtKm } from '../lib/geo'
 import { dms } from './Landing'
-import { playCoo } from '../lib/sound'
 import { useStore } from '../lib/store'
 import { toggleStorySaved } from '../lib/stories'
 import { useWikiPhoto } from '../lib/wikiPhoto'
@@ -224,7 +223,6 @@ export default function JournalDetail() {
 
           <div className="order-6 flex flex-col gap-2 pb-6 pt-1 lg:order-none lg:pb-0">
             <div className="flex gap-2">
-              <Action onClick={() => playCoo(true)} icon="/assets/sd-tram.svg" w="size-[16.7px]" label="Ambiance" />
               <Action onClick={toggleSave} icon="/assets/sd-keep.svg" w="h-[15px] w-[11.7px]" label={story.saved ? 'Saved' : 'Keepsake'} on={story.saved} />
               <Action onClick={() => void dispatch()} icon="/assets/sd-post.svg" w="h-[13.3px] w-[15.8px]" label="Post Dispatch" />
             </div>

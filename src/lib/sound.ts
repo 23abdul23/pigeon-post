@@ -52,19 +52,6 @@ function tone(c: AudioContext, start: number, from: number, to: number, dur: num
   o.stop(start + dur + 0.02)
 }
 
-/** Soft two-note coo, synthesised so no audio files are needed. Respects the global sound toggle. */
-export function playCoo(force = false) {
-  const { soundOn, settings } = getState()
-  if (!force && (!soundOn || !settings.coo)) return
-  const c = audio()
-  if (!c) return
-  void c.resume()
-  const t = c.currentTime
-  const g = 0.14 * (settings.volume / 100)
-  tone(c, t, 520, 400, 0.22, g)
-  tone(c, t + 0.26, 470, 360, 0.3, g)
-}
-
 /** Short paper-rustle burst for opening letters. */
 export function playRustle() {
   const { soundOn, settings } = getState()

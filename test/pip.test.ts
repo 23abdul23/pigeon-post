@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { closePopup, copyStyles, getPopup, openPopup, popupSupported, resizePopup } from '../src/lib/pip'
+import { closePopup, copyStyles, getPopup, openPopup, popupSupported, resizePopup, watchTabLeave } from '../src/lib/pip'
 
 const DESKTOP = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36', maxTouchPoints: 0 }
 
@@ -90,5 +90,50 @@ describe('popup (Document Picture-in-Picture)', () => {
     expect(popupSupported()).toBe(false)
     vi.stubGlobal('navigator', DESKTOP)
     expect(popupSupported()).toBe(true)
+  })
+})
+
+describe('watchTabLeave', () => {
+  const setup = (hidden: boolean) => {
+    const doc = Object.assign(new EventTarget(), { hidden, querySelectorAll: () => [] })
+    vi.stubGlobal('document', doc)
+    vi.stubGlobal('navigator', { ...DESKTOP, mediaSession: { setActionHandler: vi.fn() } })
+    const win = fakeWindow()
+    const requestWindow = vi.fn(async () => win)
+    vi.stubGlobal('documentPictureInPicture', { requestWindow })
+    return { doc, win, requestWindow }
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 0))
+
+  it('opens nothing while the tab is in front, opens on leaving, closes on returning', async () => {
+    const { doc, win, requestWindow } = setup(false)
+    const stop = watchTabLeave()
+    expect(requestWindow).not.toHaveBeenCalled()
+    doc.hidden = true
+    doc.dispatchEvent(new Event('visibilitychange'))
+    await tick()
+    expect(getPopup()).toBe(win)
+    doc.hidden = false
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(getPopup()).toBeNull()
+    stop()
+  })
+
+  it('leaves a hand-opened popup alone when the person comes back', async () => {
+    const { doc, win } = setup(false)
+    const stop = watchTabLeave()
+    await openPopup()
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(getPopup()).toBe(win)
+    stop()
+  })
+
+  it('registers and removes the enterpictureinpicture action', () => {
+    setup(false)
+    const stop = watchTabLeave()
+    const set = (navigator as unknown as { mediaSession: { setActionHandler: ReturnType<typeof vi.fn> } }).mediaSession.setActionHandler
+    expect(set).toHaveBeenCalledWith('enterpictureinpicture', expect.any(Function))
+    stop()
+    expect(set).toHaveBeenLastCalledWith('enterpictureinpicture', null)
   })
 })

@@ -98,3 +98,42 @@ export function resizePopup(size: Size): boolean {
     return false
   }
 }
+
+/**
+ * Opens the popup when the person leaves this tab and closes it when they come back (a popup they opened by hand stays).
+ * Chrome only lets a page open a Picture-in-Picture window without a click through the `enterpictureinpicture` media-session action,
+ * so that is registered too; where neither works the flight simply freezes on leaving, as it always did.
+ */
+export function watchTabLeave(): () => void {
+  if (!popupSupported()) return () => {}
+  let auto = false
+  const open = () => {
+    if (getPopup()) return
+    void openPopup().then((w) => {
+      if (w && !document.hidden) closePopup() // came back before it opened
+      else auto = !!w
+    })
+  }
+  const onVisibility = () => {
+    if (document.hidden) open()
+    else if (auto) {
+      auto = false
+      closePopup()
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibility)
+  const action = 'enterpictureinpicture' as MediaSessionAction
+  try {
+    navigator.mediaSession.setActionHandler(action, open)
+  } catch {
+    // the action is not supported here
+  }
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibility)
+    try {
+      navigator.mediaSession.setActionHandler(action, null)
+    } catch {
+      // nothing registered
+    }
+  }
+}
