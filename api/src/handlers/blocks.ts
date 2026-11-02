@@ -9,7 +9,10 @@ const noContent: APIGatewayProxyResultV2 = { statusCode: 204 }
 
 /**
  * POST /blocks/{id}: blocks `id` and removes the friendship rows in both partitions in one transaction. Idempotent (an
- * unconditional put and deletes). The row exists only in the blocker's partition, so the blocked person cannot learn of it.
+ * unconditional put and deletes). The row exists only in the blocker's partition, so nothing reads it out to the blocked
+ * person directly. They can still infer it: a new friend request to the blocker is refused (403), the friendship vanishes,
+ * and their undelivered letters to the blocker disappear from their sent list. Accepted tradeoff: hiding those effects
+ * would mean faking success for requests and letters that can never arrive, which is worse than a quiet, deducible block.
  */
 export const block = route(async (sub, event) => {
   const other = id(event.pathParameters?.id, 'user id')

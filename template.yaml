@@ -287,6 +287,17 @@ Resources:
         AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
         AllowHeaders: [content-type, authorization]
         MaxAge: 600
+      # Stage-wide throttling (all callers together, not per user): caps a runaway client or a flood before it reaches
+      # Lambda, DynamoDB or Bedrock. 25 requests/s steady with bursts of 50 is far above normal use for this app's size.
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 50
+        ThrottlingRateLimit: 25
+      # /weather proxies a paid upstream (Open-Meteo commercial key) and each flying client polls it, so it gets a
+      # stricter cap: 5 requests/s steady, bursts of 20. Excess calls get 429, which the client's windAt reads as no weather (it never breaks a flight).
+      RouteSettings:
+        'GET /weather':
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 5
 
   # Single table (API contract): PK/SK per user, GSI1 for invite-code lookup, TTL on `ttl`.
   PigeonPost:

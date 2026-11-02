@@ -10,6 +10,7 @@ import { reportPk, reportUsageSk, REPORT_SK, userPk } from '../lib/keys'
 const ses = new SESv2Client({})
 const DAILY_CAP = 20
 const DAY = 86400
+const REPORT_RETENTION_S = 365 * DAY
 const KINDS = ['user', 'letter']
 const REASONS = ['spam', 'harassment', 'inappropriate', 'other']
 const oneOf = <T extends string>(v: unknown, list: string[], what: string) => (typeof v === 'string' && list.includes(v) ? (v as T) : bad(`invalid ${what}`))
@@ -48,7 +49,8 @@ export const report = route(async (sub, event) => {
   await ddb.send(
     new PutCommand({
       TableName: tableName(),
-      Item: { PK: reportPk(reportId), SK: REPORT_SK, id: reportId, reporterId: sub, ...input, createdMs: Date.now() },
+      // the privacy policy promises reports are kept for up to 12 months; DynamoDB TTL deletes the row after that
+      Item: { PK: reportPk(reportId), SK: REPORT_SK, id: reportId, reporterId: sub, ...input, createdMs: Date.now(), ttl: now + REPORT_RETENTION_S },
     }),
   )
   await notifyModerator(reportId, sub, input)

@@ -147,3 +147,24 @@ describe('native sign-in and API configuration', () => {
     expect(receiver).toContain('requestStop')
   })
 })
+
+describe('API throttling (template.yaml)', () => {
+  const httpApi = yamlBlock(template, 'HttpApi')
+
+  it('httpapi_has_default_route_throttling', () => {
+    expect(httpApi).toContain('Type: AWS::Serverless::HttpApi')
+    const d = yamlBlock(httpApi, 'DefaultRouteSettings')
+    expect(d).toMatch(/ThrottlingBurstLimit: 50\b/)
+    expect(d).toMatch(/ThrottlingRateLimit: 25\b/)
+  })
+
+  it('weather_route_has_a_stricter_throttle', () => {
+    const r = yamlBlock(httpApi, 'RouteSettings')
+    const w = r.slice(r.indexOf("'GET /weather':"))
+    expect(r).toContain("'GET /weather':")
+    expect(w).toMatch(/ThrottlingBurstLimit: 20\b/)
+    expect(w).toMatch(/ThrottlingRateLimit: 5\b/)
+    // the route key must match a real route, or the stage deploy fails
+    expect(template).toMatch(/Method: GET, Path: \/weather/)
+  })
+})

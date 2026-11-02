@@ -39,6 +39,15 @@ describe('reports', () => {
     expect(String(puts[0].args[0].input.Item!.PK)).toMatch(/^REPORT#/)
   })
 
+  it('report_rows_expire_after_twelve_months', async () => {
+    const before = Math.floor(Date.now() / 1000)
+    expect((await post({ targetId: 'b', kind: 'user', reason: 'spam' })).statusCode).toBe(204)
+    const after = Math.floor(Date.now() / 1000)
+    const ttl = ddb.commandCalls(PutCommand)[0].args[0].input.Item!.ttl as number
+    expect(ttl).toBeGreaterThanOrEqual(before + 365 * 86400)
+    expect(ttl).toBeLessThanOrEqual(after + 365 * 86400)
+  })
+
   it('report_rejects_unknown_reason_400', async () => {
     expect((await post({ targetId: 'b', kind: 'user', reason: 'because' })).statusCode).toBe(400)
     expect((await post({ targetId: 'b', kind: 'thing', reason: 'spam' })).statusCode).toBe(400)
