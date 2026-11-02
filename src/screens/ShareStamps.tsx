@@ -5,6 +5,7 @@ import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
 import Flag from '../components/Flag'
 import { useStore } from '../lib/store'
+import { liveShareDeps, SHARE_IMAGE_FILE, SHARE_IMAGE_SAVED_MSG, shareImage } from '../lib/share'
 
 type Format = 'story' | 'post' | 'square'
 type Period = 'week' | 'month' | 'all'
@@ -68,18 +69,22 @@ export default function ShareStamps() {
     return toBlob(card.current, { pixelRatio: f.w / card.current.offsetWidth, cacheBust: true, backgroundColor: PALETTES[palette].c })
   }
 
+  function saveBlob(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function download() {
     setBusy(true)
     setMsg('')
     try {
       const blob = await render()
       if (!blob) throw new Error('no blob')
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `pigeon-post-${format}-${title.toLowerCase().replace(' ', '-')}.png`
-      a.click()
-      URL.revokeObjectURL(url)
+      saveBlob(blob, `pigeon-post-${format}-${title.toLowerCase().replace(' ', '-')}.png`)
       setMsg('Saved to your downloads.')
     } catch {
       setMsg("Couldn't build the image. Try again in a moment.")
@@ -94,21 +99,16 @@ export default function ShareStamps() {
     try {
       const blob = await render()
       if (!blob) throw new Error('no blob')
-      const file = new File([blob], 'pigeon-post.png', { type: 'image/png' })
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'My Pigeon Post journeys' })
+      const deps = liveShareDeps()
+      if (!deps.native && !navigator.canShare) deps.webShare = undefined // files need canShare on the web, as before
+      if ((await shareImage(blob, 'My Pigeon Post journeys', deps)) === 'shared') {
         setMsg('Shared.')
       } else {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'pigeon-post.png'
-        a.click()
-        URL.revokeObjectURL(url)
-        setMsg('Image saved. Open Instagram and pick it from your gallery.')
+        saveBlob(blob, SHARE_IMAGE_FILE)
+        setMsg(SHARE_IMAGE_SAVED_MSG)
       }
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') setMsg("Couldn't share. Download the image instead.")
+    } catch {
+      setMsg("Couldn't share. Download the image instead.")
     } finally {
       setBusy(false)
     }

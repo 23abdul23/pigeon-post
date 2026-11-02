@@ -8,6 +8,7 @@ import MiniMap from '../components/MiniMap'
 import { fmtKm } from '../lib/geo'
 import { dms } from './Landing'
 import { useStore } from '../lib/store'
+import { liveShareDeps, shareLink } from '../lib/share'
 import { toggleStorySaved } from '../lib/stories'
 import { useWikiPhoto } from '../lib/wikiPhoto'
 
@@ -43,14 +44,10 @@ export default function JournalDetail() {
 
   async function dispatch() {
     const text = `${story.place}, ${story.country}: ${story.text}`
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: story.place, text, url: story.sourceUrl })
-      } catch {
-        // dismissed
-      }
-    } else {
-      nav(`/passport/share?story=${story.id}`)
+    try {
+      if ((await shareLink({ title: story.place, text, url: story.sourceUrl }, liveShareDeps())) === 'unsupported') nav(`/passport/share?story=${story.id}`)
+    } catch {
+      // share failed; nothing to fall back to
     }
   }
 

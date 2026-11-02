@@ -12,6 +12,7 @@ import { startSession } from '../lib/flight'
 import { fmtKm, haversineKm } from '../lib/geo'
 import { COGNITO_CONFIGURED } from '../lib/auth'
 import { avatarColor, initials, uploadAttachment, writeLetter } from '../lib/social'
+import { speechAvailable } from '../lib/share'
 import { useStore, type Letter, type Place } from '../lib/store'
 import { createTrip, tripProblem } from '../lib/trips'
 
@@ -61,7 +62,7 @@ export default function TripComposer() {
   const rec = useRef<SR | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const letterOnly = params.get('letter') === '1'
-  const canDictate = useMemo(() => speechCtor() !== null, [])
+  const canDictate = useMemo(() => speechCtor() !== null && speechAvailable(window), [])
 
   const friend = friends.find((f) => f.id === friendId) ?? null
   const dest: Place | null =
