@@ -75,23 +75,70 @@ export function handleBack(env: BackEnv): BackAction {
   return action
 }
 
-/** Native only: class hook, status bar, Back listener. Returns a cleanup. Every failure is swallowed. */
-export async function startNativeChrome(env: Omit<BackEnv, 'exitApp'>): Promise<() => void> {
-  applyNativeClasses(document.documentElement)
+/** A Back env whose `navigate` is read from a mutable ref at press time, so the one listener never holds a stale router function. */
+export function backEnvFromRef(
+  ref: { current: (to: string | number) => void },
+  path: () => string,
+  canGoBack: () => boolean,
+): Omit<BackEnv, 'exitApp'> {
+  return { path, canGoBack, navigate: (to) => ref.current(to) }
+}
+
+export type NativeDeps = {
+  root: { classList: { add(c: string): void } }
+  setupStatusBar: () => Promise<void>
+  app: { addListener(e: 'backButton', cb: () => void): Promise<{ remove(): void }>; exitApp(): void }
+}
+
+async function defaultDeps(): Promise<NativeDeps> {
+  const { App } = await import('@capacitor/app')
+  return {
+    root: document.documentElement,
+    app: { addListener: (e, cb) => App.addListener(e, cb), exitApp: () => void App.exitApp() },
+    setupStatusBar: async () => {
+      const { StatusBar, Style } = await import('@capacitor/status-bar')
+      await StatusBar.setOverlaysWebView({ overlay: false })
+      await StatusBar.setBackgroundColor({ color: STATUS_BAR_COLOR })
+      await StatusBar.setStyle({ style: Style.Light }) // Light = dark icons for a light background
+    },
+  }
+}
+
+let stopCurrent: (() => void) | undefined
+function stopPrevious(): void {
+  stopCurrent?.()
+  stopCurrent = undefined
+}
+
+/** Native only: class hook, status bar, Back listener. Start once per app; a second start replaces the first listener. Returns a stop. Failures are swallowed. */
+export async function startNativeChrome(env: Omit<BackEnv, 'exitApp'>, deps?: NativeDeps): Promise<() => void> {
+  stopPrevious()
+  let d: NativeDeps
   try {
-    const { StatusBar, Style } = await import('@capacitor/status-bar')
-    await StatusBar.setOverlaysWebView({ overlay: false })
-    await StatusBar.setBackgroundColor({ color: STATUS_BAR_COLOR })
-    await StatusBar.setStyle({ style: Style.Light }) // Light = dark icons for a light background
+    d = deps ?? (await defaultDeps())
+  } catch {
+    return () => {}
+  }
+  applyNativeClasses(d.root)
+  try {
+    await d.setupStatusBar()
   } catch {
     /* cosmetic only */
   }
   try {
-    const { App } = await import('@capacitor/app')
-    const handle = await App.addListener('backButton', () => {
-      handleBack({ ...env, exitApp: () => void App.exitApp() })
+    const handle = await d.app.addListener('backButton', () => {
+      handleBack({ ...env, exitApp: () => d.app.exitApp() })
     })
-    return () => void handle.remove()
+    let stopped = false
+    const stop = () => {
+      if (stopped) return
+      stopped = true
+      if (stopCurrent === stop) stopCurrent = undefined
+      handle.remove()
+    }
+    stopPrevious() // a start that overlapped this one while awaiting
+    stopCurrent = stop
+    return stop
   } catch {
     return () => {}
   }

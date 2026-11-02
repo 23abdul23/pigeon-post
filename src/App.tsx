@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setNavigate } from './lib/navigateRef'
-import { startNativeChrome } from './lib/nativeChrome'
+import { backEnvFromRef, startNativeChrome } from './lib/nativeChrome'
 import { isNativeApp } from './lib/platform'
 import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
@@ -85,20 +85,27 @@ export default function App() {
     setNavigate((to) => navigate(to, { replace: true }))
     return () => setNavigate(undefined)
   }, [navigate])
+  // react-router hands out a new `navigate` on every route change; the one Back listener reads the latest through this ref.
+  const navigateLatest = useRef<(to: string | number) => void>(() => {})
+  useEffect(() => {
+    navigateLatest.current = (to) => (typeof to === 'number' ? navigate(to) : navigate(to, { replace: true }))
+  })
   useEffect(() => {
     if (!isNativeApp()) return
     let stop: (() => void) | undefined
     let cancelled = false
-    void startNativeChrome({
-      path: () => window.location.pathname,
-      canGoBack: () => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0,
-      navigate: (to) => (typeof to === 'number' ? navigate(to) : navigate(to, { replace: true })),
-    }).then((s) => (cancelled ? s() : (stop = s)))
+    void startNativeChrome(
+      backEnvFromRef(
+        navigateLatest,
+        () => window.location.pathname,
+        () => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0,
+      ),
+    ).then((s) => (cancelled ? s() : (stop = s)))
     return () => {
       cancelled = true
       stop?.()
     }
-  }, [navigate])
+  }, [])
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/home" replace />} />
