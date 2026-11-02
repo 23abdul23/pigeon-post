@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import java.util.concurrent.atomic.AtomicBoolean;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
@@ -29,6 +30,11 @@ public class FlightService extends Service {
     static final String EXTRA_ENDS_AT_MS = "endsAtMs";
     static final String ACTION_END_FLIGHT = "app.pigeonpost.action.END_FLIGHT";
 
+    static final String ACTION_STOP = "app.pigeonpost.action.STOP";
+
+    /** True from the plugin's start() until this service is destroyed; stop() is a no-op while false. */
+    static final AtomicBoolean requested = new AtomicBoolean(false);
+
     private static final String CHANNEL_ID = "flight";
     private static final int NOTIFICATION_ID = 1001;
 
@@ -39,9 +45,9 @@ public class FlightService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) {
-            // Restarted by the system without our extras: nothing to show, so do not linger.
-            stopSelf();
+        if (intent == null || ACTION_STOP.equals(intent.getAction())) {
+            // Stop request, or a system restart without our extras: nothing to show, so do not linger.
+            stopNow();
             return START_NOT_STICKY;
         }
         String title = intent.getStringExtra(EXTRA_TITLE);
@@ -69,6 +75,36 @@ public class FlightService extends Service {
         return START_NOT_STICKY;
     }
 
+    /**
+     * Stops the service safely. A service begun with startForegroundService must call startForeground before it
+     * stops, otherwise the system crashes the app, so do that first if it has not happened yet.
+     */
+    private void stopNow() {
+        if (!foregrounded) {
+            ensureChannel();
+            int type = Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0;
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification("", "", 0L), type);
+            foregrounded = true;
+        }
+        handler.removeCallbacks(autoStop);
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
+        stopSelf();
+    }
+
+    /** Asks a running service to stop; a no-op when no start was requested. Safe to call repeatedly. */
+    static void requestStop(Context context) {
+        if (!requested.get()) return;
+        Intent stop = new Intent(context, FlightService.class).setAction(ACTION_STOP);
+        ContextCompat.startForegroundService(context, stop);
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // The app task was swiped away: nothing in JS can end the flight any more.
+        stopNow();
+        super.onTaskRemoved(rootIntent);
+    }
+
     private void ensureChannel() {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -88,7 +124,7 @@ public class FlightService extends Service {
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_flight)
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
@@ -135,6 +171,7 @@ public class FlightService extends Service {
             screenReceiver = null;
         }
         foregrounded = false;
+        requested.set(false);
         super.onDestroy();
     }
 
@@ -147,7 +184,12 @@ public class FlightService extends Service {
     public static class FlightEndReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            FlightPlugin.emit("endRequested");
+            if (FlightPlugin.hasInstance()) {
+                FlightPlugin.emit("endRequested");
+            } else {
+                // No JS to handle it (task was removed): end the flight ourselves.
+                requestStop(context);
+            }
         }
     }
 }

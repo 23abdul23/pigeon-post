@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const template = readFileSync(new URL('../template.yaml', import.meta.url), 'utf8')
@@ -19,6 +19,11 @@ function yamlBlock(src: string, key: string): string {
   }
   return out.join('\n')
 }
+
+const javaDir = new URL('../android/app/src/main/java/app/pigeonpost/', import.meta.url)
+const plugin = readFileSync(new URL('FlightPlugin.java', javaDir), 'utf8')
+const service = readFileSync(new URL('FlightService.java', javaDir), 'utf8')
+const statIconUrl = new URL('../android/app/src/main/res/drawable/ic_stat_flight.xml', import.meta.url)
 
 describe('native sign-in and API configuration', () => {
   it('template_allows_native_callback_and_logout_uris', () => {
@@ -67,5 +72,32 @@ describe('native sign-in and API configuration', () => {
     expect(service).toMatch(/android:foregroundServiceType="specialUse"/)
     expect(service).toMatch(/android:exported="false"/)
     expect(service).toMatch(/<property[^>]*android:name="android\.app\.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"[^>]*android:value="[^"]+"/)
+  })
+
+  it('flight_plugin_reads_endsAtMs_without_getDouble', () => {
+    expect(plugin).not.toContain('getDouble("endsAtMs"')
+    expect(plugin).toContain('opt("endsAtMs")')
+  })
+
+  it('flight_service_uses_a_monochrome_vector_status_icon', () => {
+    expect(existsSync(statIconUrl)).toBe(true)
+    expect(readFileSync(statIconUrl, 'utf8')).toContain('<vector')
+    expect(service).toContain('setSmallIcon(R.drawable.ic_stat_flight)')
+    expect(service).not.toMatch(/setSmallIcon\(R\.mipmap/)
+  })
+
+  it('flight_stop_goes_through_the_service_not_stopService', () => {
+    expect(plugin).not.toContain('stopService(')
+    expect(plugin).toContain('FlightService.requestStop')
+    expect(service).toContain('ACTION_STOP')
+    expect(plugin).toContain('FlightService.requested')
+    expect(service).toContain('AtomicBoolean requested')
+    expect(service).toMatch(/ACTION_STOP\.equals/)
+  })
+
+  it('flight_service_stops_itself_when_orphaned', () => {
+    expect(service).toContain('onTaskRemoved')
+    const receiver = service.slice(service.indexOf('class FlightEndReceiver'))
+    expect(receiver).toContain('requestStop')
   })
 })
