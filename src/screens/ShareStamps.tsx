@@ -101,9 +101,10 @@ export default function ShareStamps() {
       if (!blob) throw new Error('no blob')
       const deps = liveShareDeps()
       if (!deps.native && !navigator.canShare) deps.webShare = undefined // files need canShare on the web, as before
-      if ((await shareImage(blob, 'My Pigeon Post journeys', deps)) === 'shared') {
+      const result = await shareImage(blob, 'My Pigeon Post journeys', deps)
+      if (result === 'shared') {
         setMsg('Shared.')
-      } else {
+      } else if (result === 'unsupported') {
         saveBlob(blob, SHARE_IMAGE_FILE)
         setMsg(SHARE_IMAGE_SAVED_MSG)
       }

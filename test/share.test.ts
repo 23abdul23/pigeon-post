@@ -35,13 +35,20 @@ describe('shareImage', () => {
 
   it('user_cancel_is_not_an_error', async () => {
     const abort = Object.assign(new Error('x'), { name: 'AbortError' })
-    expect(await shareImage(png, 't', { native: false, webShare: async () => { throw abort } })).toBe('shared')
+    expect(await shareImage(png, 't', { native: false, webShare: async () => { throw abort } })).toBe('canceled')
     const writeTemp = async () => 'file:///a.png'
-    for (const msg of ['Share canceled', 'Share cancelled']) {
+    for (const msg of ['Share canceled', 'Share cancelled', 'share Canceled']) {
       const nativeShare = async () => { throw new Error(msg) }
-      expect(await shareImage(png, 't', { native: true, writeTemp, nativeShare })).toBe('shared')
-      expect(await shareLink({ title: 't', url: 'u' }, { native: true, nativeShare })).toBe('shared')
+      expect(await shareImage(png, 't', { native: true, writeTemp, nativeShare })).toBe('canceled')
+      expect(await shareLink({ title: 't', url: 'u' }, { native: true, nativeShare })).toBe('canceled')
     }
+  })
+
+  it('a_non_share_error_containing_canceled_is_not_swallowed', async () => {
+    const writeTemp = async () => { throw new Error('Write canceled: disk full') }
+    const nativeShare = vi.fn(async () => {})
+    await expect(shareImage(png, 't', { native: true, writeTemp, nativeShare })).rejects.toThrow('Write canceled')
+    await expect(shareLink({ title: 't' }, { native: true, nativeShare: async () => { throw new Error('Request canceled') } })).rejects.toThrow('Request canceled')
   })
 })
 

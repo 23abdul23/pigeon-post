@@ -12,11 +12,14 @@ export type ShareDeps = {
   webShare?: (d: ShareData) => Promise<void>
 }
 
-/** The user dismissing the share sheet is not a failure: web rejects with AbortError, Capacitor with "Share canceled". */
+/** The user dismissing the share sheet is not a failure: web rejects with AbortError, Capacitor with "Share canceled".
+ *  Any other error, even one whose message says "canceled", is a real failure. */
 function isCancel(e: unknown): boolean {
   const err = e as { name?: string; message?: string } | null
-  return err?.name === 'AbortError' || /cancell?ed/i.test(err?.message ?? '')
+  return err?.name === 'AbortError' || /share cancell?ed/i.test(err?.message ?? '')
 }
+
+export type ShareResult = 'shared' | 'canceled' | 'unsupported'
 
 function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf)
@@ -25,16 +28,18 @@ function toBase64(buf: ArrayBuffer): string {
   return btoa(bin)
 }
 
-async function guarded(run: () => Promise<void>): Promise<'shared'> {
+/** 'canceled' when the person dismissed the sheet: callers stay silent and offer no fall-back. */
+async function guarded(run: () => Promise<void>): Promise<'shared' | 'canceled'> {
   try {
     await run()
   } catch (e) {
     if (!isCancel(e)) throw e
+    return 'canceled'
   }
   return 'shared'
 }
 
-export async function shareImage(png: Blob, title: string, d: ShareDeps): Promise<'shared' | 'unsupported'> {
+export async function shareImage(png: Blob, title: string, d: ShareDeps): Promise<ShareResult> {
   if (d.native) {
     const { nativeShare, writeTemp } = d
     if (!nativeShare || !writeTemp) return 'unsupported'
@@ -50,7 +55,7 @@ export async function shareImage(png: Blob, title: string, d: ShareDeps): Promis
   return guarded(() => webShare({ title, files: [file] }))
 }
 
-export async function shareLink(o: { title: string; text?: string; url?: string }, d: ShareDeps): Promise<'shared' | 'unsupported'> {
+export async function shareLink(o: { title: string; text?: string; url?: string }, d: ShareDeps): Promise<ShareResult> {
   if (d.native) {
     const { nativeShare } = d
     return nativeShare ? guarded(() => nativeShare(o)) : 'unsupported'

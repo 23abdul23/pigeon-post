@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyNativeClasses, decideBack } from '../src/lib/nativeChrome'
+import { readFileSync } from 'node:fs'
+import { applyNativeClasses, decideBack, withViewportFitCover } from '../src/lib/nativeChrome'
 
 const base = { path: '/mailbox', flightActive: false, dialogOpen: false, canGoBack: true }
 
@@ -20,6 +21,37 @@ describe('decideBack', () => {
   })
   it('non_home_without_history_navigates_to_home_not_exit', () => {
     expect(decideBack({ ...base, canGoBack: false })).toBe('navigate-back')
+  })
+  it('signin_without_history_exits', () => {
+    // signed out, /home would only bounce back to /signin
+    expect(decideBack({ ...base, path: '/signin', canGoBack: false })).toBe('exit-app')
+  })
+  it('onboarding_root_without_history_exits', () => {
+    expect(decideBack({ ...base, path: '/onboarding/city', canGoBack: false })).toBe('exit-app')
+    expect(decideBack({ ...base, path: '/onboarding/bird', canGoBack: false })).toBe('exit-app')
+  })
+  it('signin_with_history_still_navigates_back', () => {
+    expect(decideBack({ ...base, path: '/signin', canGoBack: true })).toBe('navigate-back')
+    expect(decideBack({ ...base, path: '/onboarding/city', canGoBack: true })).toBe('navigate-back')
+  })
+  it('signin_and_onboarding_close_a_dialog_before_exiting', () => {
+    expect(decideBack({ ...base, path: '/signin', canGoBack: false, dialogOpen: true })).toBe('close-dialog')
+    expect(decideBack({ ...base, path: '/onboarding/city', canGoBack: false, flightActive: true })).toBe('confirm-end-flight')
+  })
+})
+
+describe('viewport-fit', () => {
+  it('index_html_does_not_set_viewport_fit_for_the_web', () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+    expect(html).toMatch(/<meta name="viewport"/)
+    expect(html).not.toContain('viewport-fit')
+  })
+  it('withViewportFitCover_adds_the_flag_once', () => {
+    const base = 'width=device-width, initial-scale=1.0'
+    expect(withViewportFitCover(base)).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover')
+    expect(withViewportFitCover(withViewportFitCover(base))).toBe(withViewportFitCover(base))
+    expect(withViewportFitCover('width=device-width, viewport-fit=auto')).toBe('width=device-width, viewport-fit=cover')
+    expect(withViewportFitCover('')).toBe('viewport-fit=cover')
   })
 })
 
@@ -134,6 +166,13 @@ describe('startNativeChrome', () => {
     }
     return { deps, remove, listeners }
   }
+  it('native_chrome_sets_viewport_fit_cover_on_the_viewport_meta', async () => {
+    const { deps } = fakeDeps()
+    let content = 'width=device-width, initial-scale=1.0'
+    const viewport = { getAttribute: () => content, setAttribute: (_n: string, v: string) => void (content = v) }
+    cleanups.push(await startNativeChrome(env(), { ...deps, viewport }))
+    expect(content).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover')
+  })
   it('native_chrome_registers_back_listener_once_and_stop_removes_it', async () => {
     const { deps, remove, listeners } = fakeDeps()
     const stop = await startNativeChrome(env(), deps)

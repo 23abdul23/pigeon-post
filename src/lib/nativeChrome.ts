@@ -4,17 +4,34 @@
 export type BackContext = { path: string; flightActive: boolean; dialogOpen: boolean; canGoBack: boolean }
 export type BackAction = 'close-dialog' | 'confirm-end-flight' | 'navigate-back' | 'exit-app'
 
-/** What hardware Back should do. Dialog first; a running flight asks before ending; the app exits only from /home with nowhere to go back to. */
+/** Screens where Back with no history exits: /home, and /signin and onboarding, where /home would only redirect back. */
+const isRootPath = (path: string) => path === '/home' || path === '/signin' || path.startsWith('/onboarding')
+
+/** What hardware Back should do. Dialog first; a running flight asks before ending; the app exits only from a root screen with nowhere to go back to. */
 export function decideBack(c: BackContext): BackAction {
   if (c.dialogOpen) return 'close-dialog'
   if (c.flightActive) return 'confirm-end-flight'
   if (c.canGoBack) return 'navigate-back'
-  return c.path === '/home' ? 'exit-app' : 'navigate-back' // elsewhere the executor sends the user to /home
+  return isRootPath(c.path) ? 'exit-app' : 'navigate-back' // elsewhere the executor sends the user to /home
 }
 
 /** Marks the document as the installed app so `.native-app` CSS applies (safe-area insets, no centred-column cap). */
 export function applyNativeClasses(root: { classList: { add(c: string): void } }): void {
   root.classList.add('native-app')
+}
+
+/** The viewport meta content with `viewport-fit=cover` set exactly once (replacing any other viewport-fit). Native only:
+ *  the web has no safe-area padding, so it must not draw under a notch. */
+export function withViewportFitCover(content: string): string {
+  const parts = content.split(',').map((p) => p.trim()).filter((p) => p && !/^viewport-fit\s*=/i.test(p))
+  return [...parts, 'viewport-fit=cover'].join(', ')
+}
+
+type ViewportMeta = { getAttribute(n: string): string | null; setAttribute(n: string, v: string): void }
+
+function applyViewportFit(meta: ViewportMeta | null | undefined): void {
+  if (!meta) return
+  meta.setAttribute('content', withViewportFitCover(meta.getAttribute('content') ?? ''))
 }
 
 /** Status bar colours: cream, matching the theme-color in index.html, with dark icons. */
@@ -86,6 +103,8 @@ export function backEnvFromRef(
 
 export type NativeDeps = {
   root: { classList: { add(c: string): void } }
+  /** the `<meta name="viewport">` element; gains viewport-fit=cover so the `.native-app` safe-area padding applies */
+  viewport?: ViewportMeta | null
   setupStatusBar: () => Promise<void>
   app: { addListener(e: 'backButton', cb: () => void): Promise<{ remove(): void }>; exitApp(): void }
 }
@@ -94,6 +113,7 @@ async function defaultDeps(): Promise<NativeDeps> {
   const { App } = await import('@capacitor/app')
   return {
     root: document.documentElement,
+    viewport: document.querySelector('meta[name="viewport"]'),
     app: { addListener: (e, cb) => App.addListener(e, cb), exitApp: () => void App.exitApp() },
     setupStatusBar: async () => {
       const { StatusBar, Style } = await import('@capacitor/status-bar')
@@ -120,6 +140,7 @@ export async function startNativeChrome(env: Omit<BackEnv, 'exitApp'>, deps?: Na
     return () => {}
   }
   applyNativeClasses(d.root)
+  applyViewportFit(d.viewport)
   try {
     await d.setupStatusBar()
   } catch {
