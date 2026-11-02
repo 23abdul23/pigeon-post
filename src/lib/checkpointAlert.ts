@@ -36,13 +36,22 @@ export async function cancelCheckpoints(n: LocalNotifierLike): Promise<void> {
   }
 }
 
-/** Schedules `plan` and returns the function that cancels it. A stop before the schedule finished cancels right after it, so nothing stays scheduled. */
+const chains = new WeakMap<LocalNotifierLike, Promise<void>>()
+
+/** Runs `op` after every earlier operation on `n` has finished (even a failed one), so schedule and cancel never interleave. */
+function enqueue(n: LocalNotifierLike, op: () => Promise<void>): Promise<void> {
+  const next = (chains.get(n) ?? Promise.resolve()).catch(() => undefined).then(op)
+  chains.set(n, next.catch(() => undefined))
+  return next
+}
+
+/** Schedules `plan` and returns the function that cancels it. All operations on `n` run strictly in order: a stop cancels after its own schedule, and a re-run's new schedule starts only after that cancel. */
 export function keepCheckpointsScheduled(n: LocalNotifierLike, plan: PlannedAlert[]): () => void {
-  const scheduled = scheduleCheckpoints(n, plan)
+  void enqueue(n, () => scheduleCheckpoints(n, plan))
   let stopped = false
   return () => {
     if (stopped) return
     stopped = true
-    void scheduled.then(() => cancelCheckpoints(n))
+    void enqueue(n, () => cancelCheckpoints(n))
   }
 }

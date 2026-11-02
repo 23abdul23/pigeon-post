@@ -103,7 +103,7 @@ describe('native scheduling', () => {
     })
     const stop = keepCheckpointsScheduled(n, plan)
     stop()
-    await Promise.resolve()
+    await vi.waitFor(() => expect(n.schedule).toHaveBeenCalled())
     expect(n.cancelAll).not.toHaveBeenCalled()
     release()
     await vi.waitFor(() => expect(order).toEqual(['scheduled', 'cancelled']))
@@ -115,5 +115,61 @@ describe('native scheduling', () => {
     stop()
     await vi.waitFor(() => expect(n.cancelAll).toHaveBeenCalled())
     expect(n.cancelAll).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('serialised native operations', () => {
+  const plan = [{ id: 1, atMs: 5, place: 'A' }]
+  const deferred = () => {
+    let resolve!: () => void
+    const p = new Promise<void>((r) => (resolve = r))
+    return { p, resolve }
+  }
+
+  it('successive_keepers_cancel_before_the_next_schedule', async () => {
+    const log: string[] = []
+    const gates: Record<string, ReturnType<typeof deferred>> = {}
+    let s = 0
+    let c = 0
+    const n: LocalNotifierLike = {
+      schedule: vi.fn(() => {
+        const k = `schedule#${++s}`
+        log.push(`start ${k}`)
+        gates[k] = deferred()
+        return gates[k].p.then(() => void log.push(`end ${k}`))
+      }),
+      cancelAll: vi.fn(() => {
+        const k = `cancel#${++c}`
+        log.push(`start ${k}`)
+        gates[k] = deferred()
+        return gates[k].p.then(() => void log.push(`end ${k}`))
+      }),
+    }
+    const stop1 = keepCheckpointsScheduled(n, plan)
+    stop1()
+    keepCheckpointsScheduled(n, plan) // the effect re-ran: cleanup, then a new schedule
+    await new Promise((r) => setTimeout(r, 5))
+    expect(log).toEqual(['start schedule#1']) // the first schedule resolves late; nothing else may start
+    gates['schedule#1'].resolve()
+    await vi.waitFor(() => expect(log).toContain('start cancel#1'))
+    expect(log).not.toContain('start schedule#2')
+    gates['cancel#1'].resolve()
+    await vi.waitFor(() => expect(log).toContain('start schedule#2'))
+    gates['schedule#2'].resolve()
+    await vi.waitFor(() => expect(log.at(-1)).toBe('end schedule#2'))
+    expect(log).toEqual(['start schedule#1', 'end schedule#1', 'start cancel#1', 'end cancel#1', 'start schedule#2', 'end schedule#2'])
+  })
+
+  it('a_rejected_operation_does_not_block_later_operations', async () => {
+    const n: LocalNotifierLike = {
+      schedule: vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined),
+      cancelAll: vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined),
+    }
+    const stop1 = keepCheckpointsScheduled(n, plan)
+    stop1()
+    const stop2 = keepCheckpointsScheduled(n, plan)
+    stop2()
+    await vi.waitFor(() => expect(n.cancelAll).toHaveBeenCalledTimes(2))
+    expect(n.schedule).toHaveBeenCalledTimes(2)
   })
 })
