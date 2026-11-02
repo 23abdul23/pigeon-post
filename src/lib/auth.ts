@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
 import { Browser } from '@capacitor/browser'
+import { Preferences } from '@capacitor/preferences'
 import { callbackUri, signOutUri } from './authUrls'
 import { createBrowserNavigator } from './nativeAuth'
 import { isNativeApp } from './platform'
+import { createPrefsStorage } from './prefsStorage'
 
 const env = import.meta.env
 const POOL = env.VITE_COGNITO_USER_POOL_ID as string | undefined
@@ -24,7 +26,7 @@ function um(): UserManager {
       redirect_uri: callbackUri(native, location.origin),
       scope: 'openid email profile',
       response_type: 'code', // PKCE is on by default for code flow
-      userStore: new WebStorageStateStore({ store: localStorage }),
+      userStore: new WebStorageStateStore({ store: native ? createPrefsStorage(Preferences) : localStorage }),
     },
     // Google refuses OAuth in an embedded WebView, so the native app signs in through a Custom Tab.
     native ? createBrowserNavigator(Browser) : undefined,
