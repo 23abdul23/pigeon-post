@@ -96,12 +96,12 @@ Each phase ends with something runnable. Verify at every phase with `npm test`, 
 
 ### Phase 1: Capacitor shell that boots (2-3 days)
 Files: `package.json`, new `capacitor.config.ts`, new `android/`, `vite.config.ts`.
-- [ ] `npm i @capacitor/core @capacitor/android @capacitor/app @capacitor/status-bar @capacitor/splash-screen @capacitor/keyboard` and `-D @capacitor/cli @capacitor/assets`.
-- [ ] `capacitor.config.ts`: `appId`, `appName: 'Pigeon Post'`, `webDir: 'dist'`, `server.androidScheme: 'https'`.
-- [ ] `npx cap add android`; `npm run build && npx cap sync`; run on an emulator.
+- [x] `npm i @capacitor/core @capacitor/android @capacitor/app @capacitor/status-bar @capacitor/splash-screen @capacitor/keyboard` and `-D @capacitor/cli @capacitor/assets`.
+- [x] `capacitor.config.ts`: `appId`, `appName: 'Pigeon Post'`, `webDir: 'dist'`, `server.androidScheme: 'https'`.
+- [x] `npx cap add android`, `npm run build`, `cap sync` all succeed (appId `app.pigeonpost`, minSdk 24, target/compile SDK 36). **Still to do on a machine with Android Studio:** `npm run android:open` and run on an emulator (not possible in the cloud container).
 - [ ] Confirm the map worker (`assets/maplibre-gl-worker.mjs`) loads and the 3D bird renders.
-- [ ] Add `src/lib/platform.ts` exporting `isNative` (`Capacitor.isNativePlatform()`) so every later change is behind one switch and the web build is untouched.
-- [ ] Commit `android/` (exclude build outputs in `.gitignore`).
+- [x] Add `src/lib/platform.ts` exporting `isNative` (`Capacitor.isNativePlatform()`) so every later change is behind one switch and the web build is untouched.
+- [x] Commit `android/` (exclude build outputs in `.gitignore`).
 
 ### Phase 2: Auth that Google will accept (3-4 days) fixes G1, G2, G3
 Files: `src/lib/auth.ts`, `src/screens/SignIn.tsx`, `src/screens/AuthCallback.tsx`, `template.yaml`, `AndroidManifest.xml`.
