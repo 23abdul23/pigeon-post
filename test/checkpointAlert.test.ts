@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { alertCheckpoint } from '../src/lib/checkpointAlert'
+import { alertCheckpoint, cancelCheckpoints, keepCheckpointsScheduled, scheduleCheckpoints } from '../src/lib/checkpointAlert'
+import type { LocalNotifierLike } from '../src/lib/checkpointPlan'
 import { defaultSettings, getState, setState } from '../src/lib/store'
 
 class FakeNotification {
@@ -59,5 +60,60 @@ describe('alertCheckpoint', () => {
   it('returns false when constructing the notification throws', () => {
     vi.stubGlobal('Notification', class { static permission = 'granted'; constructor() { throw new TypeError('Illegal constructor') } })
     expect(alertCheckpoint('Lisbon', () => {})).toBe(false)
+  })
+})
+
+describe('native scheduling', () => {
+  const plan = [{ id: 1, atMs: 5, place: 'A' }]
+  const notifier = (over: Partial<LocalNotifierLike> = {}): LocalNotifierLike => ({ schedule: vi.fn(async () => {}), cancelAll: vi.fn(async () => {}), ...over })
+
+  it('schedule_calls_notifier_with_the_plan', async () => {
+    const n = notifier()
+    await scheduleCheckpoints(n, plan)
+    expect(n.schedule).toHaveBeenCalledWith(plan)
+  })
+  it('does not call the notifier for an empty plan', async () => {
+    const n = notifier()
+    await scheduleCheckpoints(n, [])
+    expect(n.schedule).not.toHaveBeenCalled()
+  })
+  it('cancel_calls_cancelAll', async () => {
+    const n = notifier()
+    await cancelCheckpoints(n)
+    expect(n.cancelAll).toHaveBeenCalledTimes(1)
+  })
+  it('schedule_swallows_notifier_failure_and_resolves', async () => {
+    const n = notifier({ schedule: vi.fn(async () => { throw new Error('denied') }), cancelAll: vi.fn(async () => { throw new Error('x') }) })
+    await expect(scheduleCheckpoints(n, plan)).resolves.toBeUndefined()
+    await expect(cancelCheckpoints(n)).resolves.toBeUndefined()
+  })
+  it('keepCheckpointsScheduled schedules, and its stop function cancels', async () => {
+    const n = notifier()
+    const stop = keepCheckpointsScheduled(n, plan)
+    stop()
+    await vi.waitFor(() => expect(n.cancelAll).toHaveBeenCalledTimes(1))
+    expect(n.schedule).toHaveBeenCalledWith(plan)
+  })
+  it('a stop before the schedule finished still cancels afterwards', async () => {
+    let release!: () => void
+    const order: string[] = []
+    const n = notifier({
+      schedule: vi.fn(() => new Promise<void>((r) => (release = () => { order.push('scheduled'); r() }))),
+      cancelAll: vi.fn(async () => { order.push('cancelled') }),
+    })
+    const stop = keepCheckpointsScheduled(n, plan)
+    stop()
+    await Promise.resolve()
+    expect(n.cancelAll).not.toHaveBeenCalled()
+    release()
+    await vi.waitFor(() => expect(order).toEqual(['scheduled', 'cancelled']))
+  })
+  it('stop twice cancels once', async () => {
+    const n = notifier()
+    const stop = keepCheckpointsScheduled(n, plan)
+    stop()
+    stop()
+    await vi.waitFor(() => expect(n.cancelAll).toHaveBeenCalled())
+    expect(n.cancelAll).toHaveBeenCalledTimes(1)
   })
 })

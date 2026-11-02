@@ -11,6 +11,8 @@ import { DEMO_MODE, loadDemoData } from '../lib/demo'
 import { setState, useStore, type Settings as SettingsT } from '../lib/store'
 import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
+import { requestNativeNotificationPermission } from '../lib/localNotifier'
+import { isNativeApp } from '../lib/platform'
 
 const SECTIONS = [
   ['profile', 'Profile'],
@@ -69,6 +71,7 @@ export default function Settings() {
 
   async function browserAlerts() {
     set('channel', 'browser')
+    if (isNativeApp()) return void (await requestNativeNotificationPermission())
     if ('Notification' in window && Notification.permission === 'default') {
       try {
         await Notification.requestPermission()

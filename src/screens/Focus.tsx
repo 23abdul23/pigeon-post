@@ -16,7 +16,9 @@ import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
 import { startScreenWatch } from '../lib/idle'
 import { restHere } from '../lib/rest'
-import { alertCheckpoint } from '../lib/checkpointAlert'
+import { alertCheckpoint, keepCheckpointsScheduled } from '../lib/checkpointAlert'
+import { planCheckpointAlerts } from '../lib/checkpointPlan'
+import { localNotifier } from '../lib/localNotifier'
 import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup, watchTabLeave } from '../lib/pip'
 import { createPresence, isMobileDevice } from '../lib/presence'
 import { FlightNativePlugin } from '../lib/flightPlugin'
@@ -226,6 +228,17 @@ export default function Focus() {
     },
     [live?.baseKm, live?.durationMin, trip?.routeKm, midStop, landing?.km, landing?.durationMin], // eslint-disable-line react-hooks/exhaustive-deps
   )
+
+  // Android: the OS fires each checkpoint notification (the page may be frozen). Scheduled when the flight starts, and cancelled the
+  // moment it stops flying (ended, landed, left/frozen, taken over) or this screen goes: the cleanup is the one cancel path.
+  useEffect(() => {
+    if (!isNativeApp() || !flying || !session || !trip || !getState().settings.notifyBird) return
+    const endKm = Math.min(trip.routeKm, session.baseKm + session.durationMin * KM_PER_FOCUS_MINUTE)
+    const stopKms = stops.filter((km) => km <= endKm + 1)
+    const places = stopKms.map((km) => (km >= trip.routeKm ? trip.dest.name : [...hits].reverse().find((h) => h.km <= km)?.country ?? ''))
+    const plan = planCheckpointAlerts({ startMs: session.startMs, startKm: session.baseKm, stopKms, places, nowMs: serverNow() })
+    return keepCheckpointsScheduled(localNotifier, plan)
+  }, [flying, session?.tripId, session?.startMs, session?.baseKm, session?.durationMin, trip?.routeKm, stops, hits]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // a session found stale on load has leftAtMs set in the store by now: the resume prompt handles it, not a completion
