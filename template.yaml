@@ -54,6 +54,14 @@ Parameters:
     AllowedPattern: '^[A-Za-z0-9 @.:/_+-]{0,100}$'
     Description: Optional contact (URL or email) sent in the geocoder User-Agent (empty = "Pigeon Post/1.0")
 
+  # Weather (Task 15). Open-Meteo's FREE tier is NON-COMMERCIAL: a paid API key is required before public release.
+  # With a key the function calls customer-api.open-meteo.com; empty (the default) uses the free host. The key stays server-side.
+  OpenMeteoApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Open-Meteo commercial API key (empty = free non-commercial host; set before public release)
+
   # Optional custom domain (Task 10). Leave Domain empty to serve from the CloudFront domain only.
   Domain:
     Type: String
@@ -717,6 +725,38 @@ Resources:
         Reverse:
           Type: HttpApi
           Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /places/reverse }
+
+  WeatherLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-weather'
+      RetentionInDays: 14
+
+  # Current wind and temperature through Open-Meteo, cached in memory per 0.1 degree cell. No table access, so no extra IAM.
+  WeatherFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/weather.ts]
+    Properties:
+      CodeUri: api/
+      Handler: weather.handler
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref WeatherLogGroup
+      Environment:
+        Variables:
+          OPEN_METEO_API_KEY: !Ref OpenMeteoApiKey
+      Events:
+        Weather:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /weather }
 
   FriendsLogGroup:
     Type: AWS::Logs::LogGroup

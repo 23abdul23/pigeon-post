@@ -1,10 +1,18 @@
+import { api } from './api'
+import { COGNITO_CONFIGURED } from './auth'
+
 const ARROWS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 export type Wind = { speedKmh: number; fromDeg: number; tempC: number }
 
-/** Current wind and temperature at a point from Open-Meteo (no key). Null when offline. */
+/**
+ * Current wind and temperature at a point. Through `GET /weather` when signed-in builds are configured (the server holds
+ * the Open-Meteo key and caches per 0.1 degree cell, so the coordinates leave the device rounded to 1 decimal);
+ * offline dev without Cognito calls Open-Meteo's free endpoint directly. Null on any failure.
+ */
 export async function windAt(lat: number, lng: number): Promise<Wind | null> {
   try {
+    if (COGNITO_CONFIGURED) return await api<Wind>(`/weather?lat=${lat.toFixed(1)}&lng=${lng.toFixed(1)}`)
     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(2)}&longitude=${lng.toFixed(2)}&current=temperature_2m,wind_speed_10m,wind_direction_10m`)
     if (!r.ok) return null
     const c = (await r.json()).current
