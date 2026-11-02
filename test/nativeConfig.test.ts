@@ -54,4 +54,18 @@ describe('native sign-in and API configuration', () => {
     const activity = manifest.match(/<activity[\s\S]*?<\/activity>/)?.[0] ?? ''
     expect(activity).toMatch(/android:launchMode="(singleTask|singleTop)"/)
   })
+
+  it('manifest_declares_foreground_service_permissions', () => {
+    for (const name of ['FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_SPECIAL_USE', 'POST_NOTIFICATIONS']) {
+      expect(manifest).toMatch(new RegExp(`<uses-permission[^>]*android:name="android\\.permission\\.${name}"`))
+    }
+  })
+
+  it('manifest_declares_FlightService_with_foregroundServiceType', () => {
+    const service = manifest.match(/<service[\s\S]*?<\/service>/)?.[0] ?? ''
+    expect(service).toMatch(/android:name="\.FlightService"/)
+    expect(service).toMatch(/android:foregroundServiceType="specialUse"/)
+    expect(service).toMatch(/android:exported="false"/)
+    expect(service).toMatch(/<property[^>]*android:name="android\.app\.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"[^>]*android:value="[^"]+"/)
+  })
 })
