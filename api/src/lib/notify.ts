@@ -40,7 +40,7 @@ const SCOPE = 'https://www.googleapis.com/auth/firebase.messaging'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const FETCH_MS = 4000
 /** Overall budget for a push attempt, so a slow Google never holds the letter response past the Lambda timeout. */
-const PUSH_BUDGET_MS = 7000
+const PUSH_BUDGET_MS = 5000
 const REFRESH_MARGIN_MS = 5 * 60_000
 
 type ServiceAccount = { project_id: string; client_email: string; private_key: string }
@@ -84,10 +84,10 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
 /** True when FCM says this token will never work again, so its row should go. */
 async function isStale(res: Response): Promise<boolean> {
   if (res.status === 404 || res.status === 410) return true
-  if (res.status !== 400) return false
   try {
     const e = ((await res.json()) as { error?: { status?: string; details?: { errorCode?: string }[] } }).error
-    return e?.status === 'UNREGISTERED' || e?.status === 'INVALID_ARGUMENT' || !!e?.details?.some((d) => d.errorCode === 'UNREGISTERED')
+    // INVALID_ARGUMENT is NOT here: a payload bug or wrong project must never wipe valid tokens
+    return e?.status === 'UNREGISTERED' || !!e?.details?.some((d) => d.errorCode === 'UNREGISTERED')
   } catch {
     return false
   }

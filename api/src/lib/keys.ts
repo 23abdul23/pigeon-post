@@ -26,4 +26,8 @@ export const REPORT_SK = 'REPORT'
 export const reportUsageSk = (day: string) => `USAGE#report#${day}`
 export const DEVICE_PREFIX = 'DEVICE#'
 /** One row per (user, push token). The token is hashed so the key stays short and safe whatever characters it holds. */
-export const deviceSk = (token: string) => `${DEVICE_PREFIX}${createHash('sha256').update(token).digest('hex')}`
+export const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex')
+export const deviceSk = (token: string) => `${DEVICE_PREFIX}${tokenHash(token)}`
+/** The one global row naming who owns a push token (a phone belongs to one account at a time). */
+export const tokenPk = (token: string) => `PUSHTOKEN#${tokenHash(token)}`
+export const TOKEN_OWNER_SK = 'OWNER'

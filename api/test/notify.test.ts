@@ -78,12 +78,20 @@ describe('notifyLetterDelivered', () => {
     setDevices('gone', 'bad', 'old', 'good', 'flaky')
     sendStatus = (t) =>
       t === 'gone' ? { status: 404, body: { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } } }
-      : t === 'bad' ? { status: 400, body: { error: { status: 'INVALID_ARGUMENT' } } }
+      : t === 'bad' ? { status: 400, body: { error: { status: 'UNREGISTERED' } } }
       : t === 'old' ? { status: 410 }
       : t === 'flaky' ? { status: 503, body: { error: { status: 'UNAVAILABLE' } } }
       : { status: 200 }
     await notifyLetterDelivered('b', 'Ann')
     expect(deleted.sort()).toEqual([deviceSk('bad'), deviceSk('gone'), deviceSk('old')].sort())
+  })
+
+  it('invalid_argument_does_not_delete_the_token', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    sendStatus = () => ({ status: 400, body: { error: { status: 'INVALID_ARGUMENT' } } })
+    await notifyLetterDelivered('b', 'Ann')
+    expect(sends()).toHaveLength(2)
+    expect(deleted).toEqual([])
   })
 
   it('notify_skipped_when_user_disabled_letters', async () => {

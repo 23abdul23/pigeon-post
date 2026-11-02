@@ -48,6 +48,13 @@ describe('credits', () => {
     expect(h).toContain('first name')
     expect(h).not.toContain('task 16')
   })
+  it('privacy_page_does_not_promise_deletion_only_on_sign_out', () => {
+    const h = page('privacy.html').toLowerCase()
+    expect(h).not.toContain('until you sign out')
+    expect(h).toContain('when you sign out on this device')
+    expect(h).toContain('another account')
+    expect(h).toContain('stops being valid')
+  })
   it('delete_page_does_not_promise_immediate_removal', () => {
     expect(page('delete-account.html').toLowerCase()).not.toContain('immediately')
   })

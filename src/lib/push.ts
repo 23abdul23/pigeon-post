@@ -1,6 +1,14 @@
 // Push notifications for "A letter arrived" in the Android app (Firebase Cloud Messaging through Capacitor). The plugin is
 // loaded on demand so the web bundle never pulls it in; every failure is swallowed because push is only a convenience.
 
+// BUILD FLAG: push is OFF unless the build sets VITE_PUSH_ENABLED=true (see .env.production). Manual steps before turning it on:
+//   1. Create the Firebase project and add the Android app (app id app.pigeonpost).
+//   2. Put its google-services.json in android/app/ (not committed) so the Gradle google-services plugin applies.
+//   3. Create the Secrets Manager secret with the service-account JSON and deploy with FcmServiceAccountSecretArn.
+//   4. Build, run on a device, then set VITE_PUSH_ENABLED=true.
+// Without Firebase config, PushNotifications.register() throws on the plugin thread and crashes the app, so nothing here may
+// touch the plugin while the flag is off.
+
 import { api } from './api'
 import { isNativeApp } from './platform'
 
@@ -41,6 +49,9 @@ const stored = {
   },
 }
 
+/** True only for the exact string 'true'. */
+export const pushEnabled = (env: Record<string, unknown> = import.meta.env): boolean => env.VITE_PUSH_ENABLED === 'true'
+
 let started = false
 
 export const putDevice = async (token: string) => {
@@ -49,9 +60,9 @@ export const putDevice = async (token: string) => {
 }
 
 /** Android only, after sign-in: creates the `letters` notification channel and registers this device. Never throws. */
-export async function startPush(): Promise<void> {
+export async function startPush(enabled: boolean = pushEnabled()): Promise<void> {
   // every screen's guard calls this: once per app run is enough
-  if (!isNativeApp() || started) return
+  if (!enabled || !isNativeApp() || started) return
   started = true
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications')

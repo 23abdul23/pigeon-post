@@ -7,6 +7,7 @@ import { AdminDeleteUserCommand, CognitoIdentityProviderClient, UserNotFoundExce
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
+import { tokenPk } from '../src/lib/keys'
 import { handler as deleteMe } from '../src/handlers/account'
 import { handler as postSession } from '../src/handlers/sessions'
 import { returnTrip } from '../src/handlers/trips'
@@ -135,6 +136,18 @@ beforeEach(() => {
 })
 
 describe('DELETE /me', () => {
+  it('account_deletion_removes_owned_pushtoken_rows', async () => {
+    profile('a', 'Ann')
+    put({ PK: 'USER#a', SK: 'DEVICE#h1', token: 'mine', platform: 'android' })
+    put({ PK: 'USER#a', SK: 'DEVICE#h2', token: 'moved', platform: 'android' })
+    put({ PK: tokenPk('mine'), SK: 'OWNER', ownerId: 'a' })
+    put({ PK: tokenPk('moved'), SK: 'OWNER', ownerId: 'b' }) // since claimed by another account: not mine to delete
+    expect((await call(deleteMe, ev({ sub: 'a' }))).status).toBe(204)
+    expect(row(tokenPk('mine'), 'OWNER')).toBeUndefined()
+    expect(row(tokenPk('moved'), 'OWNER')).toMatchObject({ ownerId: 'b' })
+    expect(rowsOf('a')).toHaveLength(0)
+  })
+
   it('delete_me_removes_all_user_items', async () => {
     profile('a', 'Ann')
     profile('b', 'Bob')

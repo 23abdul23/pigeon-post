@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { registerPush, type PushLike } from '../src/lib/push'
+import { pushEnabled, registerPush, startPush, type PushLike } from '../src/lib/push'
 
 const fake = (perm: 'granted' | 'denied' | 'prompt', afterRequest: 'granted' | 'denied' = 'granted') => {
   const calls: string[] = []
@@ -44,5 +44,27 @@ describe('registerPush', () => {
     expect(p.register).not.toHaveBeenCalled()
     expect(p.addListener).not.toHaveBeenCalled()
     expect(put).not.toHaveBeenCalled()
+  })
+})
+
+const plugin = { createChannel: vi.fn(), checkPermissions: vi.fn(), requestPermissions: vi.fn(), register: vi.fn(), addListener: vi.fn() }
+vi.mock('@capacitor/push-notifications', () => ({ PushNotifications: plugin }))
+
+describe('push build flag', () => {
+  it('pushEnabled_is_false_by_default_and_true_only_for_the_string_true', () => {
+    expect(pushEnabled({})).toBe(false)
+    for (const v of [undefined, '', 'false', 'TRUE', '1', 'yes', true]) expect(pushEnabled({ VITE_PUSH_ENABLED: v })).toBe(false)
+    expect(pushEnabled({ VITE_PUSH_ENABLED: 'true' })).toBe(true)
+  })
+
+  it('startPush_never_touches_the_plugin_when_push_is_disabled', async () => {
+    vi.stubGlobal('Capacitor', { isNativePlatform: () => true })
+    try {
+      await startPush(false)
+      await startPush() // the test environment sets no flag
+      for (const f of Object.values(plugin)) expect(f).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

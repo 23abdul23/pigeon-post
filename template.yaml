@@ -867,7 +867,8 @@ Resources:
       LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-devices'
       RetentionInDays: 14
 
-  # PUT /devices and DELETE /devices/{token}: the caller's push tokens. Query lists them to enforce the per-user cap.
+  # PUT /devices and DELETE /devices/{token}: the caller's push tokens. Query lists them to enforce the per-user cap; GetItem
+  # reads the token's single-owner row; the ownership transaction is authorized per item by PutItem / DeleteItem.
   DevicesFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -887,7 +888,7 @@ Resources:
       Policies:
         - Statement:
             - Effect: Allow
-              Action: [dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query]
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query]
               Resource: !GetAtt PigeonPost.Arn
       Events:
         Register:

@@ -3,13 +3,13 @@ import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/c
 import { AdminDeleteUserCommand, CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider'
 import { ddb, isConditionFail, tableName } from '../lib/db'
 import { route } from '../lib/http'
-import { friendSk, letterSk, PROFILE_SK, sentSk, userPk } from '../lib/keys'
+import { DEVICE_PREFIX, friendSk, letterSk, PROFILE_SK, sentSk, TOKEN_OWNER_SK, tokenPk, userPk } from '../lib/keys'
 import { queryAll, type LetterRow } from '../lib/letters'
 
 const s3 = new S3Client({})
 const cognito = new CognitoIdentityProviderClient({})
 
-type Row = Partial<Omit<LetterRow, 'status'>> & { PK: string; SK: string; status?: string } // a letter or a friend row
+type Row = Partial<Omit<LetterRow, 'status'>> & { PK: string; SK: string; status?: string; token?: string } // a letter or a friend row
 // a row that is already gone (or a letter that landed meanwhile) is fine: that is what a re-run sees
 const unlessGone = async (write: () => Promise<unknown>) => {
   try {
@@ -64,6 +64,16 @@ export const handler = route(async (sub, event) => {
     }
     ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined
   } while (ContinuationToken)
+
+  // 2b. Push-token ownership rows I still own (one claimed by another account since is theirs and stays). Before my own rows go,
+  //     so a re-run after a failure still finds the device rows that name them.
+  await Promise.all(
+    rows
+      .filter((r) => r.SK.startsWith(DEVICE_PREFIX) && typeof r.token === 'string')
+      .map((r) =>
+        unlessGone(() => ddb.send(new DeleteCommand({ TableName, Key: { PK: tokenPk(r.token!), SK: TOKEN_OWNER_SK }, ConditionExpression: 'ownerId = :me', ExpressionAttributeValues: { ':me': sub } }))),
+      ),
+  )
 
   // 3. My own rows, 25 per batch; unprocessed ones are retried with backoff, then the request fails and can be re-run.
   const deletes = rows.filter((r) => r.SK !== PROFILE_SK).map(({ PK, SK }) => ({ DeleteRequest: { Key: { PK, SK } } }))
