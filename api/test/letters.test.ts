@@ -100,7 +100,10 @@ const fly = (sub: string, sessionId: string) =>
   })
 const status = (pk: string, sk: string) => row(pk, sk)?.status
 
+let beforeTransact: (() => void) | undefined // lets a test change the table after the handler's reads, before the write
+
 beforeEach(() => {
+  beforeTransact = undefined
   ddb.reset()
   table.clear()
   profile('a', 'Ann', city('Zagreb', 'HR'))
@@ -117,7 +120,15 @@ beforeEach(() => {
     return { Attributes: applyUpdate(i) }
   })
   ddb.on(TransactWriteCommand).callsFake((i) => {
-    const items = (i.TransactItems as any[]).filter((t) => t.Put || t.Update) // the FLIGHT delete/check: api/test/flight.test.ts
+    const hook = beforeTransact
+    beforeTransact = undefined
+    hook?.()
+    const all = i.TransactItems as any[]
+    // block / friend checks and letter deletes are honoured here; the FLIGHT delete/check are covered in api/test/flight.test.ts
+    const checks = all.filter((t) => t.ConditionCheck && /^(BLOCK|FRIEND)#/.test(t.ConditionCheck.Key.SK)).map((t) => t.ConditionCheck)
+    if (checks.some((c) => !holds(c, table.get(k(c.Key.PK, c.Key.SK))))) throw cancelled()
+    for (const t of all) if (t.Delete && /^(LETTER|SENT)#/.test(t.Delete.Key.SK)) table.delete(k(t.Delete.Key.PK, t.Delete.Key.SK))
+    const items = all.filter((t) => t.Put || t.Update)
     if (items.some((t) => (t.Put ? !holds(t.Put, table.get(k(t.Put.Item.PK, t.Put.Item.SK))) : !holds(t.Update, table.get(k(t.Update.Key.PK, t.Update.Key.SK)))))) throw cancelled()
     for (const t of items) t.Put ? table.set(k(t.Put.Item.PK, t.Put.Item.SK), t.Put.Item) : applyUpdate(t.Update)
     return {}
@@ -194,6 +205,55 @@ describe('POST /letters', () => {
     expect(row('USER#a', 'SENT#l1')).toMatchObject({ box: 'sent', fromId: 'a', toId: 'b', status: 'CARRIED' })
     expect(JSON.stringify([...table.values()].filter((r) => String(r.SK).match(/LETTER|SENT/)))).not.toContain('@example.com')
     expect(await write('a', { text: 'x'.repeat(2000) })).toEqual(ok) // replay of the same id
+  })
+})
+
+const blockRow = (owner: string, other: string) => table.set(k(`USER#${owner}`, `BLOCK#${other}`), { PK: `USER#${owner}`, SK: `BLOCK#${other}`, id: other })
+const seedLetter = (id: string, from: string, to: string, st: string) => {
+  const l = { id, fromId: from, toId: to, fromName: 'X', fromCity: 'Y', cc: 'HR', text: 'Hi', attachments: [], status: st, dateMs: 1 }
+  table.set(k(`USER#${from}`, `SENT#${id}`), { PK: `USER#${from}`, SK: `SENT#${id}`, ...l, box: 'sent' })
+  table.set(k(`USER#${to}`, `LETTER#${id}`), { PK: `USER#${to}`, SK: `LETTER#${id}`, ...l, box: 'in' })
+}
+
+describe('blocks and letters', () => {
+  it('letter_create_is_rejected_when_a_block_lands_between_check_and_write', async () => {
+    beforeTransact = () => blockRow('b', 'a')
+    const before = table.size
+    const r = await write('a', {})
+    expect(r.status).toBe(403)
+    expect(JSON.stringify(r.body)).not.toMatch(/block/i)
+    expect(table.size).toBe(before + 1) // only the block row the test inserted
+    expect(row('USER#b', 'LETTER#l1')).toBeUndefined()
+  })
+
+  it('letter_create_is_rejected_when_the_friendship_is_removed_between_check_and_write', async () => {
+    beforeTransact = () => {
+      table.delete(k('USER#a', 'FRIEND#b'))
+    }
+    expect((await write('a', {})).status).toBe(403)
+    expect(row('USER#a', 'SENT#l1')).toBeUndefined()
+  })
+
+  it('arrival_does_not_deliver_a_letter_between_blocked_users', async () => {
+    await write('a', {})
+    await write('b', { id: 'reply', toId: 'a', text: 'Write back soon', status: 'WAITING' })
+    blockRow('b', 'a') // lands after both letters were queued
+    seedTrip('a')
+    const r = await fly('a', 's1')
+    expect(r.status).toBe(200)
+    expect(r.body.delivered).toEqual([])
+    expect(r.body.pickedUp).toEqual([])
+    expect(status('USER#b', 'LETTER#l1')).toBe('CARRIED')
+    expect(status('USER#a', 'LETTER#reply')).toBe('WAITING')
+  })
+
+  it('state_does_not_expose_cancelled_letters', async () => {
+    seedLetter('x1', 'b', 'a', 'WAITING')
+    seedLetter('x2', 'a', 'b', 'CARRIED')
+    const { handler: blocks } = await import('../src/handlers/blocks')
+    expect((await call(blocks, ev({ sub: 'a', routeKey: 'POST /blocks/{id}', id: 'b' }))).status).toBe(204)
+    expect((await call(state, ev({ sub: 'a' }))).body.letters).toEqual([])
+    expect((await call(state, ev({ sub: 'b' }))).body.letters).toEqual([])
   })
 })
 

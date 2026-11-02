@@ -5,7 +5,7 @@ import { ATTACHMENT_MAX_BYTES, ATTACHMENT_TYPES, LETTER_MAX_CHARS, MAX_ATTACHMEN
 import { ddb, tableName } from '../lib/db'
 import { bad, fail, id, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { letterOut, move, type LetterRow, type StoredAttachment, type TransactItem } from '../lib/letters'
-import { blockedEitherWay } from '../lib/blocks'
+import { blockedEitherWay, noBlockChecks } from '../lib/blocks'
 import { friendSk, letterSk, PROFILE_SK, sentSk, userPk } from '../lib/keys'
 
 const get = async <T>(pk: string, sk: string) =>
@@ -79,7 +79,11 @@ export const create = route(async (sub, event) => {
     const put = (PK: string, SK: string, box: LetterRow['box']): TransactItem => ({
       Put: { TableName: tableName(), Item: { PK, SK, ...letter, box }, ConditionExpression: 'attribute_not_exists(PK)' },
     })
-    return { items: [put(userPk(toId), letterSk(letterId), 'in'), put(userPk(sub), sentSk(letterId), 'sent')], result: json(200, letterOut({ ...letter, box: 'sent' }, sub)) }
+    // the pre-check above can be stale: these fail the write if a block (or an unfriend) landed since
+    const stillFriends: TransactItem = {
+      ConditionCheck: { TableName: tableName(), Key: { PK: userPk(sub), SK: friendSk(toId) }, ConditionExpression: '#s = :accepted', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':accepted': 'accepted' } },
+    }
+    return { items: [...noBlockChecks(sub, toId), stillFriends, put(userPk(toId), letterSk(letterId), 'in'), put(userPk(sub), sentSk(letterId), 'sent')], result: json(200, letterOut({ ...letter, box: 'sent' }, sub)) }
   })
 })
 

@@ -48,7 +48,10 @@ function failsCondition(op: Record<string, any>, existing: Record<string, any> |
   throw new Error('unexpected condition ' + c)
 }
 
+let beforeTransact: (() => void) | undefined // lets a test change the table after the handler's reads, before the write
+
 beforeEach(() => {
+  beforeTransact = undefined
   ddb.reset()
   table.clear()
   profile('a', 'AAAAAAAA', 'Ann')
@@ -57,12 +60,16 @@ beforeEach(() => {
   ddb.on(QueryCommand).callsFake((i) => ({ Items: [...table.values()].filter((r) => r[i.IndexName ? 'GSI1PK' : 'PK'] === i.ExpressionAttributeValues[':pk']) }))
   ddb.on(TransactWriteCommand).callsFake((i) => {
     const items = i.TransactItems as any[]
+    const hook = beforeTransact
+    beforeTransact = undefined
+    hook?.()
     const failed = items.some((t) => {
-      const op = t.Put ?? t.Delete
+      const op = t.Put ?? t.Delete ?? t.ConditionCheck
       return failsCondition(op, table.get(k(op.Item?.PK ?? op.Key.PK, op.Item?.SK ?? op.Key.SK)))
     })
     if (failed) throw new TransactionCanceledException({ message: 'cancelled', $metadata: {} })
     for (const t of items) {
+      if (t.ConditionCheck) continue
       if (t.Put) table.set(k(t.Put.Item.PK, t.Put.Item.SK), t.Put.Item)
       else table.delete(k(t.Delete.Key.PK, t.Delete.Key.SK))
     }
@@ -199,5 +206,27 @@ describe('friends', () => {
     table.set(k('USER#a', 'BLOCK#b'), { PK: 'USER#a', SK: 'BLOCK#b', id: 'b' })
     expect((await req('a', 'BBBBBBBB')).status).toBe(403)
     expect(transacts()).toHaveLength(0)
+  })
+
+  it('friend_request_is_rejected_when_a_block_lands_between_check_and_write', async () => {
+    beforeTransact = () => table.set(k('USER#b', 'BLOCK#a'), { PK: 'USER#b', SK: 'BLOCK#a', id: 'a' })
+    expect((await req('a', 'BBBBBBBB')).status).toBe(403)
+    expect(row('USER#a', 'FRIEND#b')).toBeUndefined()
+    expect(row('USER#b', 'FRIEND#a')).toBeUndefined()
+  })
+
+  it('accept_is_403_when_either_side_blocked', async () => {
+    await req('b', 'AAAAAAAA') // b asks a
+    table.set(k('USER#b', 'BLOCK#a'), { PK: 'USER#b', SK: 'BLOCK#a', id: 'a' })
+    expect((await call(accept, ev({ sub: 'a', id: 'b' }))).status).toBe(403)
+    table.delete(k('USER#b', 'BLOCK#a'))
+    table.set(k('USER#a', 'BLOCK#b'), { PK: 'USER#a', SK: 'BLOCK#b', id: 'b' })
+    expect((await call(accept, ev({ sub: 'a', id: 'b' }))).status).toBe(403)
+    expect(row('USER#a', 'FRIEND#b')?.status).toBe('pending_in')
+    // and a block landing after accept's read cancels the write
+    table.delete(k('USER#a', 'BLOCK#b'))
+    beforeTransact = () => table.set(k('USER#b', 'BLOCK#a'), { PK: 'USER#b', SK: 'BLOCK#a', id: 'a' })
+    expect((await call(accept, ev({ sub: 'a', id: 'b' }))).status).toBe(403)
+    expect(row('USER#a', 'FRIEND#b')?.status).toBe('pending_in')
   })
 })

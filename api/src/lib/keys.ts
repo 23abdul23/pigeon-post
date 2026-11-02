@@ -22,3 +22,4 @@ export const blockSk = (otherSub: string) => `BLOCK#${otherSub}`
 export const BLOCK_PREFIX = 'BLOCK#'
 export const reportPk = (reportId: string) => `REPORT#${reportId}`
 export const REPORT_SK = 'REPORT'
+export const reportUsageSk = (day: string) => `USAGE#report#${day}`

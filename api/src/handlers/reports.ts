@@ -1,13 +1,15 @@
-import { PutCommand } from '@aws-sdk/lib-dynamodb'
+import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import { randomUUID } from 'node:crypto'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from 'aws-lambda'
 import type { ReportInput } from '../../../src/lib/types'
-import { ddb, tableName } from '../lib/db'
-import { bad, id, json, optStr, parseBody, route } from '../lib/http'
-import { reportPk, REPORT_SK, userPk } from '../lib/keys'
+import { ddb, isConditionFail, tableName } from '../lib/db'
+import { bad, fail, id, json, optStr, parseBody, route } from '../lib/http'
+import { reportPk, reportUsageSk, REPORT_SK, userPk } from '../lib/keys'
 
 const ses = new SESv2Client({})
+const DAILY_CAP = 20
+const DAY = 86400
 const KINDS = ['user', 'letter']
 const REASONS = ['spam', 'harassment', 'inappropriate', 'other']
 const oneOf = <T extends string>(v: unknown, list: string[], what: string) => (typeof v === 'string' && list.includes(v) ? (v as T) : bad(`invalid ${what}`))
@@ -24,6 +26,23 @@ export const report = route(async (sub, event) => {
     reason: oneOf(b.reason, REASONS, 'reason'),
     note: optStr(b.note, 500, 'note'),
     letterId: b.letterId === undefined ? undefined : id(b.letterId, 'letterId'),
+  }
+  // per-user daily cap (UTC day): each report costs a row and maybe an email from the shared SES sender
+  const now = Math.floor(Date.now() / 1000)
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: tableName(),
+        Key: { PK: userPk(sub), SK: reportUsageSk(new Date(now * 1000).toISOString().slice(0, 10)) },
+        UpdateExpression: 'ADD n :one SET #ttl = :ttl',
+        ConditionExpression: 'attribute_not_exists(n) OR n < :cap',
+        ExpressionAttributeNames: { '#ttl': 'ttl' },
+        ExpressionAttributeValues: { ':one': 1, ':cap': DAILY_CAP, ':ttl': now + 2 * DAY },
+      }),
+    )
+  } catch (e) {
+    if (isConditionFail(e)) return fail(429, 'daily limit reached')
+    throw e
   }
   const reportId = randomUUID()
   await ddb.send(

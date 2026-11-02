@@ -2,7 +2,8 @@ import { DeleteCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda'
 import { ddb, tableName } from '../lib/db'
 import { bad, id, json, route } from '../lib/http'
-import { blockSk, BLOCK_PREFIX, friendSk, userPk } from '../lib/keys'
+import { blockSk, BLOCK_PREFIX, friendSk, letterSk, sentSk, userPk } from '../lib/keys'
+import { queryAll, type LetterRow, type TransactItem } from '../lib/letters'
 
 const noContent: APIGatewayProxyResultV2 = { statusCode: 204 }
 
@@ -22,8 +23,27 @@ export const block = route(async (sub, event) => {
       ],
     }),
   )
+  await cancelPending(sub, other)
   return noContent
 })
+
+/**
+ * Deletes both copies of every not-yet-delivered (WAITING or CARRIED) letter between the two users, in both directions.
+ * My partition holds my copy of every one of these letters (my inbox from them, my sent to them) and copies are always
+ * written as pairs, so listing it finds all of them. Delivered and opened letters stay. Safe to repeat: a failure
+ * part-way leaves the rest findable, and POST /blocks/{id} again finishes the job.
+ */
+async function cancelPending(me: string, other: string) {
+  const mine = [...(await queryAll<LetterRow>(userPk(me), 'LETTER#')), ...(await queryAll<LetterRow>(userPk(me), 'SENT#'))]
+  const pending = mine.filter((l) => (l.status === 'WAITING' || l.status === 'CARRIED') && (l.fromId === other || l.toId === other))
+  for (let i = 0; i < pending.length; i += 25) {
+    const items: TransactItem[] = pending.slice(i, i + 25).flatMap((l) => [
+      { Delete: { TableName: tableName(), Key: { PK: userPk(l.toId), SK: letterSk(l.id) } } },
+      { Delete: { TableName: tableName(), Key: { PK: userPk(l.fromId), SK: sentSk(l.id) } } },
+    ])
+    await ddb.send(new TransactWriteCommand({ TransactItems: items }))
+  }
+}
 
 /** DELETE /blocks/{id}: unblock. Does not restore the friendship. Already gone is fine. */
 export const unblock = route(async (sub, event) => {

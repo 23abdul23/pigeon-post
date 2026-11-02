@@ -3,7 +3,7 @@ import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 }
 import type { Friend, ServerProfile } from '../../../src/lib/types'
 import { ddb, tableName } from '../lib/db'
 import { bad, fail, id, json, parseBody, route, str } from '../lib/http'
-import { blockedEitherWay } from '../lib/blocks'
+import { blockedEitherWay, noBlockChecks } from '../lib/blocks'
 import { friendSk, codePk, PROFILE_SK, userPk } from '../lib/keys'
 
 type TransactItem = NonNullable<TransactWriteCommandInput['TransactItems']>[number]
@@ -88,11 +88,11 @@ export const request = route(async (sub, event) => {
     const mine = (await get(userPk(sub), friendSk(other))) as Row | undefined
     const theirRow = (await get(userPk(other), friendSk(sub))) as Row | undefined
     if (mine?.status === 'pending_out' || mine?.status === 'accepted') return json(200, friendOut(mine)) // idempotent
-    if (mine?.status === 'pending_in' && theirRow) return { items: accepted(mine, theirRow), result: json(200, friendOut({ ...mine, status: 'accepted' })) } // they already asked me
+    if (mine?.status === 'pending_in' && theirRow) return { items: [...noBlockChecks(sub, other), ...accepted(mine, theirRow)], result: json(200, friendOut({ ...mine, status: 'accepted' })) } // they already asked me
     const me = (await get(userPk(sub), PROFILE_SK)) as ServerProfile | undefined
     if (!me?.name || !me.homeCity) return bad('finish setting up your profile first')
     const out = rowFor(sub, other, them, 'pending_out')
-    return { items: [put(out), put(rowFor(other, sub, me, 'pending_in'))], result: json(200, friendOut(out)) }
+    return { items: [...noBlockChecks(sub, other), put(out), put(rowFor(other, sub, me, 'pending_in'))], result: json(200, friendOut(out)) }
   })
 })
 
@@ -100,13 +100,14 @@ export const request = route(async (sub, event) => {
 export const accept = route(async (sub, event) => {
   const other = id(event.pathParameters?.id, 'friend id')
   return mirrored(async () => {
+    if (await blockedEitherWay(sub, other)) return fail(403, 'cannot send a friend request')
     const mine = (await get(userPk(sub), friendSk(other))) as Row | undefined
     if (!mine) return fail(404, 'no such request')
     if (mine.status === 'accepted') return json(200, friendOut(mine))
     if (mine.status === 'pending_out') return fail(409, 'you sent this request; they have to accept it')
     const theirs = (await get(userPk(other), friendSk(sub))) as Row | undefined
     if (!theirs) return fail(404, 'no such request')
-    return { items: accepted(mine, theirs), result: json(200, friendOut({ ...mine, status: 'accepted' })) }
+    return { items: [...noBlockChecks(sub, other), ...accepted(mine, theirs)], result: json(200, friendOut({ ...mine, status: 'accepted' })) }
   })
 })
 

@@ -744,7 +744,7 @@ Resources:
       Policies:
         - Statement:
             - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem]
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:ConditionCheckItem]
               Resource: !GetAtt PigeonPost.Arn
             - Effect: Allow
               Action: [dynamodb:Query]
@@ -832,7 +832,7 @@ Resources:
       Policies:
         - Statement:
             - Effect: Allow
-              Action: [dynamodb:PutItem]
+              Action: [dynamodb:PutItem, dynamodb:UpdateItem]
               Resource: !GetAtt PigeonPost.Arn
             - !If
               - HasSesSender
@@ -896,7 +896,7 @@ Resources:
       Policies:
         - Statement:
             - Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:ConditionCheckItem]
               Resource: !GetAtt PigeonPost.Arn
       Events:
         Create:

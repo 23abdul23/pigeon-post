@@ -24,7 +24,17 @@ const friends = (x: string, y: string) => {
   table.set(k(`USER#${y}`, `FRIEND#${x}`), { PK: `USER#${y}`, SK: `FRIEND#${x}`, id: x, status: 'accepted' })
 }
 
+let beforeFail = false // fail the first letter-cancelling transaction
+
+const letter = (id: string, from: string, to: string, status: string) => {
+  const l = { id, fromId: from, toId: to, status }
+  table.set(k(`USER#${from}`, `SENT#${id}`), { PK: `USER#${from}`, SK: `SENT#${id}`, ...l, box: 'sent' })
+  table.set(k(`USER#${to}`, `LETTER#${id}`), { PK: `USER#${to}`, SK: `LETTER#${id}`, ...l, box: 'in' })
+}
+const letterKeys = () => [...table.keys()].filter((x) => /LETTER#|SENT#/.test(x)).sort()
+
 beforeEach(() => {
+  beforeFail = false
   ddb.reset()
   table.clear()
   ddb.on(GetCommand).callsFake((i) => ({ Item: table.get(k(i.Key.PK, i.Key.SK)) }))
@@ -35,6 +45,10 @@ beforeEach(() => {
   ddb.on(DeleteCommand).callsFake((i) => (table.delete(k(i.Key.PK, i.Key.SK)), {}))
   ddb.on(TransactWriteCommand).callsFake((i) => {
     for (const t of i.TransactItems as any[]) {
+      if (beforeFail && t.Delete?.Key.SK.match(/^(LETTER|SENT)#/)) {
+        beforeFail = false
+        throw new Error('boom')
+      }
       if (t.Put) table.set(k(t.Put.Item.PK, t.Put.Item.SK), t.Put.Item)
       else table.delete(k(t.Delete.Key.PK, t.Delete.Key.SK))
     }
@@ -83,5 +97,35 @@ describe('blocks', () => {
   it('block_requires_auth_401', async () => {
     const r = (await handler({ routeKey: 'POST /blocks/{id}', pathParameters: { id: 'b' }, requestContext: {} } as any)) as APIGatewayProxyStructuredResultV2
     expect(r.statusCode).toBe(401)
+  })
+
+  it('block_cancels_undelivered_letters_in_both_directions', async () => {
+    friends('a', 'b')
+    letter('w1', 'a', 'b', 'WAITING') // mine to them
+    letter('c1', 'a', 'b', 'CARRIED')
+    letter('w2', 'b', 'a', 'WAITING') // theirs to me
+    letter('c2', 'b', 'a', 'CARRIED')
+    letter('other', 'a', 'z', 'CARRIED') // someone else is untouched
+    expect((await block('a', 'b')).status).toBe(204)
+    expect(letterKeys()).toEqual(['USER#a|SENT#other', 'USER#z|LETTER#other'])
+  })
+
+  it('block_keeps_delivered_and_opened_letters', async () => {
+    letter('d1', 'a', 'b', 'DELIVERED')
+    letter('o1', 'b', 'a', 'OPENED')
+    letter('w1', 'b', 'a', 'WAITING')
+    await block('a', 'b')
+    expect(letterKeys()).toEqual(['USER#a|LETTER#o1', 'USER#a|SENT#d1', 'USER#b|LETTER#d1', 'USER#b|SENT#o1'])
+  })
+
+  it('repeated_block_finishes_cancelling_after_partial_failure', async () => {
+    letter('w1', 'a', 'b', 'WAITING')
+    letter('w2', 'b', 'a', 'CARRIED')
+    beforeFail = true
+    await expect(block('a', 'b')).rejects.toThrow('boom')
+    expect(row('USER#a', 'BLOCK#b')).toBeDefined()
+    expect(letterKeys()).toHaveLength(4) // nothing cancelled yet
+    expect((await block('a', 'b')).status).toBe(204)
+    expect(letterKeys()).toEqual([])
   })
 })

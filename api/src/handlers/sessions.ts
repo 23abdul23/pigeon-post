@@ -6,6 +6,7 @@ import { clean, ddb, isConditionFail, tableName, tripOut, type StoredTrip } from
 import { bad, cc, fail, id, isObj, json, num, optStr, parseBody, route, str } from '../lib/http'
 import { flightSk, letterSk, sentSk, sessionSk, stampSk, storySk, tripSk, userPk } from '../lib/keys'
 import { letterOut, move, queryAll, type LetterRow, type TransactItem } from '../lib/letters'
+import { blockedEitherWay } from '../lib/blocks'
 import { notifyLetterArrived } from '../lib/notify'
 
 // A transaction holds at most 100 items: 5 for the session itself (session, trip, stamp, story, flight), 2 per letter (both copies).
@@ -31,7 +32,8 @@ async function arrival(sub: string, trip: StoredTrip): Promise<{ delivered: Lett
   const get = async (PK: string, SK: string) => (await ddb.send(new GetCommand({ TableName: tableName(), Key: { PK, SK }, ConsistentRead: true }))).Item
   // the other copy is the one outside my partition: the recipient's LETTER# for a letter I sent, the sender's SENT# otherwise
   const hasOtherCopy = async (l: LetterRow) => !!(await (l.fromId === sub ? get(userPk(l.toId), letterSk(l.id)) : get(userPk(l.fromId), sentSk(l.id))))
-  const mirrored = async (ls: LetterRow[]) => (await Promise.all(ls.map(async (l) => ((await hasOtherCopy(l)) ? l : undefined)))).filter((l): l is LetterRow => !!l)
+  // defence in depth: a block cancels pending letters, but one that slipped through is never delivered or picked up
+  const mirrored = async (ls: LetterRow[]) => (await Promise.all(ls.map(async (l) => ((await hasOtherCopy(l)) && !(await blockedEitherWay(l.fromId, l.toId)) ? l : undefined)))).filter((l): l is LetterRow => !!l)
   deliver = await mirrored(deliver.slice(0, MAX_LETTER_MOVES))
   pickUp = await mirrored(pickUp.slice(0, MAX_LETTER_MOVES - deliver.length))
   return {
