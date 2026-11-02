@@ -234,10 +234,12 @@ Resources:
         - !Sub 'https://${SiteDistribution.DomainName}/auth/callback'
         - http://localhost:5173/auth/callback
         - !If [HasDomain, !Sub 'https://${Domain}/auth/callback', !Ref 'AWS::NoValue']
+        - app.pigeonpost://auth/callback
       LogoutURLs:
         - !Sub 'https://${SiteDistribution.DomainName}/signin'
         - http://localhost:5173/signin
         - !If [HasDomain, !Sub 'https://${Domain}/signin', !Ref 'AWS::NoValue']
+        - app.pigeonpost://signin
       ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
       PreventUserExistenceErrors: ENABLED
 
@@ -257,6 +259,7 @@ Resources:
           - !Sub 'https://${SiteDistribution.DomainName}'
           - http://localhost:5173
           - !If [HasDomain, !Sub 'https://${Domain}', !Ref 'AWS::NoValue']
+          - https://localhost
         AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
         AllowHeaders: [content-type, authorization]
         MaxAge: 600
