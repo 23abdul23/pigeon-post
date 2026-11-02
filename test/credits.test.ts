@@ -48,6 +48,14 @@ describe('credits', () => {
     expect(h).toContain('first name')
     expect(h).not.toContain('task 16')
   })
+  it('privacy_page_says_weather_goes_through_our_servers', () => {
+    const h = page('privacy.html')
+    const direct = h.match(/<p>The app loads map tiles[\s\S]*?<\/p>/)?.[0] ?? ''
+    expect(direct).not.toBe('')
+    expect(direct).not.toMatch(/weather/i)
+    expect(direct).not.toContain('Open-Meteo')
+    expect(h.toLowerCase()).toContain('weather lookups go through our servers')
+  })
   it('privacy_page_does_not_promise_deletion_only_on_sign_out', () => {
     const h = page('privacy.html').toLowerCase()
     expect(h).not.toContain('until you sign out')
