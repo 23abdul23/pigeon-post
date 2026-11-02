@@ -5,6 +5,7 @@ import { ATTACHMENT_MAX_BYTES, ATTACHMENT_TYPES, LETTER_MAX_CHARS, MAX_ATTACHMEN
 import { ddb, tableName } from '../lib/db'
 import { bad, fail, id, isObj, json, num, parseBody, route, str } from '../lib/http'
 import { letterOut, move, type LetterRow, type StoredAttachment, type TransactItem } from '../lib/letters'
+import { blockedEitherWay } from '../lib/blocks'
 import { friendSk, letterSk, PROFILE_SK, sentSk, userPk } from '../lib/keys'
 
 const get = async <T>(pk: string, sk: string) =>
@@ -59,7 +60,7 @@ export const create = route(async (sub, event) => {
     const mine = await get<LetterRow>(userPk(sub), sentSk(letterId))
     if (mine) return json(200, letterOut(mine, sub)) // replay
     const friend = await get<{ status: string }>(userPk(sub), friendSk(toId))
-    if (friend?.status !== 'accepted') return fail(403, 'letters go to friends only')
+    if (friend?.status !== 'accepted' || (await blockedEitherWay(sub, toId))) return fail(403, 'letters go to friends only') // same answer for a block
     const me = await get<ServerProfile>(userPk(sub), PROFILE_SK)
     if (!me?.name || !me.homeCity) return bad('finish setting up your profile first')
     // profile fields are whitelisted here, so an email can never ride along

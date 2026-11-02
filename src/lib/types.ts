@@ -65,6 +65,15 @@ export type Letter = {
   dateMs: number
 }
 
+/** POST /reports body. `note` is at most 500 code points. */
+export type ReportInput = {
+  targetId: string
+  kind: 'user' | 'letter'
+  reason: 'spam' | 'harassment' | 'inappropriate' | 'other'
+  note?: string
+  letterId?: string
+}
+
 export type Friend = {
   id: string
   name: string

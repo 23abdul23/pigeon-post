@@ -186,4 +186,18 @@ describe('friends', () => {
     expect((await call(handler as never, { ...ev({ sub: 'a', id: 'b' }), routeKey: 'DELETE /friends/{id}' } as never)).status).toBe(204)
     expect((await call(handler as never, { ...ev({}), routeKey: 'GET /nope' } as never)).status).toBe(404)
   })
+
+  it('friend_request_to_a_user_who_blocked_me_is_403', async () => {
+    table.set(k('USER#b', 'BLOCK#a'), { PK: 'USER#b', SK: 'BLOCK#a', id: 'a' })
+    const r = await req('a', 'BBBBBBBB')
+    expect(r.status).toBe(403)
+    expect(JSON.stringify(r.body)).not.toMatch(/block/i)
+    expect(transacts()).toHaveLength(0)
+  })
+
+  it('friend_request_to_someone_i_blocked_is_403', async () => {
+    table.set(k('USER#a', 'BLOCK#b'), { PK: 'USER#a', SK: 'BLOCK#b', id: 'b' })
+    expect((await req('a', 'BBBBBBBB')).status).toBe(403)
+    expect(transacts()).toHaveLength(0)
+  })
 })

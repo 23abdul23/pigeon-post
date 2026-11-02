@@ -21,6 +21,13 @@ Parameters:
     Default: ''
     AllowedPattern: '^$|^[^@\s]+@[^@\s]+$'
     Description: Optional SES-verified sender address for "A letter arrived" emails (empty = email alerts off)
+  # Optional: where "a user reported something" emails go. Empty (default) skips the email; reports are still stored.
+  # Needs SesSenderEmail too, and in the SES sandbox the moderator address must be verified.
+  ModeratorEmail:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[^@\s]+@[^@\s]+$'
+    Description: Optional moderator address that is emailed each user report (empty = no email)
 
   # Confirm this id in the Bedrock console (model access granted in Task 0); the "us." prefix is a cross-region inference profile.
   BedrockModelId:
@@ -755,6 +762,88 @@ Resources:
         Remove:
           Type: HttpApi
           Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: '/friends/{id}' }
+
+  BlocksLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-blocks'
+      RetentionInDays: 14
+
+  # One function for the three block routes. Blocking removes the friendship rows in both partitions (TransactWriteItems is
+  # authorized per item by PutItem / DeleteItem).
+  BlocksFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/blocks.ts]
+    Properties:
+      CodeUri: api/
+      Handler: blocks.handler
+      LoggingConfig:
+        LogGroup: !Ref BlocksLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Block:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: '/blocks/{id}' }
+        Unblock:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: '/blocks/{id}' }
+        List:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /blocks }
+
+  ReportsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-reports'
+      RetentionInDays: 14
+
+  ReportsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/reports.ts]
+    Properties:
+      CodeUri: api/
+      Handler: reports.handler
+      LoggingConfig:
+        LogGroup: !Ref ReportsLogGroup
+      Environment:
+        Variables:
+          SES_SENDER: !Ref SesSenderEmail
+          MODERATOR_EMAIL: !Ref ModeratorEmail
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:PutItem]
+              Resource: !GetAtt PigeonPost.Arn
+            - !If
+              - HasSesSender
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}'
+              - !Ref AWS::NoValue
+      Events:
+        Report:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: POST, Path: /reports }
 
   # Letter attachments. Private: the browser uploads and downloads only through 5-minute presigned URLs.
   LettersBucket:

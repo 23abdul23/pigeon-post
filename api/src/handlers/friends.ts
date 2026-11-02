@@ -3,6 +3,7 @@ import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 }
 import type { Friend, ServerProfile } from '../../../src/lib/types'
 import { ddb, tableName } from '../lib/db'
 import { bad, fail, id, json, parseBody, route, str } from '../lib/http'
+import { blockedEitherWay } from '../lib/blocks'
 import { friendSk, codePk, PROFILE_SK, userPk } from '../lib/keys'
 
 type TransactItem = NonNullable<TransactWriteCommandInput['TransactItems']>[number]
@@ -79,6 +80,8 @@ export const request = route(async (sub, event) => {
   if (other === sub) return bad('that is your own code')
 
   return mirrored(async () => {
+    // same status and body whichever side blocked, so the blocked person learns nothing
+    if (await blockedEitherWay(sub, other)) return fail(403, 'cannot send a friend request')
     const them = (await get(userPk(other), PROFILE_SK)) as ServerProfile | undefined
     // a friend who has not finished onboarding has no name/home city to show: same as an unknown code
     if (!them?.name || !them.homeCity) return fail(404, 'no one has that code')

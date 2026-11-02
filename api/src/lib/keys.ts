@@ -18,3 +18,7 @@ export const GEO_REVERSE_SK = 'REVERSE'
 export const GEO_GLOBAL_PK = 'GEO#GLOBAL'
 export const geoGlobalUseSk = (yyyymmdd: string) => `USE#${yyyymmdd}`
 export const geoUserUseSk = (yyyymmdd: string) => `GEOUSE#${yyyymmdd}`
+export const blockSk = (otherSub: string) => `BLOCK#${otherSub}`
+export const BLOCK_PREFIX = 'BLOCK#'
+export const reportPk = (reportId: string) => `REPORT#${reportId}`
+export const REPORT_SK = 'REPORT'

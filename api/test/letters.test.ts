@@ -168,6 +168,18 @@ describe('POST /letters', () => {
     expect(transacts()).toHaveLength(0)
   })
 
+  it('letter_to_a_blocked_user_is_403_and_nothing_is_stored', async () => {
+    friends('a', 'b')
+    table.set(k('USER#a', 'BLOCK#b'), { PK: 'USER#a', SK: 'BLOCK#b', id: 'b' })
+    const before = table.size
+    const r = await write('a', {}) // I blocked them
+    expect(r.status).toBe(403)
+    expect(await write('b', { toId: 'a', id: 'l2' })).toMatchObject({ status: 403 }) // they write to me
+    expect(JSON.stringify(r.body)).not.toMatch(/block/i)
+    expect(transacts()).toHaveLength(0)
+    expect(table.size).toBe(before)
+  })
+
   it('letter_text_over_2000_chars_is_rejected', async () => {
     expect((await write('a', { text: 'x'.repeat(2001) })).status).toBe(400)
     expect((await write('a', { status: 'DELIVERED' })).status).toBe(400)
