@@ -165,6 +165,19 @@ describe('Android app with the native screen source', () => {
     expect(t.p.state()).toBe('left')
   })
 
+  it('screen_on_event_never_arrives_at_keyguard_so_flight_stays_locked', () => {
+    // FlightService forwards screenOn only once the device is unlocked (USER_PRESENT, or SCREEN_ON with no keyguard),
+    // so a lit keyguard (slow PIN entry, an incoming notification) sends nothing and the flight keeps going.
+    const t = native()
+    t.hide()
+    t.screenOff()
+    t.tick(DECIDE_MS + 1)
+    expect(t.p.state()).toBe('locked')
+    t.tick(10_000) // screen lit at the keyguard, page still hidden, no screenOn
+    expect(t.p.state()).toBe('locked')
+    expect(t.left).toEqual([])
+  })
+
   it('screen_on_with_page_visible_resumes_present', () => {
     const t = native()
     t.hide()

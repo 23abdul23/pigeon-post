@@ -58,6 +58,10 @@ internal testing, then closed testing (5-10 testers, about a week), then product
 
 Keep `VITE_PUSH_ENABLED` at `false` until Firebase `google-services.json` and the Gradle google-services plugin are in place and a device test has passed. If you add it later, supply `android/app/google-services.json` at build time from a secret (decode it in a workflow step, like the keystore) and never commit it.
 
+## Data safety notes
+
+- Android backups are disabled (`android:allowBackup="false"`): the sign-in tokens and app storage are never copied to Google Drive backups or device transfers.
+
 ## Pre-release checklist (human decisions)
 
 - Resolve the UNCONFIRMED three.js bird licences (README, credits) before any public track.
@@ -74,4 +78,3 @@ Keep `VITE_PUSH_ENABLED` at `false` until Firebase `google-services.json` and th
 
 - Pin third-party actions to full commit SHAs instead of major tags.
 - Run the job in a GitHub environment with required reviewers and tag restrictions, so only approved tags can reach the signing secrets.
-- Uncomment the keystore ignore lines in `android/.gitignore`.

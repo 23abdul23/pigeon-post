@@ -1,5 +1,6 @@
 package app.pigeonpost;
 
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -14,7 +15,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import java.util.concurrent.atomic.AtomicBoolean;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
@@ -32,8 +32,22 @@ public class FlightService extends Service {
 
     static final String ACTION_STOP = "app.pigeonpost.action.STOP";
 
-    /** True from the plugin's start() until this service is destroyed; stop() is a no-op while false. */
-    static final AtomicBoolean requested = new AtomicBoolean(false);
+    /**
+     * True once the service has called startForeground for a flight, until onDestroy. While true, a refresh only
+     * re-posts the notification and a stop uses stopService, so neither needs startForegroundService (which the
+     * system refuses from the background on API 31+).
+     */
+    static volatile boolean running = false;
+
+    /**
+     * True from the plugin's startForegroundService request until onStartCommand has called startForeground (or the
+     * request failed). A stop in this window must go through ACTION_STOP, because stopping a service that was begun
+     * with startForegroundService before it calls startForeground crashes the app.
+     */
+    static volatile boolean starting = false;
+
+    /** The live service, for refresh(); set in onCreate, cleared in onDestroy. */
+    private static volatile FlightService current;
 
     private static final String CHANNEL_ID = "flight";
     private static final int NOTIFICATION_ID = 1001;
@@ -42,6 +56,14 @@ public class FlightService extends Service {
     private final Runnable autoStop = this::stopSelf;
     private boolean foregrounded = false;
     private BroadcastReceiver screenReceiver;
+    /** Whether "screenOn" has been sent since the last "screenOff", so SCREEN_ON and USER_PRESENT do not both send it. */
+    private boolean screenOnSent = true;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        current = this;
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -64,15 +86,38 @@ public class FlightService extends Service {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.notify(NOTIFICATION_ID, notification);
         }
+        // Set running before clearing starting so a concurrent stop never sees both false while we are foreground.
+        running = true;
+        starting = false;
 
         registerScreenReceiver();
+        scheduleAutoStop(endsAtMs);
+        return START_NOT_STICKY;
+    }
 
+    private void scheduleAutoStop(long endsAtMs) {
         handler.removeCallbacks(autoStop);
         if (endsAtMs > 0) {
             long delay = endsAtMs - System.currentTimeMillis();
             handler.postDelayed(autoStop, Math.max(delay, 0L));
         }
-        return START_NOT_STICKY;
+    }
+
+    /**
+     * Updates a running flight's notification and auto-stop time without startForegroundService. Returns false when
+     * no service is running (the caller then starts one). Any thread; the work runs on the main looper.
+     */
+    static boolean refresh(Context context, String title, String text, long endsAtMs) {
+        FlightService svc = current;
+        if (!running || svc == null) return false;
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return false;
+        Notification notification = svc.buildNotification(title == null ? "" : title, text == null ? "" : text, endsAtMs);
+        nm.notify(NOTIFICATION_ID, notification);
+        svc.handler.post(() -> {
+            if (current == svc) svc.scheduleAutoStop(endsAtMs);
+        });
+        return true;
     }
 
     /**
@@ -91,11 +136,20 @@ public class FlightService extends Service {
         stopSelf();
     }
 
-    /** Asks a running service to stop; a no-op when no start was requested. Safe to call repeatedly. */
+    /**
+     * Stops the flight service. Running: stopService, which is allowed from the background. Still starting (the
+     * service has not called startForeground yet): ACTION_STOP, so it calls startForeground before stopping. Neither:
+     * a no-op. Safe to call repeatedly.
+     */
     static void requestStop(Context context) {
-        if (!requested.get()) return;
-        Intent stop = new Intent(context, FlightService.class).setAction(ACTION_STOP);
-        ContextCompat.startForegroundService(context, stop);
+        if (running) {
+            context.stopService(new Intent(context, FlightService.class));
+            return;
+        }
+        if (starting) {
+            Intent stop = new Intent(context, FlightService.class).setAction(ACTION_STOP);
+            ContextCompat.startForegroundService(context, stop);
+        }
     }
 
     @Override
@@ -149,14 +203,35 @@ public class FlightService extends Service {
             public void onReceive(Context context, Intent intent) {
                 if (intent == null) return;
                 String action = intent.getAction();
-                if (Intent.ACTION_SCREEN_OFF.equals(action)) FlightPlugin.emit("screenOff");
-                else if (Intent.ACTION_SCREEN_ON.equals(action)) FlightPlugin.emit("screenOn");
+                if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                    screenOnSent = false;
+                    FlightPlugin.emit("screenOff");
+                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                    // The keyguard was dismissed: the person is really back on the phone.
+                    sendScreenOn();
+                } else if (Intent.ACTION_SCREEN_ON.equals(action) && !isKeyguardLocked(context)) {
+                    // The screen lights at the keyguard too (PIN entry, an incoming notification). JS treats screenOn
+                    // with our page hidden as leaving, so only send it when there is no keyguard to get past.
+                    sendScreenOn();
+                }
             }
         };
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_USER_PRESENT);
         ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+
+    private void sendScreenOn() {
+        if (screenOnSent) return;
+        screenOnSent = true;
+        FlightPlugin.emit("screenOn");
+    }
+
+    private static boolean isKeyguardLocked(Context context) {
+        KeyguardManager km = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        return km != null && km.isKeyguardLocked();
     }
 
     @Override
@@ -171,7 +246,9 @@ public class FlightService extends Service {
             screenReceiver = null;
         }
         foregrounded = false;
-        requested.set(false);
+        running = false;
+        starting = false;
+        if (current == this) current = null;
         super.onDestroy();
     }
 

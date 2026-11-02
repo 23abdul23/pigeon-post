@@ -42,17 +42,32 @@ public class FlightPlugin extends Plugin {
         // getDouble() drops whole-number epoch times (org.json parses them as Long), so read the raw value.
         Object rawEndsAt = call.getData().opt("endsAtMs");
         long endsAtMs = rawEndsAt instanceof Number ? ((Number) rawEndsAt).longValue() : 0L;
+        Context context = getContext();
+        if (FlightService.running) {
+            // Already flying: update the notification in place. No startForegroundService, which the system refuses
+            // from the background on API 31+. A failed refresh leaves running/starting untouched.
+            try {
+                if (FlightService.refresh(context, title, text, endsAtMs)) {
+                    call.resolve();
+                    return;
+                }
+            } catch (RuntimeException e) {
+                call.reject("Could not refresh the flight notification: " + e.getMessage());
+                return;
+            }
+        }
+        boolean wasStarting = FlightService.starting;
         try {
-            Context context = getContext();
             Intent intent = new Intent(context, FlightService.class)
                 .putExtra(FlightService.EXTRA_TITLE, title)
                 .putExtra(FlightService.EXTRA_TEXT, text)
                 .putExtra(FlightService.EXTRA_ENDS_AT_MS, endsAtMs);
-            FlightService.requested.set(true);
+            FlightService.starting = true;
             ContextCompat.startForegroundService(context, intent);
             call.resolve();
         } catch (RuntimeException e) {
-            FlightService.requested.set(false);
+            // A failed first start clears only starting (and only if this call set it); running is the service's.
+            if (!wasStarting) FlightService.starting = false;
             call.reject("Could not start the flight service: " + e.getMessage());
         }
     }

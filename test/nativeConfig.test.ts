@@ -86,13 +86,59 @@ describe('native sign-in and API configuration', () => {
     expect(service).not.toMatch(/setSmallIcon\(R\.mipmap/)
   })
 
-  it('flight_stop_goes_through_the_service_not_stopService', () => {
-    expect(plugin).not.toContain('stopService(')
+  it('flight_service_tracks_running_and_starting_instead_of_requested', () => {
+    expect(service).not.toContain('AtomicBoolean')
+    expect(plugin).not.toContain('requested')
+    expect(service).toMatch(/static volatile boolean running\b/)
+    expect(service).toMatch(/static volatile boolean starting\b/)
+    // running is set only after startForeground, and cleared in onDestroy
+    const onStart = service.slice(service.indexOf('public int onStartCommand'), service.indexOf('private void stopNow'))
+    expect(onStart.indexOf('running = true')).toBeGreaterThan(onStart.indexOf('ServiceCompat.startForeground'))
+    const onDestroy = service.slice(service.indexOf('public void onDestroy'))
+    expect(onDestroy).toContain('running = false')
+    expect(onDestroy).toContain('starting = false')
+  })
+
+  it('flight_refresh_while_running_notifies_instead_of_restarting', () => {
+    const start = plugin.slice(plugin.indexOf('public void start('), plugin.indexOf('public void stop('))
+    expect(start).toContain('FlightService.running')
+    expect(start).toContain('FlightService.refresh(')
+    const refresh = service.slice(service.indexOf('static boolean refresh('))
+    expect(refresh).toContain('NotificationManager')
+    expect(service).toMatch(/nm\.notify\(NOTIFICATION_ID/)
+    // a refresh failure never clears the flags
+    const catchBlock = start.slice(start.indexOf('catch'))
+    expect(catchBlock).not.toMatch(/running\s*=\s*false/)
+  })
+
+  it('flight_stop_uses_stopService_when_running_and_ACTION_STOP_while_starting', () => {
     expect(plugin).toContain('FlightService.requestStop')
-    expect(service).toContain('ACTION_STOP')
-    expect(plugin).toContain('FlightService.requested')
-    expect(service).toContain('AtomicBoolean requested')
+    const stop = service.slice(service.indexOf('static void requestStop('), service.indexOf('public void onTaskRemoved'))
+    expect(stop).toContain('context.stopService(')
+    expect(stop).toMatch(/if \(running\)/)
+    expect(stop).toMatch(/if \(starting\)/)
+    expect(stop).toContain('ACTION_STOP')
+    expect(stop.indexOf('stopService(')).toBeLessThan(stop.indexOf('startForegroundService('))
     expect(service).toMatch(/ACTION_STOP\.equals/)
+  })
+
+  it('flight_service_reports_screen_on_only_when_unlocked', () => {
+    expect(service).toContain('Intent.ACTION_USER_PRESENT')
+    expect(service).toMatch(/filter\.addAction\(Intent\.ACTION_USER_PRESENT\)/)
+    expect(service).toContain('KeyguardManager')
+    expect(service).toContain('isKeyguardLocked()')
+    expect(service).toContain('FlightPlugin.emit("screenOff")')
+  })
+
+  it('manifest_disables_backup', () => {
+    const app = manifest.match(/<application[\s\S]*?>/)?.[0] ?? ''
+    expect(app).toContain('android:allowBackup="false"')
+    expect(manifest).not.toContain('android:allowBackup="true"')
+  })
+
+  it('android_gitignore_ignores_keystores_and_google_services', () => {
+    const ignore = readFileSync(new URL('../android/.gitignore', import.meta.url), 'utf8').split('\n').map((l) => l.trim())
+    for (const pattern of ['*.jks', '*.keystore', 'google-services.json']) expect(ignore).toContain(pattern)
   })
 
   it('flight_service_stops_itself_when_orphaned', () => {
