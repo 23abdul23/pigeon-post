@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPresence, DECIDE_MS, isMobileDevice, UNLOCK_GRACE_MS } from '../src/lib/presence'
 import type { ScreenState } from '../src/lib/idle'
+import { nativeScreenSource } from '../src/lib/nativeScreen'
 
 // A fake page: EventTargets plus the two fields the controller reads, driven by hand.
 function setup(opts: { mobile: boolean; screen?: ScreenState; audio?: boolean; pip?: boolean }) {
@@ -106,6 +107,74 @@ describe('mobile with the screen-lock signal (Chrome Idle Detection)', () => {
     t.blur()
     t.tick(DECIDE_MS * 4)
     expect(t.left).toEqual([])
+  })
+})
+
+// The Android app: the native plugin reports screen off / on; the page's visibility tells us whether our app is in front.
+describe('Android app with the native screen source', () => {
+  function native() {
+    const offs = new Set<() => void>()
+    const ons = new Set<() => void>()
+    const src = nativeScreenSource({
+      onScreenOff: (cb) => (offs.add(cb), () => offs.delete(cb)),
+      onScreenOn: (cb) => (ons.add(cb), () => ons.delete(cb)),
+    })
+    const doc = Object.assign(new EventTarget(), { visibilityState: 'visible', focused: true, hasFocus() { return this.focused } })
+    const win = new EventTarget()
+    const left: number[] = []
+    let clock = 1_000_000
+    const p = createPresence({ doc, win, mobile: true, screen: src.screen, onScreen: src.onScreen, keepAliveActive: () => false, onLeave: (at) => left.push(at), now: () => clock })
+    return {
+      p,
+      left,
+      tick: (ms: number) => ((clock += ms), vi.advanceTimersByTime(ms)),
+      hide: () => ((doc.visibilityState = 'hidden'), doc.dispatchEvent(new Event('visibilitychange'))),
+      show: () => ((doc.visibilityState = 'visible'), doc.dispatchEvent(new Event('visibilitychange'))),
+      screenOff: () => offs.forEach((f) => f()),
+      screenOn: () => ons.forEach((f) => f()),
+    }
+  }
+
+  it('screen_off_with_app_in_front_never_leaves', () => {
+    const t = native()
+    t.hide() // the page is hidden as the screen goes to sleep
+    t.tick(500)
+    t.screenOff()
+    t.tick(60_000)
+    expect(t.p.state()).toBe('locked')
+    expect(t.left).toEqual([])
+  })
+
+  it('home_button_leaves', () => {
+    const t = native()
+    t.hide() // screen stays on
+    t.tick(DECIDE_MS)
+    expect(t.left.length).toBe(1)
+    expect(t.p.state()).toBe('left')
+  })
+
+  it('screen_off_then_other_app_before_screen_on_leaves', () => {
+    const t = native()
+    t.hide()
+    t.screenOff()
+    t.tick(60_000)
+    expect(t.p.state()).toBe('locked')
+    t.screenOn() // woke into some other app: our page is still hidden
+    t.tick(UNLOCK_GRACE_MS + 1)
+    expect(t.left.length).toBe(1)
+    expect(t.p.state()).toBe('left')
+  })
+
+  it('screen_on_with_page_visible_resumes_present', () => {
+    const t = native()
+    t.hide()
+    t.screenOff()
+    t.tick(60_000)
+    t.screenOn()
+    t.show()
+    t.tick(UNLOCK_GRACE_MS + 1)
+    expect(t.left).toEqual([])
+    expect(t.p.state()).toBe('present')
   })
 })
 
