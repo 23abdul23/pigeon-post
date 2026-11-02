@@ -19,8 +19,11 @@ import { restHere } from '../lib/rest'
 import { alertCheckpoint } from '../lib/checkpointAlert'
 import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup, watchTabLeave } from '../lib/pip'
 import { createPresence, isMobileDevice } from '../lib/presence'
+import { FlightNativePlugin } from '../lib/flightPlugin'
+import { nativeScreenSource } from '../lib/nativeScreen'
+import { isNativeApp } from '../lib/platform'
 import { holdWakeLock } from '../lib/wakeLock'
-import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/keepAlive'
+import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/flightHost'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
 import { prefetchStory } from '../lib/stories'
 import { stopsAhead } from '../lib/stops'
@@ -106,13 +109,15 @@ export default function Focus() {
   // switching tab / app / window is: see lib/presence.ts for the rule and its fallbacks when the lock cannot be read.
   useEffect(() => {
     if (!flying) return
-    const watch = startScreenWatch() // Chrome's lock signal, when the permission was given
+    // Chrome's lock signal on the web (when the permission was given); the Android service's screen events in the app
+    const watch = isNativeApp() ? nativeScreenSource(FlightNativePlugin) : null
+    const web = watch ? null : startScreenWatch()
     const presence = createPresence({
       doc: document,
       win: window,
       mobile: isMobileDevice(),
-      screen: watch.screen,
-      onScreen: watch.subscribe,
+      screen: watch ? watch.screen : web!.screen,
+      onScreen: watch ? watch.onScreen : web!.subscribe,
       keepAliveActive: isKeepAliveActive,
       pipActive: () => !!getPopup(), // the popup keeps the flight on screen, so a tab switch is not leaving
       onLeave: (at) => markLeft(at),
@@ -120,9 +125,16 @@ export default function Focus() {
     })
     return () => {
       presence.stop()
-      watch.stop()
+      watch?.stop()
+      web?.stop()
     }
   }, [flying, win])
+
+  // The "End flight" button in the Android notification ends the flight like the in-app one.
+  useEffect(() => {
+    if (!flying || !isNativeApp()) return
+    return FlightNativePlugin.onEndRequested(() => void landSession('ended'))
+  }, [flying])
 
   // The popup appears when this tab is left and goes when the person returns; it is not shown while they are on this screen.
   useEffect(() => (flying ? watchTabLeave() : undefined), [flying])
