@@ -41,4 +41,23 @@ describe('credits', () => {
     expect(h).toContain('Settings')
     expect(h).toContain(EMAIL)
   })
+  it('privacy_page_does_not_claim_a_push_token', () => {
+    expect(page('privacy.html').toLowerCase()).not.toContain('push notification token')
+  })
+  it('delete_page_does_not_promise_immediate_removal', () => {
+    expect(page('delete-account.html').toLowerCase()).not.toContain('immediately')
+  })
+  it('delete_page_email_path_makes_no_timing_or_verification_promise', () => {
+    const h = page('delete-account.html').toLowerCase()
+    expect(h).not.toContain('confirm and delete')
+    expect(h).not.toMatch(/\d+\s*(business\s+)?days?/)
+    expect(h).toContain('if you cannot sign in, contact us at that address and we will help.')
+  })
+  it('privacy_page_states_age_region_and_rights', () => {
+    const h = page('privacy.html').toLowerCase()
+    for (const w of ['13', 'us-east-1', 'access', 'correction', 'deletion', 'export']) expect(h, w).toContain(w)
+  })
+  it('privacy_page_links_to_delete_account', () => {
+    expect(page('privacy.html')).toContain('/delete-account.html')
+  })
 })
