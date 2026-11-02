@@ -100,4 +100,38 @@ describe('flight host', () => {
     h.setKeepAliveMeta({ title: 'New card: Paris' })
     expect(n.start).toHaveBeenLastCalledWith({ title: 'New card: Paris', text: '', endsAtMs: 1_000_000 + 50_000 })
   })
+
+  it('first_start_carries_endsAtMs_zero_before_a_position_is_known', async () => {
+    vi.setSystemTime(5_000_000)
+    const n = fakeNative()
+    const h = createFlightHost(n, fakeWeb())
+    await h.ensureKeepAlive(meta)
+    expect(n.start).toHaveBeenCalledWith({ title: meta.title, text: meta.artist, endsAtMs: 0 })
+  })
+
+  it('second_flight_after_stop_does_not_inherit_the_previous_endsAtMs', async () => {
+    vi.setSystemTime(1_000_000)
+    const n = fakeNative()
+    const h = createFlightHost(n, fakeWeb())
+    await h.ensureKeepAlive(meta)
+    h.setKeepAlivePosition(60, 10)
+    h.releaseKeepAlive(100)
+    await vi.advanceTimersByTimeAsync(100)
+    await h.ensureKeepAlive(meta)
+    expect(n.start).toHaveBeenLastCalledWith({ title: meta.title, text: meta.artist, endsAtMs: 0 })
+  })
+
+  it('release_during_pending_start_does_not_leave_service_running', async () => {
+    let resolveStart!: () => void
+    const n = fakeNative({ start: vi.fn(() => new Promise<void>((r) => (resolveStart = r))) })
+    const h = createFlightHost(n, fakeWeb())
+    const p = h.ensureKeepAlive(meta)
+    h.releaseKeepAlive(100)
+    await vi.advanceTimersByTimeAsync(100)
+    resolveStart()
+    await p
+    expect(h.isKeepAliveActive()).toBe(false)
+    expect(n.stop).toHaveBeenCalled()
+    expect(n.stop.mock.calls.length).toBeGreaterThanOrEqual(1)
+  })
 })

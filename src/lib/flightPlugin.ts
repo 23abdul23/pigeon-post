@@ -4,7 +4,11 @@
 import { registerPlugin } from '@capacitor/core'
 
 export type FlightNative = {
-  /** Starts the service, or refreshes its notification when it is already running. Rejects when it cannot start. */
+  /**
+   * Starts the service. Idempotent: when it is already running it only refreshes the notification.
+   * `endsAtMs <= 0` means "end unknown": the service neither counts down nor auto-stops.
+   * Rejects when the service cannot start.
+   */
   start(o: { title: string; text: string; endsAtMs: number }): Promise<void>
   stop(): Promise<void>
   /** The screen turned off / on while our app is still the one in front. Each returns an unsubscribe. */
@@ -14,4 +18,33 @@ export type FlightNative = {
   onEndRequested(cb: () => void): () => void
 }
 
-export const FlightNativePlugin: FlightNative = registerPlugin<FlightNative>('Flight')
+type Handle = { remove(): Promise<void> | void }
+
+/** The plugin as Capacitor exposes it: events are bridge listeners whose handle arrives asynchronously. */
+export type RawFlight = {
+  start(o: { title: string; text: string; endsAtMs: number }): Promise<void>
+  stop(): Promise<void>
+  addListener(event: 'screenOff' | 'screenOn' | 'endRequested', cb: () => void): Promise<Handle>
+}
+
+/** Adapts bridge listeners to synchronous `(cb) => unsubscribe`; unsubscribing before the handle arrives still removes it. */
+export function createFlightNative(raw: RawFlight): FlightNative {
+  const on = (event: 'screenOff' | 'screenOn' | 'endRequested') => (cb: () => void) => {
+    let off = false
+    const handle = raw.addListener(event, cb)
+    return () => {
+      if (off) return
+      off = true
+      void handle.then((h) => h.remove(), () => {})
+    }
+  }
+  return {
+    start: (o) => raw.start(o),
+    stop: () => raw.stop(),
+    onScreenOff: on('screenOff'),
+    onScreenOn: on('screenOn'),
+    onEndRequested: on('endRequested'),
+  }
+}
+
+export const FlightNativePlugin: FlightNative = createFlightNative(registerPlugin<RawFlight>('Flight'))

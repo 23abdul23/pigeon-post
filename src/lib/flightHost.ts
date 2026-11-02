@@ -21,7 +21,8 @@ export function createFlightHost(native: FlightNative | null, web: FlightHostApi
   let starting: Promise<boolean> | null = null
   let releaseTimer: ReturnType<typeof setTimeout> | undefined
   let meta: KeepAliveMeta = { title: '' }
-  let endsAtMs = Date.now()
+  let endsAtMs = 0 // <= 0: end unknown (see FlightNative.start)
+  let gen = 0 // bumped on every stop, so a start still pending then cannot leave the service running
 
   const options = () => ({ title: meta.title, text: meta.artist ?? '', endsAtMs })
   const refresh = () => {
@@ -33,9 +34,16 @@ export function createFlightHost(native: FlightNative | null, web: FlightHostApi
       clearTimeout(releaseTimer)
       meta = m
       if (active) return Promise.resolve(true)
+      const g = gen
       starting ??= native
         .start(options())
-        .then(() => (active = true))
+        .then(() => {
+          if (g !== gen) {
+            native.stop().catch(() => {})
+            return false
+          }
+          return (active = true)
+        })
         .catch(() => (active = false))
         .finally(() => (starting = null))
       return starting
@@ -44,6 +52,8 @@ export function createFlightHost(native: FlightNative | null, web: FlightHostApi
       clearTimeout(releaseTimer)
       releaseTimer = setTimeout(() => {
         active = false
+        endsAtMs = 0
+        gen++
         native.stop().catch(() => {})
       }, graceMs)
     },
