@@ -1,6 +1,6 @@
 import { getState } from './store'
-import coo1 from '../assets/Coo_1.wav'
-import coo2 from '../assets/Coo_2.wav'
+import coo1 from '../assets/Coo_1.m4a'
+import coo2 from '../assets/Coo_2.m4a'
 
 let ctx: AudioContext | null = null
 

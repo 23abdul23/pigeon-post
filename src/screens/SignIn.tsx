@@ -6,7 +6,7 @@ import { COGNITO_CONFIGURED, signIn as cognitoSignIn } from '../lib/auth'
 import { getState, setState } from '../lib/store'
 import bg1 from '../assets/bird_bg.png'
 import bg2 from '../assets/bird_bg_2.png'
-import webBg1 from '../assets/web_bird_bg.png'
+import webBg1 from '../assets/web_bird_bg.webp'
 import webBg2 from '../assets/web_bird_bg_2.png'
 
 const SLIDES = [bg1, bg2]
