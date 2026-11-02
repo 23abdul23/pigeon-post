@@ -1,0 +1,87 @@
+name: android-release
+
+# Builds a signed App Bundle and uploads it to the Google Play INTERNAL track only.
+# Promotion to closed or production is manual in the Play Console (docs/android-release.md).
+# Third-party actions are pinned by major version tag, as in deploy.yml.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['android-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false # never kill an upload half way; queue the next release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            api/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install web dependencies
+        run: npm ci
+      - name: Web tests
+        run: npx vitest run
+      - name: Install API dependencies
+        run: npm --prefix api ci
+      - name: API tests
+        run: npm --prefix api test
+      - name: Type check
+        run: npx tsc -b
+      - name: Build web bundle
+        # Non-secret repository variables, passed through env, never interpolated into the script text.
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_PUSH_ENABLED: ${{ vars.VITE_PUSH_ENABLED || 'false' }}
+        run: npm run build
+      - name: Sync Capacitor
+        run: npx cap sync android
+      - name: Decode upload keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+      - name: Build signed bundle
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: ${{ github.ref_type == 'tag' && github.ref_name || '1.0' }}
+        working-directory: android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew bundleRelease --no-daemon
+      - name: Upload to Play internal track
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: app.pigeonpost
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          # First releases of a new Play app must be drafts until the store listing is complete.
+          # Change to "completed" once the listing is approved (docs/android-release.md).
+          status: draft
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.keystore"
