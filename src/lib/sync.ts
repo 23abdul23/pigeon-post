@@ -8,6 +8,7 @@ import { claimLocalData, hasLocalData, reconcileLocal } from './reconcile'
 import { getSyncStatus, markSynced, setSyncStatus } from './syncStatus'
 import { getState, hydrate, resetState, setState, type Profile, type ServerState } from './store'
 import { withRoute } from './trips'
+import { refreshBlocks } from './safety'
 
 /** The signed-in user cannot be determined while this device holds another account's data: nothing local may be shown or sent. */
 export class OwnerUnknown extends Error {
@@ -112,6 +113,8 @@ export async function loadServerState(): Promise<void> {
   await claimUser() // before the first flush: queued writes and local data of another account never go out
   await flush()
   await pullOnce(true)
+  // blocks have their own endpoint; loaded once per sign-in (the block actions keep the list current), and never fails the load
+  await refreshBlocks(pendingTouches()).catch((e) => console.warn('could not load blocks', e))
 }
 
 /** The poll, tab-visible and after-flush refresh: server state for every entity group without a pending local write. */

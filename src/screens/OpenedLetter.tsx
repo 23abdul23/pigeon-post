@@ -9,6 +9,8 @@ import { countryName, haversineKm } from '../lib/geo'
 import { send } from '../lib/outbox'
 import { attachmentUrl } from '../lib/social'
 import { getState, setState, useStore, type Letter } from '../lib/store'
+import { BlockDialog, ReportDialog } from '../components/SafetyDialogs'
+import { S } from '../lib/strings'
 
 type Attachment = Letter['attachments'][number]
 
@@ -37,6 +39,7 @@ export default function OpenedLetter() {
   const friends = useStore((s) => s.friends)
   const bird = useStore((s) => s.bird)
   const user = useStore((s) => s.user)
+  const [safety, setSafety] = useState<'block' | 'report' | null>(null)
   if (!letter) return <Navigate to="/mailbox" replace />
 
   // An unread letter sent to me opens with the envelope animation first; my own sent letters never do.
@@ -246,8 +249,16 @@ export default function OpenedLetter() {
               Close letter
             </button>
           </div>
+          {!mine && (
+            <div className="flex justify-center gap-4 pt-1 text-[12px] font-semibold text-ink-2">
+              <button type="button" onClick={() => setSafety('report')} className="underline">{S.reportLetterTitle}</button>
+              <button type="button" onClick={() => setSafety('block')} className="underline">{`${S.block} ${sender}`}</button>
+            </div>
+          )}
         </div>
       </main>
+      {safety === 'block' && <BlockDialog id={letter.fromId} name={letter.fromName} onClose={() => setSafety(null)} onDone={() => nav('/mailbox')} />}
+      {safety === 'report' && <ReportDialog target={{ targetId: letter.fromId, kind: 'letter', letterId: letter.id }} title={S.reportLetterTitle} onClose={() => setSafety(null)} />}
     </Frame>
   )
 }

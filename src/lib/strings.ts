@@ -1,0 +1,37 @@
+/** User-facing copy for block, report and the age and terms gate (English only). */
+export const S = {
+  ageConfirm: 'I am 13 or older, or the minimum age required in my country',
+  termsPrefix: 'I accept the ',
+  termsLink: 'Terms',
+  termsAnd: ' and ',
+  privacyLink: 'Privacy Policy',
+  termsPath: '/terms.html',
+  privacyPath: '/privacy.html',
+  gateHint: 'Tick both boxes to continue.',
+
+  block: 'Block',
+  blockTitle: (name: string) => `Block ${name}?`,
+  blockBody: (name: string) => `${name} will be removed from your friends, any letters still on their way between you will be cancelled, and you will not see each other's letters. You can unblock later.`,
+  blockConfirm: 'Block',
+  unblock: 'Unblock',
+  blocked: 'Blocked',
+
+  report: 'Report',
+  reportTitle: 'Report',
+  reportUserTitle: (name: string) => `Report ${name}`,
+  reportLetterTitle: 'Report this letter',
+  reportBody: 'Tell us what is wrong. Reports are private; the other person is not told.',
+  reportReasonLabel: 'Reason',
+  reportNoteLabel: 'Anything else we should know? (optional)',
+  reportNoteMax: 500,
+  reportSend: 'Send report',
+  reportSent: 'Thanks. Your report was sent.',
+  reportQueued: 'Your report is saved and will be sent when you are back online.',
+  reasons: {
+    spam: 'Spam',
+    harassment: 'Harassment or bullying',
+    inappropriate: 'Inappropriate content',
+    other: 'Something else',
+  },
+  cancel: 'Cancel',
+} as const

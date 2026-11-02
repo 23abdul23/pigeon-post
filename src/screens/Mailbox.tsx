@@ -4,6 +4,7 @@ import Flag from '../components/Flag'
 import { AppLayout } from '../components/Layout'
 import { KM_PER_FOCUS_MINUTE } from '../lib/geo'
 import { useStore, type Letter } from '../lib/store'
+import { visibleLetters } from '../lib/safety'
 
 type Box = 'all' | 'unopened' | 'sent' | 'keep'
 
@@ -26,7 +27,9 @@ export default function Mailbox() {
   const nav = useNavigate()
   const [params, setParams] = useSearchParams()
   const box = (params.get('box') as Box) ?? 'all'
-  const letters = useStore((s) => s.letters)
+  const allLetters = useStore((s) => s.letters)
+  const blockedIds = useStore((s) => s.blockedIds)
+  const letters = useMemo(() => visibleLetters(allLetters, blockedIds), [allLetters, blockedIds])
   const friends = useStore((s) => s.friends)
   const trip = useStore((s) => s.trip)
   const bird = useStore((s) => s.bird)

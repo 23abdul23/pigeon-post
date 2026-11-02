@@ -6,6 +6,8 @@ import MiniMap from '../components/MiniMap'
 import { acceptFriend, avatarColor, declineFriend, initials, removeFriend, settleRequests } from '../lib/social'
 import { useStore, type Friend } from '../lib/store'
 import { countryName } from '../lib/geo'
+import { BlockDialog, ReportDialog } from '../components/SafetyDialogs'
+import { S } from '../lib/strings'
 
 const fmtLeft = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60000))
@@ -19,6 +21,7 @@ export default function Friends() {
   const home = useStore((s) => s.homeCity)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [safety, setSafety] = useState<{ kind: 'block' | 'report'; f: Friend } | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const tab = params.get('tab') === 'requests' ? 'requests' : 'friends'
 
@@ -130,7 +133,7 @@ export default function Friends() {
             <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
               {shown.map((f, i) => (
                 <Fragment key={f.id}>
-                <DesktopFriend f={f} i={i} now={now} mapOpen={open === f.id} onMap={() => setOpen(open === f.id ? null : f.id)} lastMs={lastDispatch.get(f.id)} onSend={() => nav(`/trip/new?friend=${f.id}&letter=1`)} onFly={() => nav(`/trip/new?friend=${f.id}`)} />
+                <DesktopFriend f={f} i={i} now={now} mapOpen={open === f.id} onMap={() => setOpen(open === f.id ? null : f.id)} lastMs={lastDispatch.get(f.id)} onSend={() => nav(`/trip/new?friend=${f.id}&letter=1`)} onFly={() => nav(`/trip/new?friend=${f.id}`)} onSafety={(kind) => setSafety({ kind, f })} />
                 <article className="flex flex-col gap-3 rounded-2xl bg-card-soft p-3.5 shadow-[0_2px_8px_-2px_rgba(62,58,54,0.05)] lg:hidden">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -179,6 +182,7 @@ export default function Friends() {
                       Send letter
                     </button>
                   </div>
+                  <SafetyLinks f={f} onPick={(kind) => setSafety({ kind, f })} />
                 </article>
                 </Fragment>
               ))}
@@ -317,6 +321,8 @@ export default function Friends() {
           </div>
         )}
       </div>
+      {safety?.kind === 'block' && <BlockDialog id={safety.f.id} name={safety.f.name} onClose={() => setSafety(null)} />}
+      {safety?.kind === 'report' && <ReportDialog target={{ targetId: safety.f.id, kind: 'user' }} title={S.reportUserTitle(safety.f.name)} onClose={() => setSafety(null)} />}
     </AppLayout>
   )
 }
@@ -411,7 +417,7 @@ const ago = (ms?: number) => {
   return d === 1 ? 'Yesterday' : `${d} days ago`
 }
 
-function DesktopFriend({ f, i, now, mapOpen, onMap, lastMs, onSend, onFly }: { f: Friend; i: number; now: number; mapOpen: boolean; onMap: () => void; lastMs?: number; onSend: () => void; onFly: () => void }) {
+function DesktopFriend({ f, i, now, mapOpen, onMap, lastMs, onSend, onFly, onSafety }: { f: Friend; i: number; now: number; mapOpen: boolean; onMap: () => void; lastMs?: number; onSend: () => void; onFly: () => void; onSafety: (k: 'block' | 'report') => void }) {
   return (
     <article className="hidden flex-col gap-4 rounded-3xl bg-card-soft p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] lg:flex">
       <div className="flex items-start justify-between">
@@ -455,6 +461,16 @@ function DesktopFriend({ f, i, now, mapOpen, onMap, lastMs, onSend, onFly }: { f
         <img src="/assets/fr-send-green.svg" alt="" className="h-3 w-3.5" />
         Send letter
       </button>
+      <SafetyLinks f={f} onPick={onSafety} />
     </article>
+  )
+}
+
+function SafetyLinks({ f, onPick }: { f: Friend; onPick: (k: 'block' | 'report') => void }) {
+  return (
+    <div className="flex justify-center gap-4 text-[12px] font-semibold text-ink-2">
+      <button type="button" onClick={() => onPick('report')} aria-label={`${S.report} ${f.name}`} className="underline">{S.report}</button>
+      <button type="button" onClick={() => onPick('block')} aria-label={`${S.block} ${f.name}`} className="underline">{S.block}</button>
+    </div>
   )
 }

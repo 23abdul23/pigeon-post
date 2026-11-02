@@ -65,6 +65,10 @@ export type State = {
   stories: Story[]
   letters: Letter[]
   friends: Friend[]
+  /** ids of the users this account has blocked (from `GET /blocks`, updated at once when blocking) */
+  blockedIds: string[]
+  /** when the user confirmed they meet the minimum age and accepted the Terms; null before the first sign-in */
+  ageConfirmedAt: number | null
   stamps: Stamp[]
   sessions: SessionLog[]
   settings: Settings
@@ -96,6 +100,8 @@ const initial: State = {
   stories: [],
   letters: [],
   friends: [],
+  blockedIds: [],
+  ageConfirmedAt: null,
   stamps: [],
   sessions: [],
   settings: defaultSettings,

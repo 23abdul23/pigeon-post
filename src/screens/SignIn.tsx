@@ -4,6 +4,8 @@ import { Frame } from '../components/Layout'
 import Header from '../components/Header'
 import { COGNITO_CONFIGURED, signIn as cognitoSignIn } from '../lib/auth'
 import { getState, setState } from '../lib/store'
+import { canContinueSignIn } from '../lib/safety'
+import { S } from '../lib/strings'
 import bg1 from '../assets/bird_bg.png'
 import bg2 from '../assets/bird_bg_2.png'
 import webBg1 from '../assets/web_bird_bg.webp'
@@ -34,7 +36,13 @@ export default function SignIn() {
     return () => clearInterval(t)
   }, [])
 
+  const [ageConfirmed, setAge] = useState(false)
+  const [termsAccepted, setTerms] = useState(false)
+  const allowed = canContinueSignIn({ ageConfirmed, termsAccepted })
+
   function signIn() {
+    if (!allowed) return
+    setState({ ageConfirmedAt: Date.now() })
     if (COGNITO_CONFIGURED) return void cognitoSignIn(returnTo)
     // Offline dev (no VITE_COGNITO_*): local mock user.
     const s = getState()
@@ -81,10 +89,26 @@ export default function SignIn() {
         </div>
 
         <div className="flex flex-col items-center gap-3">
+          <div className="flex max-w-[320px] flex-col gap-2 text-[13px] leading-5 text-ink-2">
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={ageConfirmed} onChange={(e) => setAge(e.target.checked)} className="mt-1 size-4 shrink-0" />
+              <span>{S.ageConfirm}</span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={termsAccepted} onChange={(e) => setTerms(e.target.checked)} className="mt-1 size-4 shrink-0" />
+              <span>
+                {S.termsPrefix}
+                <a href={S.termsPath} target="_blank" rel="noopener noreferrer" className="underline">{S.termsLink}</a>
+                {S.termsAnd}
+                <a href={S.privacyPath} target="_blank" rel="noopener noreferrer" className="underline">{S.privacyLink}</a>
+              </span>
+            </label>
+          </div>
           <button
             type="button"
             onClick={signIn}
-            className="inline-flex h-14 items-center justify-center gap-3 rounded-full bg-white px-8 shadow-[0_4px_16px_rgba(62,58,54,0.12)] transition active:scale-[0.98]"
+            disabled={!allowed}
+            className="inline-flex h-14 items-center justify-center gap-3 rounded-full bg-white px-8 shadow-[0_4px_16px_rgba(62,58,54,0.12)] transition active:scale-[0.98] disabled:opacity-50"
           >
             <img src="/assets/google.svg" alt="" className="size-5" />
             <span className="text-[14px] font-bold tracking-[-0.35px] text-ink">Continue with Google</span>
