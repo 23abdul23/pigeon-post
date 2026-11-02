@@ -2,11 +2,14 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
+import { cancelOrphanedCheckpoints } from './lib/checkpointAlert'
+import { serverNow } from './lib/device'
+import { localNotifier } from './lib/localNotifier'
 import { setNavigate } from './lib/navigateRef'
 import { backEnvFromRef, startNativeChrome } from './lib/nativeChrome'
 import { isNativeApp } from './lib/platform'
 import { startPush } from './lib/push'
-import { setState, useStore } from './lib/store'
+import { getState, setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
 import ChooseBird from './screens/ChooseBird'
@@ -97,6 +100,10 @@ export default function App() {
   useEffect(() => {
     navigateLatest.current = (to) => (typeof to === 'number' ? navigate(to) : navigate(to, { replace: true }))
   })
+  // Native only, once: checkpoint alarms left behind by a swiped-away or killed app must not fire for a flight that is over.
+  useEffect(() => {
+    if (isNativeApp()) void cancelOrphanedCheckpoints({ session: getState().session, now: serverNow(), notifier: localNotifier })
+  }, [])
   useEffect(() => {
     if (!isNativeApp()) return
     let stop: (() => void) | undefined

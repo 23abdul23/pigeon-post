@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { alertCheckpoint, cancelCheckpoints, keepCheckpointsScheduled, scheduleCheckpoints } from '../src/lib/checkpointAlert'
+import { alertCheckpoint, cancelCheckpoints, cancelOrphanedCheckpoints, keepCheckpointsScheduled, scheduleCheckpoints, STALE_HEARTBEAT_MS } from '../src/lib/checkpointAlert'
 import type { LocalNotifierLike } from '../src/lib/checkpointPlan'
 import { defaultSettings, getState, setState } from '../src/lib/store'
 
@@ -171,5 +171,31 @@ describe('serialised native operations', () => {
     stop2()
     await vi.waitFor(() => expect(n.cancelAll).toHaveBeenCalledTimes(2))
     expect(n.schedule).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('cancelOrphanedCheckpoints (app start)', () => {
+  const NOW = 5_000_000
+  const notifier = () => ({ schedule: vi.fn(async () => {}), cancelAll: vi.fn(async () => {}) }) satisfies LocalNotifierLike
+  const session = (over: Record<string, number> = {}) => ({ tripId: 't1', startMs: NOW - 60_000, durationMin: 25, baseKm: 0, heartbeatMs: NOW - 500, ...over })
+
+  it('startup_cancels_checkpoints_when_no_flight_is_running', async () => {
+    for (const s of [null, session({ leftAtMs: NOW - 10_000 }), session({ heartbeatMs: NOW - STALE_HEARTBEAT_MS - 1 })]) {
+      const n = notifier()
+      expect(await cancelOrphanedCheckpoints({ session: s, now: NOW, notifier: n })).toBe(true)
+      expect(n.cancelAll).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('startup_keeps_checkpoints_when_a_flight_is_running', async () => {
+    const n = notifier()
+    expect(await cancelOrphanedCheckpoints({ session: session(), now: NOW, notifier: n })).toBe(false)
+    expect(n.cancelAll).not.toHaveBeenCalled()
+  })
+
+  it('startup_cancel_never_throws', async () => {
+    const n = { schedule: vi.fn(), cancelAll: vi.fn(async () => { throw new Error('plugin') }) }
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(cancelOrphanedCheckpoints({ session: null, now: NOW, notifier: n })).resolves.toBe(true)
   })
 })

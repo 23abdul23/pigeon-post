@@ -16,7 +16,7 @@ import { serverNow } from '../lib/device'
 import { computeProgress, flightIds, flightRole, heartbeat, landIfStillOwner, landSession, markLeft, recoverStranded, resumeFlight, settleElapsedSlots, takeOver, unreadCards } from '../lib/flight'
 import { startScreenWatch } from '../lib/idle'
 import { restHere } from '../lib/rest'
-import { alertCheckpoint, keepCheckpointsScheduled } from '../lib/checkpointAlert'
+import { alertCheckpoint, keepCheckpointsScheduled, STALE_HEARTBEAT_MS } from '../lib/checkpointAlert'
 import { planCheckpointAlerts } from '../lib/checkpointPlan'
 import { localNotifier } from '../lib/localNotifier'
 import { CHECKPOINT_SIZE, POPUP_SIZE, closePopup, getPopup, openPopup, popupSupported, resizePopup, usePopup, watchTabLeave } from '../lib/pip'
@@ -107,7 +107,7 @@ export default function Focus() {
   // A stale heartbeat on load means the tab was closed or reloaded: treat that as leaving.
   useEffect(() => {
     const s = getState().session
-    if (s && !s.leftAtMs && serverNow() - (s.heartbeatMs ?? s.startMs) > 3000) {
+    if (s && !s.leftAtMs && serverNow() - (s.heartbeatMs ?? s.startMs) > STALE_HEARTBEAT_MS) {
       setState({ session: { ...s, leftAtMs: s.heartbeatMs ?? s.startMs } })
     }
   }, [])

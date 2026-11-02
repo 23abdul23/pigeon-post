@@ -1,4 +1,4 @@
-import { getState } from './store'
+import { getState, type ActiveSession } from './store'
 import type { LocalNotifierLike, PlannedAlert } from './checkpointPlan'
 
 /** Tells the person their bird reached a checkpoint. Clicking it is the reliable way to bring the main tab forward, because a background page cannot focus itself. Returns true when shown. */
@@ -34,6 +34,22 @@ export async function cancelCheckpoints(n: LocalNotifierLike): Promise<void> {
   } catch (e) {
     console.warn('cancelling checkpoint notifications failed', e)
   }
+}
+
+/** A heartbeat older than this when the app loads means the flight screen died (closed, reloaded, process killed). Focus treats it as leaving. */
+export const STALE_HEARTBEAT_MS = 3000
+
+/**
+ * App start: OS-scheduled checkpoint alarms outlive a swipe-away or a killed process, so cancel them unless a flight is
+ * really running (session present, not left, heartbeat fresh — the same test Focus applies on load). Returns true when it
+ * cancelled. Never throws.
+ */
+export async function cancelOrphanedCheckpoints(d: { session: ActiveSession | null; now: number; notifier: LocalNotifierLike }): Promise<boolean> {
+  const s = d.session
+  const flying = !!s && !s.leftAtMs && d.now - (s.heartbeatMs ?? s.startMs) <= STALE_HEARTBEAT_MS
+  if (flying) return false
+  await cancelCheckpoints(d.notifier)
+  return true
 }
 
 const chains = new WeakMap<LocalNotifierLike, Promise<void>>()
