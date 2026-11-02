@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockClient } from 'aws-sdk-client-mock'
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb'
 import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
 import { AdminDeleteUserCommand, CognitoIdentityProviderClient, UserNotFoundException } from '@aws-sdk/client-cognito-identity-provider'
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
+import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { handler as deleteMe } from '../src/handlers/account'
 import { handler as postSession } from '../src/handlers/sessions'
@@ -20,6 +21,7 @@ const ddb = mockClient(DynamoDBDocumentClient)
 const s3 = mockClient(S3Client)
 const cognito = mockClient(CognitoIdentityProviderClient)
 const ses = mockClient(SESv2Client)
+const secrets = mockClient(SecretsManagerClient)
 
 // In-memory table with the condition forms the handlers use: attribute_(not_)exists(PK), `a = :v` joined by AND, `#s IN (:a, :b)`.
 const table = new Map<string, Record<string, any>>()
@@ -264,6 +266,26 @@ describe('arrival email', () => {
       expect(ses.commandCalls(SendEmailCommand)).toHaveLength(0)
     } finally {
       process.env.SES_SENDER = prev
+    }
+  })
+
+  it('arrival_survives_push_failure_and_pushes_for_non_email_channels', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('offline'))
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    process.env.FCM_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111111111111:secret:fcm'
+    secrets.on(GetSecretValueCommand).rejects(new Error('denied'))
+    table.set(k('USER#b', 'DEVICE#abc'), { PK: 'USER#b', SK: 'DEVICE#abc', token: 'tok', platform: 'android' })
+    try {
+      const r = await arrive({ notifyLetter: true, channel: 'browser' })
+      expect(r.status).toBe(200)
+      expect(r.body.delivered).toHaveLength(1)
+      expect(secrets.commandCalls(GetSecretValueCommand)).toHaveLength(1)
+      expect(ses.commandCalls(SendEmailCommand)).toHaveLength(0)
+    } finally {
+      delete process.env.FCM_SECRET_ARN
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
     }
   })
 

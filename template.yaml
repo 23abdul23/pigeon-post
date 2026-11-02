@@ -84,11 +84,20 @@ Parameters:
     AllowedPattern: '^$|^arn:aws:iam::[0-9]{12}:policy/.+$'
     Description: IAM permissions boundary for the Lambda execution roles (empty = none)
 
+  # Push is optional. Empty (default) disables "A letter arrived" push and drops the secretsmanager:GetSecretValue permission.
+  # Name an AWS Secrets Manager secret whose value is the Firebase service-account JSON (created by hand, never in this repo).
+  FcmServiceAccountSecretArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$'
+    Description: Secrets Manager secret ARN holding the Firebase service-account JSON for FCM push (empty = push off)
+
 Conditions:
   HasDomain: !Not [!Equals [!Ref Domain, '']]
   HasHostedZone: !Not [!Equals [!Ref HostedZoneId, '']]
   HasDomainAndZone: !And [!Condition HasDomain, !Condition HasHostedZone]
   HasSesSender: !Not [!Equals [!Ref SesSenderEmail, '']]
+  HasFcmSecret: !Not [!Equals [!Ref FcmServiceAccountSecretArn, '']]
   HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, '']]
 
 Globals:
@@ -509,9 +518,11 @@ Resources:
       Environment:
         Variables:
           SES_SENDER: !Ref SesSenderEmail
+          FCM_SECRET_ARN: !Ref FcmServiceAccountSecretArn
       Policies:
         - Statement:
-            # Query + UpdateItem: the arrival step reads my letters and moves both copies (mine and my friend's)
+            # Query + UpdateItem: the arrival step reads my letters and moves both copies (mine and my friend's).
+            # Query also lists the recipient's push-device rows and DeleteItem drops tokens FCM reports as dead.
             - Effect: Allow
               Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:ConditionCheckItem]
               Resource: !GetAtt PigeonPost.Arn
@@ -521,6 +532,13 @@ Resources:
               - Effect: Allow
                 Action: [ses:SendEmail]
                 Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}'
+              - !Ref AWS::NoValue
+            # the Firebase service account for "A letter arrived" push: that one secret only
+            - !If
+              - HasFcmSecret
+              - Effect: Allow
+                Action: [secretsmanager:GetSecretValue]
+                Resource: !Ref FcmServiceAccountSecretArn
               - !Ref AWS::NoValue
       Events:
         Route:
@@ -842,6 +860,42 @@ Resources:
         List:
           Type: HttpApi
           Properties: { ApiId: !Ref HttpApi, Method: GET, Path: /blocks }
+
+  DevicesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-devices'
+      RetentionInDays: 14
+
+  # PUT /devices and DELETE /devices/{token}: the caller's push tokens. Query lists them to enforce the per-user cap.
+  DevicesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2023
+        Minify: true
+        OutExtension: [.js=.mjs]
+        Banner: ["js=import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);"]
+        EntryPoints: [src/handlers/devices.ts]
+    Properties:
+      CodeUri: api/
+      Handler: devices.handler
+      LoggingConfig:
+        LogGroup: !Ref DevicesLogGroup
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query]
+              Resource: !GetAtt PigeonPost.Arn
+      Events:
+        Register:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: PUT, Path: /devices }
+        Unregister:
+          Type: HttpApi
+          Properties: { ApiId: !Ref HttpApi, Method: DELETE, Path: '/devices/{token}' }
 
   ReportsLogGroup:
     Type: AWS::Logs::LogGroup

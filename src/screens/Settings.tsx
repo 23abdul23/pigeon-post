@@ -14,6 +14,7 @@ import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
 import { requestNativeNotificationPermission } from '../lib/localNotifier'
 import { isNativeApp } from '../lib/platform'
+import { stopPush } from '../lib/push'
 import { S } from '../lib/strings'
 import { useDialogBack } from '../lib/useDialogBack'
 
@@ -85,7 +86,9 @@ export default function Settings() {
     }
   }
 
-  function signOut() {
+  async function signOut() {
+    // drop this device's push token while the session still works (bounded: a slow network never traps the user here)
+    await Promise.race([stopPush(), new Promise((r) => window.setTimeout(r, 2000))])
     setState({ user: null })
     clearOutbox()
     if (COGNITO_CONFIGURED) return void cognitoSignOut()
@@ -220,7 +223,7 @@ export default function Settings() {
             <div className="flex rounded-full bg-line p-1">
               {(['email', 'browser'] as const).map((c) => (
                 <button key={c} type="button" role="radio" aria-checked={draft.channel === c} onClick={() => (c === 'browser' ? void browserAlerts() : set('channel', c))} className={`flex-1 rounded-full py-1.5 text-[13px] font-bold ${draft.channel === c ? 'bg-white text-ink shadow-[0_1px_1px_rgba(0,0,0,0.05)]' : 'text-ink-2'}`}>
-                  {c === 'email' ? 'Email' : 'In the browser'}
+                  {c === 'email' ? 'Email' : isNativeApp() ? 'On this phone' : 'In the browser'}
                 </button>
               ))}
             </div>

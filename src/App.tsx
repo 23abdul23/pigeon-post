@@ -5,6 +5,7 @@ import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setNavigate } from './lib/navigateRef'
 import { backEnvFromRef, startNativeChrome } from './lib/nativeChrome'
 import { isNativeApp } from './lib/platform'
+import { startPush } from './lib/push'
 import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
@@ -54,6 +55,11 @@ function Guard({ children, onboarding = false }: { children: ReactNode; onboardi
   // Signed-in users get their profile from the server (GET /state) before the onboarding checks below.
   const synced = useServerSync(COGNITO_CONFIGURED && auth.status === 'signedIn')
   useStatePoll(COGNITO_CONFIGURED && auth.status === 'signedIn' && synced)
+  // the Android app registers for "A letter arrived" push once signed in and synced (a no-op on the web)
+  const pushReady = COGNITO_CONFIGURED && auth.status === 'signedIn' && synced
+  useEffect(() => {
+    if (pushReady) void startPush()
+  }, [pushReady])
   // With Cognito the session is the source of truth; mirror it into the store for screens that read `user`.
   useEffect(() => {
     if (COGNITO_CONFIGURED && auth.status === 'signedIn' && (!user || auth.picture !== user.picture)) {

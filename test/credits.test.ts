@@ -41,8 +41,12 @@ describe('credits', () => {
     expect(h).toContain('Settings')
     expect(h).toContain(EMAIL)
   })
-  it('privacy_page_does_not_claim_a_push_token', () => {
-    expect(page('privacy.html').toLowerCase()).not.toContain('push notification token')
+  it('privacy_page_discloses_the_push_token', () => {
+    const h = page('privacy.html').toLowerCase()
+    expect(h).toContain('push notification token')
+    expect(h).toContain('firebase cloud messaging')
+    expect(h).toContain('first name')
+    expect(h).not.toContain('task 16')
   })
   it('delete_page_does_not_promise_immediate_removal', () => {
     expect(page('delete-account.html').toLowerCase()).not.toContain('immediately')
