@@ -4,6 +4,7 @@ import Avatar from './Avatar'
 import FlightLog from './FlightLog'
 import { setState, useStore } from '../lib/store'
 import { retrySync, useSyncStatus } from '../lib/sync'
+import { unreadCount } from '../lib/safety'
 
 const chip = 'rounded-full px-3 py-1 text-[12px] font-medium'
 
@@ -35,7 +36,7 @@ const TABS = [
 export function DesktopBar({ extra, hideLog }: { extra?: ReactNode; hideLog?: boolean }) {
   const soundOn = useStore((s) => s.soundOn)
   const user = useStore((s) => s.user)
-  const unopened = useStore((s) => s.letters.filter((l) => l.toId === 'me' && l.status === 'DELIVERED').length)
+  const unopened = useStore((s) => unreadCount(s.letters, s.blockedIds))
   return (
     <div className="sticky top-0 z-30 hidden bg-cream/85 shadow-[0_2px_12px_rgba(62,58,54,0.04)] backdrop-blur-[12px] lg:block">
     <div className="mx-auto flex h-[80px] w-full max-w-[1440px] items-center justify-between px-6">

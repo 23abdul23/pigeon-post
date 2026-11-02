@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { blockUser, reportContent } from '../lib/safety'
+import { blockedPeople, blockUser, reportContent, unblockUser } from '../lib/safety'
+import { useStore } from '../lib/store'
 import { S } from '../lib/strings'
 import type { ReportInput } from '../lib/types'
 
@@ -88,5 +89,26 @@ export function ReportDialog({ target, title, onClose }: { target: Target; title
         </>
       )}
     </Modal>
+  )
+}
+
+/** Settings list of blocked users, each with an Unblock button. */
+export function BlockedPeople() {
+  const ids = useStore((s) => s.blockedIds)
+  const names = useStore((s) => s.blockedNames)
+  const people = blockedPeople(ids, names)
+  return (
+    <div className="flex flex-col gap-2 pt-3">
+      <h3 className="text-[13px] font-bold text-ink">{S.blockedPeopleTitle}</h3>
+      {people.length === 0 && <p className="text-[13px] text-ink-2">{S.blockedPeopleEmpty}</p>}
+      {people.map((p) => (
+        <div key={p.id} className="flex items-center justify-between rounded-xl bg-white p-3">
+          <span className="text-[14px] text-ink">{p.name}</span>
+          <button type="button" onClick={() => void unblockUser(p.id)} aria-label={`${S.unblock} ${p.name}`} className="rounded-full bg-line px-3 py-1.5 text-[12px] font-bold text-ink-2">
+            {S.unblock}
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }

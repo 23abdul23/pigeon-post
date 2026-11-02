@@ -6,8 +6,9 @@ vi.mock('../src/lib/auth', () => ({ COGNITO_CONFIGURED: true, currentSub: vi.fn(
 vi.mock('../src/lib/api', async (orig) => ({ ...(await orig<typeof import('../src/lib/api')>()), api: vi.fn() }))
 
 import { api } from '../src/lib/api'
+import { clearOutbox } from '../src/lib/outbox'
 import { getState, setState, type Letter } from '../src/lib/store'
-import { blockUser, canContinueSignIn, reportContent, visibleLetters } from '../src/lib/safety'
+import { blockUser, blockedPeople, canContinueSignIn, isHiddenLetter, reportContent, unblockUser, unreadCount, visibleLetters } from '../src/lib/safety'
 
 const apiMock = vi.mocked(api)
 const queued = () => JSON.parse(store.get('pigeon-post:outbox') ?? '[]') as { path: string; method: string; body?: unknown }[]
@@ -16,8 +17,9 @@ const letter = (id: string, fromId: string, toId = 'me'): Letter => ({ id, fromI
 beforeEach(() => {
   vi.useRealTimers()
   apiMock.mockReset()
+  clearOutbox()
   store.clear()
-  setState({ blockedIds: [], friends: [{ id: 'b', name: 'Bob', city: 'Kyoto', cc: 'JP', lat: 0, lng: 0, status: 'accepted' }] })
+  setState({ blockedIds: [], blockedNames: {}, friends: [{ id: 'b', name: 'Bob', city: 'Kyoto', cc: 'JP', lat: 0, lng: 0, status: 'accepted' }] })
 })
 
 describe('safety', () => {
@@ -68,5 +70,54 @@ describe('safety', () => {
     await reportContent({ targetId: 'b', kind: 'user', reason: 'harassment' })
     expect(queued().map((o) => o.path)).toEqual(['/reports'])
     expect(queued()[0].body).toEqual({ targetId: 'b', kind: 'user', reason: 'harassment' })
+  })
+
+  it('unblockUser_removes_the_id_and_queues_the_delete', async () => {
+    vi.useFakeTimers()
+    setState({ blockedIds: ['b', 'c'], blockedNames: { b: 'Bob', c: 'Cy' } })
+    apiMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    await unblockUser('b')
+    expect(getState().blockedIds).toEqual(['c'])
+    expect(getState().blockedNames).toEqual({ c: 'Cy' })
+    expect(queued().map((o) => `${o.method} ${o.path}`)).toEqual(['DELETE /blocks/b'])
+  })
+
+  it('offline_block_then_unblock_resolves_to_the_last_intent', async () => {
+    vi.useFakeTimers()
+    apiMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    await blockUser('b')
+    await unblockUser('b')
+    expect(queued().map((o) => `${o.method} ${o.path}`)).toEqual(['DELETE /blocks/b'])
+    expect(getState().blockedIds).toEqual([])
+  })
+
+  it('blocked_people_list_uses_the_stored_name_or_the_fallback', () => {
+    expect(blockedPeople(['b', 'z'], { b: 'Bob' })).toEqual([
+      { id: 'b', name: 'Bob' },
+      { id: 'z', name: 'Blocked traveler' },
+    ])
+  })
+
+  it('blockUser_stores_the_name_snapshot', async () => {
+    vi.useFakeTimers()
+    apiMock.mockResolvedValue(undefined)
+    await blockUser('b')
+    expect(getState().blockedNames).toEqual({ b: 'Bob' })
+  })
+
+  it('visibleLetters_filters_by_sender_id', () => {
+    const ls = [letter('1', 'b'), letter('2', 'c')]
+    expect(visibleLetters(ls, ['c']).map((l) => l.id)).toEqual(['1'])
+  })
+
+  it('unread_count_ignores_letters_from_blocked_senders', () => {
+    const ls = [letter('1', 'b'), letter('2', 'c'), { ...letter('3', 'c'), status: 'OPENED' as const }]
+    expect(unreadCount(ls, [])).toBe(2)
+    expect(unreadCount(ls, ['b'])).toBe(1)
+  })
+
+  it('a_letter_from_a_blocked_sender_is_reported_as_hidden', () => {
+    expect(isHiddenLetter(letter('1', 'b'), ['b'])).toBe(true)
+    expect(isHiddenLetter(letter('1', 'b'), ['c'])).toBe(false)
   })
 })

@@ -110,7 +110,9 @@ export const clearOutbox = () => {
 }
 
 // A 4xx means the server will never accept this op; 401 (token refresh) and 429 (throttled) can succeed later.
-const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 429
+// A report over the daily cap (429) is dropped too: retrying it would hold up every write queued behind it for hours.
+const permanent = (e: unknown, op?: Op) =>
+  e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && (e.status !== 429 || op?.path === '/reports')
 
 let running: Promise<void> | undefined
 let attempt = 0
@@ -135,7 +137,7 @@ async function run() {
       await api(op.path, { method: op.method, ...(op.body === undefined ? {} : { body: JSON.stringify(op.body) }) })
       sent++
     } catch (e) {
-      if (!permanent(e)) {
+      if (!permanent(e, op)) {
         timer = setTimeout(() => void flush(), Math.min(MAX_BACKOFF_MS, 1000 * 2 ** attempt++))
         setSyncStatus({ state: 'offline', pending: pendingOps() })
         return
@@ -177,8 +179,8 @@ export function send<T>(op: Op, rejected?: (e: ApiError) => boolean): Promise<T 
           ok = true
           return r
         } catch (e) {
-          console.warn(permanent(e) ? 'server rejected op' : 'send failed; queued for retry', op, e)
-          if (permanent(e)) {
+          console.warn(permanent(e, op) ? 'server rejected op' : 'send failed; queued for retry', op, e)
+          if (permanent(e, op)) {
             if (!rejected?.(e as ApiError)) setSyncStatus({ state: 'error', pending: pendingOps(), lastError: dropMessage(op, e) })
             return null
           }

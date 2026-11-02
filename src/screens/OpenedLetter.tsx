@@ -9,6 +9,7 @@ import { countryName, haversineKm } from '../lib/geo'
 import { send } from '../lib/outbox'
 import { attachmentUrl } from '../lib/social'
 import { getState, setState, useStore, type Letter } from '../lib/store'
+import { isHiddenLetter } from '../lib/safety'
 import { BlockDialog, ReportDialog } from '../components/SafetyDialogs'
 import { S } from '../lib/strings'
 
@@ -34,7 +35,9 @@ function AttachedImage({ a }: { a: Attachment }) {
 export default function OpenedLetter() {
   const { letterId } = useParams()
   const nav = useNavigate()
-  const letter = useStore((s) => s.letters.find((l) => l.id === letterId))
+  const found = useStore((s) => s.letters.find((l) => l.id === letterId))
+  const blockedIds = useStore((s) => s.blockedIds)
+  const letter = found && !isHiddenLetter(found, blockedIds) ? found : undefined
   const home = useStore((s) => s.homeCity)
   const friends = useStore((s) => s.friends)
   const bird = useStore((s) => s.bird)

@@ -14,6 +14,9 @@ export const S = {
   blockBody: (name: string) => `${name} will be removed from your friends, any letters still on their way between you will be cancelled, and you will not see each other's letters. You can unblock later.`,
   blockConfirm: 'Block',
   unblock: 'Unblock',
+  blockedPeopleTitle: 'Blocked people',
+  blockedPeopleEmpty: 'You have not blocked anyone.',
+  blockedFallbackName: 'Blocked traveler',
   blocked: 'Blocked',
 
   report: 'Report',

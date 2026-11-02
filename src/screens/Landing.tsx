@@ -7,6 +7,7 @@ import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
 import { clearStopCards, flightRole, startReturn, startSession } from '../lib/flight'
 import { getState, setState, useStore } from '../lib/store'
+import { visibleLetters } from '../lib/safety'
 import { toggleStorySaved } from '../lib/stories'
 
 export const dms = (v: number, pos: string, neg: string) => {
@@ -31,7 +32,9 @@ export default function Landing() {
   const stamps = useStore((s) => s.stamps)
   const bird = useStore((s) => s.bird)
   const friends = useStore((s) => s.friends)
-  const letters = useStore((s) => s.letters)
+  const allLetters = useStore((s) => s.letters)
+  const blockedIds = useStore((s) => s.blockedIds)
+  const letters = visibleLetters(allLetters, blockedIds)
   const idx = stories.findIndex((s) => s.id === storyId)
   const story = stories[idx]
   if (!story) return <Navigate to="/home" replace />

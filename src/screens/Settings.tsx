@@ -8,6 +8,7 @@ import { Frame } from '../components/Layout'
 import { DesktopBar } from '../components/Header'
 import { birdBySpecies } from '../lib/birds'
 import { DEMO_MODE, loadDemoData } from '../lib/demo'
+import { BlockedPeople } from '../components/SafetyDialogs'
 import { setState, useStore, type Settings as SettingsT } from '../lib/store'
 import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
@@ -234,6 +235,7 @@ export default function Settings() {
           <Row label="Show my stats to friends">
             <Switch on={draft.shareStats} onChange={(v) => set('shareStats', v)} label="Show my stats to friends" />
           </Row>
+          <BlockedPeople />
         </Card>
 
         <Card id="account" title="Account" refs={refs}>

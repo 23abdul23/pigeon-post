@@ -16,6 +16,7 @@ import BirdThumb from '../components/BirdThumb'
 import { birdBySpecies } from '../lib/birds'
 import { RANGES, useFlightStats, type FlightRange } from '../components/FlightLog'
 import ScreenLockPrompt from '../components/ScreenLockPrompt'
+import { visibleLetters } from '../lib/safety'
 
 const DURATIONS = [10, 15, 25, 30]
 
@@ -127,7 +128,8 @@ export default function Dashboard() {
   }
 
   const letters = useStore((s) => s.letters)
-  const unopened = letters.filter((l) => l.toId === 'me' && l.status === 'DELIVERED')
+  const blockedIds = useStore((s) => s.blockedIds)
+  const unopened = visibleLetters(letters, blockedIds).filter((l) => l.toId === 'me' && l.status === 'DELIVERED')
   const [range, setRange] = useState<FlightRange>('This week')
   const stats = useFlightStats(range)
   const pct = active ? Math.min(100, Math.round((active.progressKm / active.routeKm) * 100)) : 0

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useStore } from '../lib/store'
+import { unreadCount } from '../lib/safety'
 
 const items = [
   { to: '/home', label: 'Home', icon: '/assets/nav-home-active.svg', activeIcon: '/assets/nav-home-active.svg' },
@@ -10,7 +11,7 @@ const items = [
 ]
 
 export default function BottomNav() {
-  const unopened = useStore((s) => s.letters.filter((l) => l.toId === 'me' && l.status === 'DELIVERED').length)
+  const unopened = useStore((s) => unreadCount(s.letters, s.blockedIds))
   return (
     <nav aria-label="Main" className="app-bottom-nav sticky bottom-0 z-30 px-5 pb-4 lg:hidden">
       <div className="flex h-16 items-center rounded-full bg-white/90 px-1 shadow-[0_8px_24px_-4px_rgba(62,58,54,0.08),0_2px_6px_-1px_rgba(62,58,54,0.04)] backdrop-blur-[12px]">

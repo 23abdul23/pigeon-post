@@ -144,4 +144,23 @@ describe('outbox', () => {
       setState({ ownerSub: null })
     }
   })
+
+  it('report_429_is_dropped_and_does_not_block_following_ops', async () => {
+    apiMock.mockRejectedValueOnce(new ApiError(429)).mockResolvedValue(undefined)
+    enqueue({ id: 'report:1', method: 'POST', path: '/reports', body: { x: 1 }, touches: ['reports'] })
+    enqueue({ id: 'after', method: 'PUT', path: '/after', touches: ['profile'] })
+    await flush()
+    expect(sent()).toEqual(['/reports', '/after'])
+    expect(queued()).toEqual([])
+  })
+
+  it('non_report_429_is_still_retried', async () => {
+    apiMock.mockRejectedValueOnce(new ApiError(429)).mockResolvedValue(undefined)
+    enqueue({ id: 'a', method: 'PUT', path: '/a', touches: ['profile'] })
+    await flush()
+    expect(queued()).toEqual(['a'])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(sent()).toEqual(['/a', '/a'])
+    expect(queued()).toEqual([])
+  })
 })

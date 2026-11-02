@@ -67,6 +67,8 @@ export type State = {
   friends: Friend[]
   /** ids of the users this account has blocked (from `GET /blocks`, updated at once when blocking) */
   blockedIds: string[]
+  /** display names of blocked users, saved when blocking (`GET /blocks` returns ids only) */
+  blockedNames: Record<string, string>
   /** when the user confirmed they meet the minimum age and accepted the Terms; null before the first sign-in */
   ageConfirmedAt: number | null
   stamps: Stamp[]
@@ -101,6 +103,7 @@ const initial: State = {
   letters: [],
   friends: [],
   blockedIds: [],
+  blockedNames: {},
   ageConfirmedAt: null,
   stamps: [],
   sessions: [],
