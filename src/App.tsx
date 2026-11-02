@@ -3,6 +3,8 @@ import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 're
 import { useEffect, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
 import { setNavigate } from './lib/navigateRef'
+import { startNativeChrome } from './lib/nativeChrome'
+import { isNativeApp } from './lib/platform'
 import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
@@ -82,6 +84,20 @@ export default function App() {
   useEffect(() => {
     setNavigate((to) => navigate(to, { replace: true }))
     return () => setNavigate(undefined)
+  }, [navigate])
+  useEffect(() => {
+    if (!isNativeApp()) return
+    let stop: (() => void) | undefined
+    let cancelled = false
+    void startNativeChrome({
+      path: () => window.location.pathname,
+      canGoBack: () => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0,
+      navigate: (to) => (typeof to === 'number' ? navigate(to) : navigate(to, { replace: true })),
+    }).then((s) => (cancelled ? s() : (stop = s)))
+    return () => {
+      cancelled = true
+      stop?.()
+    }
   }, [navigate])
   return (
     <Routes>

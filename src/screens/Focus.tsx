@@ -24,6 +24,8 @@ import { createPresence, isMobileDevice } from '../lib/presence'
 import { FlightNativePlugin } from '../lib/flightPlugin'
 import { nativeScreenSource } from '../lib/nativeScreen'
 import { isNativeApp } from '../lib/platform'
+import { registerEndFlightPrompt } from '../lib/nativeChrome'
+import { useDialogBack } from '../lib/useDialogBack'
 import { holdWakeLock } from '../lib/wakeLock'
 import { isKeepAliveActive, setKeepAliveMeta, setKeepAlivePosition, ensureKeepAlive, releaseKeepAlive } from '../lib/flightHost'
 import { KM_PER_FOCUS_MINUTE, pointAtKm, wrapLng } from '../lib/geo'
@@ -68,6 +70,9 @@ export default function Focus() {
   const win = usePopup() // the floating flight popup, when open
   const [now, setNow] = useState(() => serverNow())
   const [confirmEnd, setConfirmEnd] = useState(false)
+  useDialogBack(confirmEnd, () => setConfirmEnd(false)) // Android Back dismisses the confirm
+  const flightRunning = !!session
+  useEffect(() => (flightRunning ? registerEndFlightPrompt(() => setConfirmEnd(true)) : undefined), [flightRunning]) // Android Back asks to land instead of leaving
   const [wind, setWind] = useState<{ w: Wind; heading: number } | null>(null)
   const [takingOver, setTakingOver] = useState(false)
   const [resting, setResting] = useState(false)

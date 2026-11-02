@@ -26,7 +26,7 @@ function Footer() {
 
 export function Frame({ children, nav = false, footer = true }: { children: ReactNode; nav?: boolean; footer?: boolean }) {
   return (
-    <div className="desktop-main relative mx-auto flex min-h-screen w-full max-w-[448px] flex-col bg-cream lg:max-w-none">
+    <div className="desktop-main app-frame relative mx-auto flex min-h-screen w-full max-w-[448px] flex-col bg-cream lg:max-w-none">
       {children}
       {nav && <BottomNav />}
       {footer && <Footer />}

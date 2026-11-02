@@ -72,3 +72,17 @@ body {
   }
 }
 }
+
+/* Installed Android app (class set by startNativeChrome). Scoped so the web build is unchanged. */
+.native-app body {
+  background: var(--color-cream);
+}
+.native-app .app-frame {
+  max-width: none;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.native-app .app-bottom-nav {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}

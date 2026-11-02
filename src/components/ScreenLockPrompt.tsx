@@ -1,3 +1,4 @@
+import { useDialogBack } from '../lib/useDialogBack'
 import { PrimaryButton } from './ui'
 
 /**
@@ -5,6 +6,7 @@ import { PrimaryButton } from './ui'
  * Chrome only allows that prompt from a click, so "Allow" runs `onAllow` (which calls IdleDetector.requestPermission).
  */
 export default function ScreenLockPrompt({ onAllow, onSkip }: { onAllow: () => void; onSkip: () => void }) {
+  useDialogBack(true, onSkip)
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="lock-title" className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-6">
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-[0_8px_24px_rgba(62,58,54,0.2)]">

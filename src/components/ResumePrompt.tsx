@@ -1,7 +1,9 @@
+import { useDialogBack } from '../lib/useDialogBack'
 import { PrimaryButton } from './ui'
 
 /** Shown when the user returns to a flight that froze while they were away. */
 export default function ResumePrompt({ onContinue, onLand }: { onContinue: () => void; onLand: () => void }) {
+  useDialogBack(true, () => {}) // Android Back is absorbed: the choice must be made, but the app never exits from here
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="resume-title" className="absolute inset-0 z-20 flex items-center justify-center bg-ink/30 p-6">
       <div className="w-fit max-w-full rounded-2xl bg-white p-5 text-center shadow-[0_8px_24px_rgba(62,58,54,0.2)]">

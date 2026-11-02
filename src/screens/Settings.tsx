@@ -13,6 +13,7 @@ import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
 import { requestNativeNotificationPermission } from '../lib/localNotifier'
 import { isNativeApp } from '../lib/platform'
+import { useDialogBack } from '../lib/useDialogBack'
 
 const SECTIONS = [
   ['profile', 'Profile'],
@@ -35,6 +36,7 @@ export default function Settings() {
   const [draft, setDraft] = useState<SettingsT>(saved)
   const [name, setName] = useState(user?.name ?? '')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  useDialogBack(confirmDelete, () => setConfirmDelete(false))
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [toast, setToast] = useState('')

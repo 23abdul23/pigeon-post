@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useStore } from '../lib/store'
+import { useDialogBack } from '../lib/useDialogBack'
 
 export const RANGES = ['This week', 'Month', 'All time'] as const
 export type FlightRange = (typeof RANGES)[number]
@@ -34,6 +35,7 @@ export default function FlightLog() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
+  useDialogBack(open, () => setOpen(false))
   const stats = useFlightStats(range)
 
   return (
