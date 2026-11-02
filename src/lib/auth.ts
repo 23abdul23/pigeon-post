@@ -3,6 +3,7 @@ import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
 import { Browser } from '@capacitor/browser'
 import { Preferences } from '@capacitor/preferences'
 import { callbackUri, signOutUri } from './authUrls'
+import { goTo } from './navigateRef'
 import { createBrowserNavigator } from './nativeAuth'
 import { isNativeApp } from './platform'
 import { createPrefsStorage } from './prefsStorage'
@@ -58,10 +59,32 @@ export async function completeNativeSignIn(url: string): Promise<string> {
   return user ? to : '/signin'
 }
 
-export async function signOut(): Promise<void> {
+export type SignOutDeps = {
+  native: boolean
+  assign: (url: string) => void
+  openBrowser: (url: string) => Promise<void>
+  go: (to: string) => void
+}
+
+const realSignOutDeps = (): SignOutDeps => ({
+  native: isNativeApp(),
+  assign: (url) => location.assign(url),
+  openBrowser: (url) => Browser.open({ url }),
+  go: goTo,
+})
+
+/** Removes the local session, then ends the Cognito session. Web: redirects the page to Cognito's logout, which comes
+ *  back to /signin. Native: assigning the WebView location would hand Cognito to an external browser and never return,
+ *  so go to /signin at once and end the Cognito session in a Custom Tab; its app.pigeonpost://signin redirect closes the
+ *  tab (startAuthListener). */
+export async function signOut(deps: SignOutDeps = realSignOutDeps()): Promise<void> {
   await um().removeUser()
   // Cognito's end-session endpoint is not in its OIDC metadata, so build the URL by hand.
-  location.assign(`${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(signOutUri(isNativeApp(), location.origin))}`)
+  const url = `${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(signOutUri(deps.native, location.origin))}`
+  if (!deps.native) return deps.assign(url)
+  deps.go('/signin')
+  // Signed out locally either way; a failure here only leaves the Cognito cookie, and the next sign-in can reuse it.
+  await deps.openBrowser(url).catch(() => {})
 }
 
 // Concurrent callers (parallel api() calls) share one refresh instead of each spending the refresh token.

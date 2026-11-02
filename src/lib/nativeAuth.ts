@@ -1,5 +1,5 @@
 import type { INavigator } from 'oidc-client-ts'
-import { isAuthCallbackUrl } from './authUrls'
+import { isAuthCallbackUrl, isSignOutUrl } from './authUrls'
 
 export type BrowserLike = { open(o: { url: string }): Promise<void>; close(): Promise<void> }
 export type UrlOpenSource = { onUrlOpen(cb: (url: string) => void): () => void }
@@ -21,7 +21,8 @@ export function createBrowserNavigator(browser: BrowserLike): INavigator {
   }
 }
 
-/** Completes sign-in for each distinct callback deep link, then routes; any failure routes to /signin. */
+/** Completes sign-in for each distinct callback deep link, then routes; any failure routes to /signin.
+ *  The sign-out deep link (Cognito's logout redirect) closes the browser and routes to /signin. */
 export function startAuthListener(
   src: UrlOpenSource,
   finish: (url: string) => Promise<string>,
@@ -30,6 +31,13 @@ export function startAuthListener(
 ): () => void {
   const seen = new Set<string>()
   return src.onUrlOpen((url) => {
+    if (isSignOutUrl(url)) {
+      void (async () => {
+        await browser.close().catch(() => {})
+        go('/signin')
+      })()
+      return
+    }
     if (!isAuthCallbackUrl(url) || seen.has(url)) return
     seen.add(url)
     void (async () => {

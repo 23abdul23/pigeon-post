@@ -13,7 +13,7 @@ vi.stubGlobal('sessionStorage', { getItem: (k: string) => store.get(k) ?? null, 
 vi.stubGlobal('localStorage', sessionStorage)
 vi.stubGlobal('location', { origin: 'http://localhost:5173', assign: vi.fn() })
 
-import { completeNativeSignIn, completeSignIn, getIdToken, readReturnTo, resolveAuth, signIn } from '../src/lib/auth'
+import { completeNativeSignIn, completeSignIn, getIdToken, readReturnTo, resolveAuth, signIn, signOut } from '../src/lib/auth'
 
 beforeEach(() => {
   store.clear()
@@ -114,5 +114,39 @@ describe('auth client', () => {
     expect(await resolveAuth()).toEqual({ status: 'signedOut' })
     mgr.getUser.mockRejectedValue(new Error('storage'))
     expect(await resolveAuth()).toEqual({ status: 'signedOut' })
+  })
+
+  const LOGOUT_NATIVE = 'https://x.auth.us-east-1.amazoncognito.com/logout?client_id=client&logout_uri=app.pigeonpost%3A%2F%2Fsignin'
+  const LOGOUT_WEB = 'https://x.auth.us-east-1.amazoncognito.com/logout?client_id=client&logout_uri=http%3A%2F%2Flocalhost%3A5173%2Fsignin'
+  const signOutDeps = (native: boolean, log: string[]) => ({
+    native,
+    assign: vi.fn((u: string) => void log.push(`assign:${u}`)),
+    openBrowser: vi.fn(async (u: string) => void log.push(`open:${u}`)),
+    go: vi.fn((to: string) => void log.push(`go:${to}`)),
+  })
+
+  it('native_signOut_opens_the_logout_url_in_the_browser_and_does_not_assign_location', async () => {
+    const log: string[] = []
+    mgr.removeUser.mockImplementation(async () => void log.push('removeUser'))
+    const d = signOutDeps(true, log)
+    await signOut(d)
+    expect(log).toEqual(['removeUser', 'go:/signin', `open:${LOGOUT_NATIVE}`])
+    expect(d.assign).not.toHaveBeenCalled()
+  })
+  it('native_signOut_still_lands_on_signin_when_the_browser_fails_to_open', async () => {
+    const log: string[] = []
+    const d = signOutDeps(true, log)
+    d.openBrowser.mockRejectedValueOnce(new Error('no browser'))
+    await expect(signOut(d)).resolves.toBeUndefined()
+    expect(d.go).toHaveBeenCalledWith('/signin')
+  })
+  it('web_signOut_removes_the_user_and_assigns_the_logout_url', async () => {
+    const log: string[] = []
+    mgr.removeUser.mockImplementation(async () => void log.push('removeUser'))
+    const d = signOutDeps(false, log)
+    await signOut(d)
+    expect(log).toEqual(['removeUser', `assign:${LOGOUT_WEB}`])
+    expect(d.openBrowser).not.toHaveBeenCalled()
+    expect(d.go).not.toHaveBeenCalled()
   })
 })

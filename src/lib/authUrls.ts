@@ -23,3 +23,8 @@ export function isAuthCallbackUrl(url: string): boolean {
     return false
   }
 }
+
+/** True only for the exact native sign-out deep link (Cognito's logout_uri), so the app can finish signing out. */
+export function isSignOutUrl(url: string): boolean {
+  return url === signOutUri(true, '')
+}

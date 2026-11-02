@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NATIVE_SCHEME, callbackUri, isAuthCallbackUrl, signOutUri } from '../src/lib/authUrls'
+import { NATIVE_SCHEME, callbackUri, isAuthCallbackUrl, isSignOutUrl, signOutUri } from '../src/lib/authUrls'
 
 const ORIGIN = 'https://pigeonpost.example'
 
@@ -39,5 +39,10 @@ describe('auth URL helpers', () => {
   it('isAuthCallbackUrl_false_for_garbage_string', () => {
     expect(isAuthCallbackUrl('not a url at all')).toBe(false)
     expect(isAuthCallbackUrl('')).toBe(false)
+  })
+  it('isSignOutUrl_accepts_only_the_exact_signin_deep_link', () => {
+    expect(isSignOutUrl('app.pigeonpost://signin')).toBe(true)
+    for (const u of ['app.pigeonpost://signin/', 'app.pigeonpost://signin?x=1', 'app.pigeonpost://signinx', 'app.pigeonpost://auth/callback?code=1', 'https://x/signin', 'APP.PIGEONPOST://signin', '', 'garbage'])
+      expect(isSignOutUrl(u)).toBe(false)
   })
 })

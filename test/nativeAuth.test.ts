@@ -40,6 +40,30 @@ describe('browser navigator', () => {
 })
 
 describe('auth listener', () => {
+  it('listener_goes_to_signin_when_the_signout_link_arrives', async () => {
+    const { src, emit } = fakeSource()
+    const finish = vi.fn(async () => '/home')
+    const log: string[] = []
+    const go = vi.fn((to: string) => void log.push(`go:${to}`))
+    startAuthListener(src, finish, go, fakeBrowser(log))
+    emit('app.pigeonpost://signin')
+    await flush()
+    expect(finish).not.toHaveBeenCalled()
+    expect(log).toEqual(['close', 'go:/signin'])
+    emit('app.pigeonpost://signin') // a second sign-out later in the same session is handled too
+    await flush()
+    expect(go).toHaveBeenCalledTimes(2)
+  })
+  it('listener_goes_to_signin_on_signout_even_when_browser_close_rejects', async () => {
+    const { src, emit } = fakeSource()
+    const go = vi.fn()
+    const b = fakeBrowser()
+    b.close.mockRejectedValueOnce(new Error('no tab'))
+    startAuthListener(src, vi.fn(), go, b)
+    emit('app.pigeonpost://signin')
+    await flush()
+    expect(go).toHaveBeenCalledWith('/signin')
+  })
   it('listener_ignores_non_callback_urls', async () => {
     const { src, emit } = fakeSource()
     const finish = vi.fn(async () => '/home')
