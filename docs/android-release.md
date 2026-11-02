@@ -42,7 +42,7 @@
 git tag android-v1.0.0 && git push origin android-v1.0.0
 ```
 
-Or run the workflow from the Actions tab (`workflow_dispatch`). The version code is the workflow run number; the version name is the tag name (or `1.0` for manual runs). Tests (`npx vitest run`, `npm --prefix api test`, `npx tsc -b`) run before anything is built.
+Or run the workflow from the Actions tab (`workflow_dispatch`). The version code is the workflow run number; the version name is the tag without the `android-v` prefix (or `1.0` for manual runs). Tests (`npx vitest run`, `npm --prefix api test`, `npx tsc -b`) run before anything is built.
 
 The upload uses `status: draft` because a new Play app must keep drafts until the store listing is complete. Once the listing is approved, change `status: draft` to `status: completed` in the workflow.
 
@@ -65,3 +65,9 @@ Keep `VITE_PUSH_ENABLED` at `false` until Firebase `google-services.json` and th
 - Fill in EU trader details.
 - Listen-test the AAC coos on Safari and Android.
 - Device test matrix: Pixel, Samsung and a low-end phone, covering the foreground-service flight, the Back button and the share sheet.
+
+## Hardening to consider
+
+- Pin third-party actions to full commit SHAs instead of major tags.
+- Run the job in a GitHub environment with required reviewers and tag restrictions, so only approved tags can reach the signing secrets.
+- Uncomment the keystore ignore lines in `android/.gitignore`.

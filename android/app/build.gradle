@@ -22,7 +22,18 @@ android {
     def releaseKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
     def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-    def releaseSigningConfigured = [releaseKeystorePath, releaseKeystorePassword, releaseKeyAlias, releaseKeyPassword].every { it }
+    def releaseSigningEnv = [
+        ANDROID_KEYSTORE_PATH    : releaseKeystorePath,
+        ANDROID_KEYSTORE_PASSWORD: releaseKeystorePassword,
+        ANDROID_KEY_ALIAS        : releaseKeyAlias,
+        ANDROID_KEY_PASSWORD     : releaseKeyPassword
+    ]
+    def releaseSigningMissing = releaseSigningEnv.findAll { !it.value }.keySet()
+    // All absent: unsigned (local and debug builds). All present: signed. Partial: fail, never build unsigned by accident.
+    if (releaseSigningMissing.size() != 0 && releaseSigningMissing.size() != releaseSigningEnv.size()) {
+        throw new GradleException("Incomplete release signing config; missing env var(s): " + releaseSigningMissing.join(", "))
+    }
+    def releaseSigningConfigured = releaseSigningMissing.size() == 0
     if (releaseSigningConfigured) {
         signingConfigs {
             release {
