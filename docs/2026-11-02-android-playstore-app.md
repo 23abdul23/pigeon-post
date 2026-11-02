@@ -36,7 +36,7 @@ Severity: **B** = blocks release, **H** = high risk of rejection or bad reviews,
 | # | Sev | Gap | Fix |
 |---|---|---|---|
 | G4 | B | **Screen-off flight relies on a hack.** A looping near-silent audio file holds the tab alive (`keepAlive.ts`). On Android 14+ an app doing this in the background is killed or throttled, and Play policy treats fake media playback as abuse. | Replace with a real **foreground service** (type `specialUse` or `dataSync`, with a persistent "Your bird is flying to Lisbon" notification and an End flight action). Keep `computeProgress` clock logic untouched: it is already clock based, so the service only needs to keep the process alive and post checkpoint notifications. |
-| G5 | H | "Leaving the tab ends the flight" maps badly to phones: notifications, calls, and the app switcher all background the app. | Define the rule explicitly for mobile: lock screen and notification shade keep flying; switching to another app freezes after the 2.5 s window (`presence.ts` already models this). Use `App.addListener('appStateChange')` plus a `screenOn/off` signal from a small native plugin to distinguish lock from switch. Decide product behaviour (see Open Questions). |
+| G5 | H | "Leaving the tab ends the flight" maps badly to phones: notifications, calls, and the app switcher all background the app. | Define the rule explicitly for mobile: lock screen and notification shade keep flying; switching to another app freezes after the 2.5 s window (`presence.ts` already models this). Use `App.addListener('appStateChange')` plus a `screenOn/off` signal from a small native plugin to distinguish lock from switch. **Decided:** switching to another app freezes the flight; the screen sleeping (a single tap wakes it) keeps it flying with the app still open. |
 | G6 | H | Checkpoint alerts use the web `Notification` API (`checkpointAlert.ts`). | Use `@capacitor/local-notifications` with a notification channel, and request `POST_NOTIFICATIONS` (Android 13+) with a rationale screen. Schedule checkpoint notifications ahead of time from the route, so they fire even if the process dies. |
 | G7 | M | Desktop-only code paths (`pip.ts`, `FlightPopup.tsx`, the centered-column layout) must be dead on Android. | `popupSupported()` already returns false on mobile UA; verify the Capacitor UA is covered by `isMobileDevice()`. |
 
@@ -88,7 +88,7 @@ Severity: **B** = blocks release, **H** = high risk of rejection or bad reviews,
 Each phase ends with something runnable. Verify at every phase with `npm test`, `npx tsc -b`, `npx oxlint`, and `npm --prefix api test`.
 
 ### Phase 0: Decisions and accounts (1-2 days, no code)
-- [ ] Decide the product rule for backgrounding (Open Question 1).
+- [x] Backgrounding rule decided (see section 6): app switch freezes, screen sleep keeps flying.
 - [ ] Create the Play Console account (organization if possible, G30). Pay the one-time fee. Pick the application ID, e.g. `app.pigeonpost`.
 - [ ] Create a Firebase project (FCM, Crashlytics); download `google-services.json`.
 - [ ] Generate the upload keystore; store it and passwords in a password manager and as GitHub secrets. Enrol in Play App Signing.
@@ -192,11 +192,14 @@ Engineering
 - **Observability:** CloudWatch dashboards for API latency and error rate, Crashlytics for the client.
 - **iOS** via the same Capacitor project once Android is stable (needs Apple developer account, Sign in with Apple because Google sign-in is offered, and a different background story: iOS has no equivalent foreground service, so flights would rely on the clock and local notifications).
 
-## 6. Open questions for the product owner
+## 6. Decisions and remaining questions
 
-1. **Backgrounding rule on phones.** Should switching to another app freeze or end the flight (strict focus, as on the web), or only the screen lock keeps it going? This decides Phase 3 behaviour and the Play listing wording.
-2. **Account type.** Personal (needs the 12-tester, 14-day closed test) or organization (exempt, requires a D-U-N-S number)?
-3. **Monetisation.** Free forever, a paid birds/stamps pack, or a subscription? Affects Play Billing integration and the Data safety form.
-4. **Audience age.** 13+ with messaging, or restrict messaging to avoid child-safety review?
-5. **Package name and branding.** Final application ID (it cannot change after publish) and whether the name "Pigeon Post" is free to use as a Play title.
-6. **Region and languages** at launch.
+**Decided**
+1. **Backgrounding:** switching to another app **freezes** the flight (Welcome back on return). If the app is still the foreground app and the screen goes to sleep, the flight **continues**, and one tap wakes it. This is the existing `presence.ts` model (`locked` vs `left`). Phase 3 must therefore detect "screen off while our app is foreground" natively (`ACTION_SCREEN_OFF` receiver in the foreground service) and treat everything else that hides the app (home, recents, another app, incoming call UI) as leaving. Test cases to add in `test/presence.test.ts`: screen-off then screen-on resumes with no freeze; home button freezes; screen-off after another app is in front stays frozen.
+2. **Monetisation: none.** No Play Billing. Data safety form declares no purchases; the listing is free with no ads, which also keeps the privacy policy simple.
+3. **Audience 13+.** Target-audience question is answered 13+ (not a Families app). Messaging stays, so the report/block/moderation work in Phase 6 is mandatory, and the Terms must state the 13+ minimum age with a sign-up age confirmation.
+
+**Still open**
+1. **Account type.** Personal (needs the 12-tester, 14-day closed test) or organization (exempt, requires a D-U-N-S number)?
+2. **Package name and branding.** Final application ID (it cannot change after publish) and whether "Pigeon Post" is free to use as a Play title.
+3. **Region and languages** at launch.
