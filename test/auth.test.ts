@@ -13,7 +13,7 @@ vi.stubGlobal('sessionStorage', { getItem: (k: string) => store.get(k) ?? null, 
 vi.stubGlobal('localStorage', sessionStorage)
 vi.stubGlobal('location', { origin: 'http://localhost:5173', assign: vi.fn() })
 
-import { completeSignIn, getIdToken, readReturnTo, resolveAuth, signIn } from '../src/lib/auth'
+import { completeNativeSignIn, completeSignIn, getIdToken, readReturnTo, resolveAuth, signIn } from '../src/lib/auth'
 
 beforeEach(() => {
   store.clear()
@@ -82,6 +82,15 @@ describe('auth client', () => {
   it('completeSignIn_rejects_when_exchange_fails', async () => {
     mgr.signinCallback.mockRejectedValue(new Error('bad code'))
     await expect(completeSignIn()).rejects.toThrow('bad code')
+  })
+
+  it('completeNativeSignIn_passes_the_url_to_signinCallback_and_returns_returnTo', async () => {
+    await signIn('/journal')
+    mgr.signinCallback.mockResolvedValue(fresh)
+    const url = 'app.pigeonpost://auth/callback?code=c&state=s'
+    expect(await completeNativeSignIn(url)).toBe('/journal')
+    expect(mgr.signinCallback).toHaveBeenCalledWith(url)
+    expect(readReturnTo()).toBe('/home')
   })
 
   it('resolveAuth_signedIn_with_email', async () => {

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { COGNITO_CONFIGURED, useAuth } from './lib/auth'
+import { setNavigate } from './lib/navigateRef'
 import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
@@ -77,6 +78,11 @@ function OpeningMoved() {
 }
 
 export default function App() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    setNavigate((to) => navigate(to, { replace: true }))
+    return () => setNavigate(undefined)
+  }, [navigate])
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/home" replace />} />

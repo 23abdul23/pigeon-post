@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
+import { Browser } from '@capacitor/browser'
+import { callbackUri, signOutUri } from './authUrls'
+import { createBrowserNavigator } from './nativeAuth'
+import { isNativeApp } from './platform'
 
 const env = import.meta.env
 const POOL = env.VITE_COGNITO_USER_POOL_ID as string | undefined
@@ -12,14 +16,19 @@ export const COGNITO_CONFIGURED = !!(POOL && CLIENT && DOMAIN)
 
 let manager: UserManager | undefined
 function um(): UserManager {
-  return (manager ??= new UserManager({
-    authority: `https://cognito-idp.${POOL!.split('_')[0]}.amazonaws.com/${POOL}`,
-    client_id: CLIENT!,
-    redirect_uri: `${location.origin}/auth/callback`,
-    scope: 'openid email profile',
-    response_type: 'code', // PKCE is on by default for code flow
-    userStore: new WebStorageStateStore({ store: localStorage }),
-  }))
+  const native = isNativeApp()
+  return (manager ??= new UserManager(
+    {
+      authority: `https://cognito-idp.${POOL!.split('_')[0]}.amazonaws.com/${POOL}`,
+      client_id: CLIENT!,
+      redirect_uri: callbackUri(native, location.origin),
+      scope: 'openid email profile',
+      response_type: 'code', // PKCE is on by default for code flow
+      userStore: new WebStorageStateStore({ store: localStorage }),
+    },
+    // Google refuses OAuth in an embedded WebView, so the native app signs in through a Custom Tab.
+    native ? createBrowserNavigator(Browser) : undefined,
+  ))
 }
 
 export async function signIn(returnTo = '/home'): Promise<void> {
@@ -39,10 +48,18 @@ export async function completeSignIn(): Promise<string> {
   return user ? to : '/signin'
 }
 
+/** Native twin of completeSignIn: the code arrives in the deep-link URL rather than the page location. */
+export async function completeNativeSignIn(url: string): Promise<string> {
+  const user = await um().signinCallback(url)
+  const to = readReturnTo()
+  sessionStorage.removeItem(RETURN_KEY)
+  return user ? to : '/signin'
+}
+
 export async function signOut(): Promise<void> {
   await um().removeUser()
   // Cognito's end-session endpoint is not in its OIDC metadata, so build the URL by hand.
-  location.assign(`${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(`${location.origin}/signin`)}`)
+  location.assign(`${DOMAIN}/logout?client_id=${CLIENT}&logout_uri=${encodeURIComponent(signOutUri(isNativeApp(), location.origin))}`)
 }
 
 // Concurrent callers (parallel api() calls) share one refresh instead of each spending the refresh token.
