@@ -37,4 +37,13 @@ export const S = {
     other: 'Something else',
   },
   cancel: 'Cancel',
+
+  creditsLink: 'Credits and licences',
+  legalLink: 'Privacy policy and terms',
+  creditsTitle: 'Credits',
+  creditsIntro: 'Pigeon Post is built on the work of many people. Thank you.',
+  creditsBack: 'Back',
+  creditsBy: 'by',
+  creditsLicense: 'Licence',
+  creditsModels: 'Models',
 } as const

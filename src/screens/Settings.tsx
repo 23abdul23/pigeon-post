@@ -14,6 +14,7 @@ import { deleteAccount as deleteServerAccount, saveProfile } from '../lib/sync'
 import { clearOutbox } from '../lib/outbox'
 import { requestNativeNotificationPermission } from '../lib/localNotifier'
 import { isNativeApp } from '../lib/platform'
+import { S } from '../lib/strings'
 import { useDialogBack } from '../lib/useDialogBack'
 
 const SECTIONS = [
@@ -236,6 +237,10 @@ export default function Settings() {
             <Switch on={draft.shareStats} onChange={(v) => set('shareStats', v)} label="Show my stats to friends" />
           </Row>
           <BlockedPeople />
+          <div className="flex flex-col gap-1 pt-3 text-[13px] font-bold text-sage">
+            <a href={S.privacyPath} target="_blank" rel="noreferrer">{S.legalLink}</a>
+            <a href={S.termsPath} target="_blank" rel="noreferrer">{S.termsLink}</a>
+          </div>
         </Card>
 
         <Card id="account" title="Account" refs={refs}>
@@ -266,6 +271,7 @@ export default function Settings() {
             About
           </h2>
           <p>Place data: OpenStreetMap, GeoNames. Map tiles: OpenFreeMap.</p>
+          <Link to="/credits" className="font-bold text-sage">{S.creditsLink}</Link>
         </section>
       </main>
 

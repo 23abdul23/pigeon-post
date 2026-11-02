@@ -9,6 +9,7 @@ import { setState, useStore } from './lib/store'
 import { useStatePoll, useServerSync } from './lib/sync'
 import AuthCallback from './screens/AuthCallback'
 import ChooseBird from './screens/ChooseBird'
+import Credits from './screens/Credits'
 import Dashboard from './screens/Dashboard'
 import AddFriend from './screens/AddFriend'
 import Focus from './screens/Focus'
@@ -127,6 +128,7 @@ export default function App() {
       <Route path="/passport/share" element={<Guard><ShareStamps /></Guard>} />
       <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
       <Route path="/settings/:section" element={<Guard><Settings /></Guard>} />
+      <Route path="/credits" element={<Guard><Credits /></Guard>} />
       <Route path="/home" element={<Guard><Dashboard /></Guard>} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
