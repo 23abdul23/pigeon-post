@@ -33,6 +33,12 @@ describe('native sign-in and API configuration', () => {
     expect(allowOrigins).toContain('https://localhost')
   })
 
+  it('letters_bucket_cors_allows_https_localhost', () => {
+    const bucket = yamlBlock(template, 'LettersBucket')
+    const cors = bucket.slice(bucket.indexOf('CorsConfiguration:'))
+    expect(cors).toContain('https://localhost')
+  })
+
   it('manifest_declares_the_app_pigeonpost_scheme', () => {
     const filters = manifest.match(/<intent-filter[\s\S]*?<\/intent-filter>/g) ?? []
     const viewFilter = filters.find(

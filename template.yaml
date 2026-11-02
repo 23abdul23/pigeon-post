@@ -771,6 +771,7 @@ Resources:
               - !Sub 'https://${SiteDistribution.DomainName}'
               - http://localhost:5173
               - !If [HasDomain, !Sub 'https://${Domain}', !Ref 'AWS::NoValue']
+              - https://localhost
             AllowedMethods: [PUT, GET]
             AllowedHeaders: [content-type]
             MaxAge: 600
