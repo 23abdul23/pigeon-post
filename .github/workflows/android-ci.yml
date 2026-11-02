@@ -1,0 +1,40 @@
+name: android-ci
+
+# Compiles the Android app (including the native Flight plugin and service) on every pull request.
+# Debug build only: no signing, no upload, and no repository secret is referenced. Third-party actions are pinned by major version tag, as in deploy.yml.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21' # Capacitor 8 compiles with JavaVersion.VERSION_21
+      - name: Install web dependencies
+        run: npm ci
+      - name: Build web bundle
+        run: npm run build
+      - name: Sync Capacitor
+        run: npx cap sync android
+      - name: Assemble debug APK
+        working-directory: android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon

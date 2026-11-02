@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   release:
+    # Manual runs only from main; tag runs only from android-v* tags. Never ship a feature branch.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/android-v')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -31,7 +33,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21' # Capacitor 8 compiles with JavaVersion.VERSION_21
       - name: Install web dependencies
         run: npm ci
       - name: Web tests
@@ -42,6 +44,30 @@ jobs:
         run: npm --prefix api test
       - name: Type check
         run: npx tsc -b
+      - name: Check build configuration
+        # An unset repository variable expands to "" and overrides .env.production, which would ship an app that silently
+        # runs on the offline mock user. Fail instead. Only variable NAMES are printed, never values.
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_PUSH_ENABLED: ${{ vars.VITE_PUSH_ENABLED || 'false' }}
+        run: |
+          set -euo pipefail
+          bad=0
+          for name in VITE_COGNITO_USER_POOL_ID VITE_COGNITO_CLIENT_ID VITE_COGNITO_DOMAIN VITE_API_URL; do
+            value="${!name:-}"
+            if [ -z "$value" ] || [[ "$value" == *REPLACE_ME* ]]; then
+              echo "::error::Repository variable $name is empty or still a REPLACE_ME placeholder"
+              bad=1
+            fi
+          done
+          if [ "${VITE_PUSH_ENABLED:-false}" = "true" ] && [ ! -f android/app/google-services.json ]; then
+            echo "::error::VITE_PUSH_ENABLED is true but android/app/google-services.json is missing"
+            bad=1
+          fi
+          if [ "$bad" -ne 0 ]; then exit 1; fi
       - name: Build web bundle
         # Non-secret repository variables, passed through env, never interpolated into the script text.
         env:
@@ -76,6 +102,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$REF_TYPE" = "tag" ]; then v="${REF_NAME#android-v}"; else v="1.0"; fi
+          # Validate before writing to GITHUB_ENV: a newline or odd character in a tag must not inject env lines.
+          if [ -z "$v" ] || ! [[ "$v" =~ ^[0-9A-Za-z._-]+$ ]]; then
+            echo "::error::Tag does not give a valid version name (allowed: 0-9 A-Z a-z . _ -)"
+            exit 1
+          fi
           echo "ANDROID_VERSION_NAME=$v" >> "$GITHUB_ENV"
       - name: Decode upload keystore
         env:

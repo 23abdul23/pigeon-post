@@ -1,6 +1,8 @@
 # Android release
 
-`.github/workflows/android.yml` builds a signed App Bundle and uploads it to the Google Play **internal** track as a draft. It never touches any other track.
+`.github/workflows/android.yml` builds a signed App Bundle and uploads it to the Google Play **internal** track as a draft. It never touches any other track. It needs JDK 21 (Capacitor 8).
+
+`.github/workflows/android-ci.yml` runs `./gradlew assembleDebug` on every pull request so the native plugin and service are compiled before merge. It uses no secrets.
 
 ## Repository secrets (Settings, Secrets and variables, Actions)
 
@@ -22,6 +24,8 @@
 | `VITE_API_URL` | API base URL (stack output) |
 | `VITE_PUSH_ENABLED` | `true` or `false`; defaults to `false` when unset |
 
+The release job fails before building if any of the four Cognito/API variables is empty or still contains `REPLACE_ME`, or if `VITE_PUSH_ENABLED` is `true` without `android/app/google-services.json`.
+
 ## One-time setup
 
 1. Create the upload keystore (keep the file and passwords in a password manager, never in the repo):
@@ -42,7 +46,7 @@
 git tag android-v1.0.0 && git push origin android-v1.0.0
 ```
 
-Or run the workflow from the Actions tab (`workflow_dispatch`). The version code is the workflow run number; the version name is the tag without the `android-v` prefix (or `1.0` for manual runs). Tests (`npx vitest run`, `npm --prefix api test`, `npx tsc -b`) run before anything is built.
+Or run the workflow from the Actions tab (`workflow_dispatch`) on `main`; manual runs on any other branch are skipped. The version code is the workflow run number; the version name is the tag without the `android-v` prefix (or `1.0` for manual runs) and must match `^[0-9A-Za-z._-]+$`. Tests (`npx vitest run`, `npm --prefix api test`, `npx tsc -b`) run before anything is built.
 
 The upload uses `status: draft` because a new Play app must keep drafts until the store listing is complete. Once the listing is approved, change `status: draft` to `status: completed` in the workflow.
 
