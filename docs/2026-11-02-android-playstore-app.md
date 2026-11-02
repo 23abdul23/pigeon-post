@@ -77,7 +77,7 @@ Severity: **B** = blocks release, **H** = high risk of rejection or bad reviews,
 | # | Sev | Gap | Fix |
 |---|---|---|---|
 | G29 | H | No Android CI, signing, or release flow. `deploy.yml` only deploys the web. | Add a GitHub Actions job: build web, `npx cap sync`, `./gradlew bundleRelease`, sign with an upload key from secrets, upload to the Play internal track (via `r0adkll/upload-google-play` or fastlane supply). |
-| G30 | H | **New personal developer accounts must run a closed test with 12+ testers for 14 days** before production access. Organization accounts are exempt. | Register as an organization if possible, otherwise start recruiting 12 testers now. This sets the earliest launch date. |
+| G30 | L | ~~Personal accounts need a 12-tester, 14-day closed test.~~ **Not applicable: the project owner has an organization account**, which can go to production after internal and closed testing without that requirement. | Still run a short closed test (5-10 people, about a week) to catch device-specific bugs. Confirm the org account's verification is complete and that its public developer contact details and EU trader status (Digital Services Act) are filled in, because they show on the worldwide listing. |
 | G31 | M | Only logic is unit tested (vitest, node env); UI and native paths have no tests. | Add Playwright smoke tests of the built web (sign-in stubbed, fly, land) and a manual Android device matrix checklist. |
 | G32 | M | Crash and analytics visibility. | Firebase Crashlytics (or Sentry) and a minimal privacy-respecting event log; declare it in the Data safety form. |
 
@@ -89,7 +89,8 @@ Each phase ends with something runnable. Verify at every phase with `npm test`, 
 
 ### Phase 0: Decisions and accounts (1-2 days, no code)
 - [x] Backgrounding rule decided (see section 6): app switch freezes, screen sleep keeps flying.
-- [ ] Create the Play Console account (organization if possible, G30). Pay the one-time fee. Pick the application ID, e.g. `app.pigeonpost`.
+- [x] Organization Play Console account exists. Application ID is **`app.pigeonpost`** (final; set in `capacitor.config.ts` and `android/app/build.gradle`).
+- [ ] Verify the org account: developer verification done, public contact details, EU trader status declared.
 - [ ] Create a Firebase project (FCM, Crashlytics); download `google-services.json`.
 - [ ] Generate the upload keystore; store it and passwords in a password manager and as GitHub secrets. Enrol in Play App Signing.
 
@@ -150,11 +151,11 @@ Files: `api/src/handlers/` (new `reports.ts`, `blocks.ts`), `template.yaml`, `sr
 - [ ] Pre-launch report in Play Console reviewed and fixed.
 
 ### Phase 9: Testing tracks and launch (2+ weeks, mostly waiting)
-- [ ] Internal testing (you and a few people), then **closed testing with 12+ testers for 14 consecutive days** (if a personal account), collect feedback.
+- [ ] Internal testing (you and a few people), then a short closed test (5-10 people, about a week) across at least one Pixel, one Samsung and one low-end phone.
 - [ ] Fix issues, then request production access; start with a staged rollout (10% then 50% then 100%).
 - [ ] Monitor Android vitals (ANR, crash rate, battery wake locks) for two weeks.
 
-**Rough total: 5-6 weeks of engineering plus the 14-day closed test** (the test can overlap Phases 7-8 if the account is created in Phase 0).
+**Rough total: 5-6 weeks of engineering plus about a week of closed testing.** The organization account removes the 14-day, 12-tester wait, so launch date is driven by engineering and Play review.
 
 ---
 
@@ -199,7 +200,15 @@ Engineering
 2. **Monetisation: none.** No Play Billing. Data safety form declares no purchases; the listing is free with no ads, which also keeps the privacy policy simple.
 3. **Audience 13+.** Target-audience question is answered 13+ (not a Families app). Messaging stays, so the report/block/moderation work in Phase 6 is mandatory, and the Terms must state the 13+ minimum age with a sign-up age confirmation.
 
-**Still open**
-1. **Account type.** Personal (needs the 12-tester, 14-day closed test) or organization (exempt, requires a D-U-N-S number)?
-2. **Package name and branding.** Final application ID (it cannot change after publish) and whether "Pigeon Post" is free to use as a Play title.
-3. **Region and languages** at launch.
+4. **Account:** organization (already held). No mandatory 12-tester closed test.
+5. **Application ID:** `app.pigeonpost`.
+6. **Launch:** worldwide, English only.
+
+**Worldwide launch implications (added to Phase 6 and 8)**
+- **Privacy law:** GDPR/UK GDPR and CCPA apply. The privacy policy needs a lawful basis, retention periods, a contact for data requests, and an international-transfer statement (data is stored in AWS `us-east-1`). In-app account deletion (G22) already satisfies deletion; add a data-export request path (email is acceptable at launch).
+- **Age 13+ worldwide:** some countries set a higher digital-consent age (16 in parts of the EU). Show the age gate with a clear "13 or older" confirmation and state in the Terms that users below their country's minimum need a parent's consent. Choose the content-rating answers carefully (user-to-user messaging).
+- **Play listing:** distribute to all countries; the Data safety form, content rating (IARC) and DSA trader details apply globally.
+- **Third-party services:** Open-Meteo needs the paid commercial key before launch (G24); check that Photon/Wikipedia/GBIF/iNaturalist usage is cached and polite at global scale; set API throttling and AWS budget alerts for unpredictable global traffic (G25, R5).
+- **English only:** keep all strings in one place now (no inline copy in new code) so translations can be added later; stories already use English Wikipedia. Right-to-left and long-text layouts are out of scope for launch but avoid fixed-width text in new UI.
+- **Latency:** a single `us-east-1` backend is acceptable at launch. Revisit CloudFront-fronted API or multi-region DynamoDB if global p95 latency is poor in Android vitals.
+- **Export compliance:** the app uses only standard HTTPS encryption; declare accordingly where asked.
